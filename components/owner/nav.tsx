@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   MapPin,
@@ -39,8 +39,22 @@ export function OwnerNav({ userName }: OwnerNavProps) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    router.push("/");
+    router.replace("/login");
   }
+
+  // Prevent back-button from bypassing auth
+  useEffect(() => {
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      window.history.pushState(null, "", window.location.href);
+      if (window.confirm("Sign out and leave the owner panel?")) {
+        handleSignOut();
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <nav className="bg-white border-b border-gray-200">

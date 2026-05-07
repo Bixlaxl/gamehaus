@@ -37,7 +37,7 @@ export function POSScreen({
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    router.push("/");
+    router.replace("/login");
   }
 
   // Use stable selectors — these function references never change
@@ -47,6 +47,20 @@ export function POSScreen({
   const handleOrderItemChange = usePOSStore((s) => s.handleOrderItemChange);
   const handleOrderChange = usePOSStore((s) => s.handleOrderChange);
   const handleTableChange = usePOSStore((s) => s.handleTableChange);
+
+  // Prevent accidental back-button navigation — prompt to sign out instead
+  useEffect(() => {
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      window.history.pushState(null, "", window.location.href);
+      if (window.confirm("Sign out and leave the POS?")) {
+        handleSignOut();
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Single 1-second interval for all timers
   useEffect(() => {
