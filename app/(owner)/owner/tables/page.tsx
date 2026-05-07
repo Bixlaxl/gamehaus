@@ -83,15 +83,15 @@ export default function TablesPage() {
     },
   });
 
-  async function uploadImage(file: File, locationId: string, tableId: string) {
-    const ext = file.name.split(".").pop();
-    const path = `${locationId}/${tableId}/image.${ext}`;
-    const { error } = await supabase.storage
-      .from("table-images")
-      .upload(path, file, { upsert: true });
-    if (error) throw error;
-    const { data } = supabase.storage.from("table-images").getPublicUrl(path);
-    return data.publicUrl;
+  async function uploadImage(file: File, tableId: string, locationId: string): Promise<string> {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("tableId", tableId);
+    fd.append("locationId", locationId);
+    const res = await fetch("/api/tables/upload", { method: "POST", body: fd });
+    const body = await res.json() as { success: true; data: { url: string } } | { success: false; error: string };
+    if (!body.success) throw new Error(body.error);
+    return body.data.url;
   }
 
   const upsertMutation = useMutation({
@@ -100,34 +100,43 @@ export default function TablesPage() {
         location_id: values.location_id,
         name: values.name,
         type: values.type,
-        size: values.size || null,
-        description: values.description || null,
+        size: values.size || undefined,
+        description: values.description || undefined,
         hourly_rate: parseFloat(values.hourly_rate),
         sort_order: parseInt(values.sort_order),
       };
 
       if (editing) {
-        const { data, error } = await supabase
-          .from("tables")
-          .update(payload)
-          .eq("id", editing.id)
-          .select()
-          .single();
-        if (error) throw error;
-        if (values.image_file && data) {
-          const url = await uploadImage(values.image_file, data.location_id, data.id);
-          await supabase.from("tables").update({ image_url: url }).eq("id", data.id);
+        const res = await fetch(`/api/tables/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json() as { success: true; data: { id: string; location_id: string } } | { success: false; error: string };
+        if (!body.success) throw new Error(body.error);
+        if (values.image_file) {
+          const url = await uploadImage(values.image_file, body.data.id, body.data.location_id);
+          await fetch(`/api/tables/${body.data.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_url: url }),
+          });
         }
       } else {
-        const { data, error } = await supabase
-          .from("tables")
-          .insert(payload)
-          .select()
-          .single();
-        if (error) throw error;
-        if (values.image_file && data) {
-          const url = await uploadImage(values.image_file, data.location_id, data.id);
-          await supabase.from("tables").update({ image_url: url }).eq("id", data.id);
+        const res = await fetch("/api/tables", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json() as { success: true; data: { id: string; location_id: string } } | { success: false; error: string };
+        if (!body.success) throw new Error(body.error);
+        if (values.image_file) {
+          const url = await uploadImage(values.image_file, body.data.id, body.data.location_id);
+          await fetch(`/api/tables/${body.data.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_url: url }),
+          });
         }
       }
     },
@@ -141,11 +150,9 @@ export default function TablesPage() {
 
   const softDeleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("tables")
-        .update({ is_active: false })
-        .eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/tables/${id}`, { method: "DELETE" });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tables"] });
@@ -155,11 +162,13 @@ export default function TablesPage() {
 
   const reactivateMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("tables")
-        .update({ is_active: true })
-        .eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/tables/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: true }),
+      });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tables"] }),
   });
