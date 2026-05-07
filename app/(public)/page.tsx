@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
-import { MapPin, Clock, Phone } from "lucide-react";
+import { MapPin, Clock, Phone, Lock } from "lucide-react";
 
 export default async function HomePage() {
   const supabase = createClient<Database>(
@@ -15,6 +15,17 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      {/* Header */}
+      <div className="flex justify-end px-6 py-4">
+        <Link
+          href="/login"
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <Lock className="h-3.5 w-3.5" />
+          Admin
+        </Link>
+      </div>
+
       {/* Hero */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 py-20 px-4 text-center">
         <h1 className="text-5xl font-bold mb-4">Gamehaus</h1>

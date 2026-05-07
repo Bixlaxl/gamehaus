@@ -39,7 +39,7 @@ export function OwnerNav({ userName }: OwnerNavProps) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
   }
 
   return (

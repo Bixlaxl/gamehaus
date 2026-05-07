@@ -37,7 +37,7 @@ export function POSScreen({
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
   }
 
   // Use stable selectors — these function references never change
