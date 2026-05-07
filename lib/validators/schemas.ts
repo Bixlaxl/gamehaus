@@ -29,16 +29,18 @@ export const locationSchema = z.object({
 
 // Table
 export const tableSchema = z.object({
-  location_id: z.string().uuid().optional(),
-  name: z.string().min(1).optional(),
-  type: z.enum(["snooker", "pool", "ps5"]).optional(),
+  location_id: z.string().uuid(),
+  name: z.string().min(1),
+  type: z.enum(["snooker", "pool", "ps5"]),
   size: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   image_url: z.string().url().nullable().optional(),
-  hourly_rate: z.number().positive().optional(),
+  hourly_rate: z.number().positive(),
   sort_order: z.number().int().optional(),
   is_active: z.boolean().optional(),
 });
+
+export const updateTableSchema = tableSchema.partial();
 
 // Order
 export const createOrderSchema = z.object({

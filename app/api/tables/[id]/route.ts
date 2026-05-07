@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { tableSchema, ok, err } from "@/lib/validators/schemas";
+import { updateTableSchema, ok, err } from "@/lib/validators/schemas";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -10,7 +10,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body: unknown = await request.json();
-  const parsed = tableSchema.partial().safeParse(body);
+  const parsed = updateTableSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
