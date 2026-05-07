@@ -10,6 +10,9 @@ out/
 .env.local
 .env.*.local
 
+# Build artifacts
+tsconfig.tsbuildinfo
+
 # Misc
 .DS_Store
 *.pem
