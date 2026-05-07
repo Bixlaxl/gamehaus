@@ -23,7 +23,11 @@ function isOpenNow(opening: string, closing: string): boolean {
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
   const nowMins = now.getHours() * 60 + now.getMinutes();
-  return nowMins >= oh * 60 + om && nowMins < ch * 60 + cm;
+  const openMins = oh * 60 + om;
+  const closeMins = ch * 60 + cm;
+  // crosses midnight (e.g. 11:00 → 02:00)
+  if (closeMins < openMins) return nowMins >= openMins || nowMins < closeMins;
+  return nowMins >= openMins && nowMins < closeMins;
 }
 
 function formatTime(t: string): string {

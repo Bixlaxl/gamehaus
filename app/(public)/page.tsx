@@ -1,12 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/supabase/types";
+export const dynamic = "force-dynamic";
+
+import { createAdminClient } from "@/lib/supabase/admin";
 import { SplashHero } from "@/components/public/splash-hero";
 
 export default async function HomePage() {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = createAdminClient();
 
   const { data: locations } = await supabase
     .from("locations")

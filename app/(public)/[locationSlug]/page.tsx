@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/supabase/types";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { LocationBrowse } from "@/components/public/location-browse";
+
+export const dynamic = "force-dynamic";
 
 export default async function LocationPage({
   params,
@@ -9,10 +10,7 @@ export default async function LocationPage({
   params: Promise<{ locationSlug: string }>;
 }) {
   const { locationSlug } = await params;
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = createAdminClient();
 
   const { data: location } = await supabase
     .from("locations")
