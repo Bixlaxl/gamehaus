@@ -33,12 +33,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
   const { id } = await params;
+  const permanent = new URL(request.url).searchParams.get("permanent") === "true";
   const admin = createAdminClient();
-  const { error } = await admin
-    .from("tables")
-    .update({ is_active: false })
-    .eq("id", id);
 
-  if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+  if (permanent) {
+    const { error } = await admin.from("tables").delete().eq("id", id);
+    if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+  } else {
+    const { error } = await admin.from("tables").update({ is_active: false }).eq("id", id);
+    if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+  }
+
   return NextResponse.json(ok({ id }));
 }

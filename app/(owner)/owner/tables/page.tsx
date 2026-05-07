@@ -55,6 +55,7 @@ export default function TablesPage() {
   const [editing, setEditing] = useState<Table | null>(null);
   const [form, setForm] = useState<TableForm>(defaultForm);
   const [deleteConfirm, setDeleteConfirm] = useState<Table | null>(null);
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<Table | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
 
   const { data: locations } = useQuery({
@@ -173,6 +174,18 @@ export default function TablesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tables"] }),
   });
 
+  const permanentDeleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/tables/${id}?permanent=true`, { method: "DELETE" });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tables"] });
+      setPermanentDeleteConfirm(null);
+    },
+  });
+
   function openAdd() {
     setEditing(null);
     setForm({ ...defaultForm, location_id: locations?.[0]?.id ?? "" });
@@ -268,13 +281,22 @@ export default function TablesPage() {
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   {!table.is_active && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => reactivateMutation.mutate(table.id)}
-                    >
-                      Reactivate
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => reactivateMutation.mutate(table.id)}
+                      >
+                        Reactivate
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setPermanentDeleteConfirm(table)}
+                      >
+                        Delete
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="outline"
@@ -456,6 +478,30 @@ export default function TablesPage() {
               disabled={softDeleteMutation.isPending}
             >
               Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanent delete confirmation */}
+      <Dialog open={!!permanentDeleteConfirm} onOpenChange={() => setPermanentDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Permanently Delete Table?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            <strong>{permanentDeleteConfirm?.name}</strong> will be permanently deleted and cannot be recovered. All associated data will be lost.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermanentDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => permanentDeleteConfirm && permanentDeleteMutation.mutate(permanentDeleteConfirm.id)}
+              disabled={permanentDeleteMutation.isPending}
+            >
+              {permanentDeleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>
