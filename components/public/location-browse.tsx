@@ -112,8 +112,6 @@ export function LocationBrowse({ location, tables }: Props) {
   const [slot, setSlot]             = useState<string | null>(null);
   const [dur, setDur]               = useState(60);
   const [errorImgs, setErrorImgs]   = useState<Set<string>>(new Set());
-  const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set());
-
   useEffect(() => { setMounted(true); }, []);
 
   if (cart.locationId !== location.id) cart.setLocation(location.id);
@@ -125,11 +123,17 @@ export function LocationBrowse({ location, tables }: Props) {
   const days     = useMemo(buildDays, []);
   const cartCount = cart.items.length;
 
-  // Pre-compute booked slot keys for O(1) lookup: "tableId::scheduledStartISO"
-  const bookedKeys = useMemo(
-    () => new Set(cart.items.map(i => `${i.tableId}::${i.scheduledStart}`)),
-    [cart.items]
-  );
+  // Returns true if slotTime on slotDate falls within any existing cart booking for tableId.
+  // e.g. booking 1 PM for 1h → both 1:00 and 1:30 are occupied.
+  function isOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
+    const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
+    return cart.items.some(item => {
+      if (item.tableId !== tableId) return false;
+      const startMs = new Date(item.scheduledStart).getTime();
+      const endMs   = new Date(item.scheduledEnd).getTime();
+      return slotMs >= startMs && slotMs < endMs;
+    });
+  }
 
   /* theme tokens */
   const bg       = dark ? "#0A0A0A" : "#F7F5F2";
@@ -289,17 +293,8 @@ export function LocationBrowse({ location, tables }: Props) {
         {/* ── Cards ───────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {shown.map((table, i) => {
-            const tc         = cfg(table.type);
-            const imgFailed  = errorImgs.has(table.id);
-            const slots      = visibleSlots(location.opening_time, location.closing_time, date);
-            const isExpanded = expandedSlots.has(table.id);
-            const SHOW       = 4;
-            // Auto-expand if a booked slot would otherwise be hidden past the first 4
-            const hasBookedSlot = slots.some(s =>
-              bookedKeys.has(`${table.id}::${new Date(`${date}T${s}:00`).toISOString()}`)
-            );
-            const displaySlots = (isExpanded || hasBookedSlot) ? slots : slots.slice(0, SHOW);
-            const hasMore    = slots.length > SHOW && !isExpanded && !hasBookedSlot;
+            const tc        = cfg(table.type);
+            const imgFailed = errorImgs.has(table.id);
 
             return (
               <div
@@ -364,81 +359,7 @@ export function LocationBrowse({ location, tables }: Props) {
                       </p>
                     )}
 
-                    {/* ── Time slots ─────────────────── */}
                     <div className="mt-auto">
-                      {slots.length === 0 ? (
-                        <p className="text-xs py-2 text-center" style={{ color: textMut }}>
-                          No slots available for this date
-                        </p>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Clock className="h-3 w-3" style={{ color: textMut }} />
-                            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: textMut }}>
-                              Available slots
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 mb-3">
-                            {displaySlots.map(s => {
-                              const slotIso = new Date(`${date}T${s}:00`).toISOString();
-                              const inCart  = bookedKeys.has(`${table.id}::${slotIso}`);
-
-                              if (inCart) {
-                                return (
-                                  <div
-                                    key={s}
-                                    title="Already in your cart"
-                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold select-none pointer-events-none"
-                                    style={{
-                                      background: "#10B981",
-                                      color: "#fff",
-                                      border: "1.5px solid #059669",
-                                    }}
-                                  >
-                                    <Check className="h-3 w-3 shrink-0" />
-                                    {fmt(s)}
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <button
-                                  key={s}
-                                  onClick={() => openSheet(table, s)}
-                                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
-                                  style={{
-                                    background: chipBg,
-                                    color: textSec,
-                                    border: `1.5px solid ${border}`,
-                                  }}
-                                  onMouseEnter={e => {
-                                    (e.currentTarget as HTMLButtonElement).style.background = "#111111";
-                                    (e.currentTarget as HTMLButtonElement).style.color = "#FFF";
-                                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#111111";
-                                  }}
-                                  onMouseLeave={e => {
-                                    (e.currentTarget as HTMLButtonElement).style.background = chipBg;
-                                    (e.currentTarget as HTMLButtonElement).style.color = textSec;
-                                    (e.currentTarget as HTMLButtonElement).style.borderColor = border;
-                                  }}
-                                >
-                                  {fmt(s)}
-                                </button>
-                              );
-                            })}
-                            {hasMore && (
-                              <button
-                                onClick={() => setExpandedSlots(p => new Set([...p, table.id]))}
-                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold"
-                                style={{ background: chipBg, color: textSec, border: `1.5px solid ${border}` }}
-                              >
-                                +{slots.length - SHOW} more
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-
                       <button
                         className="w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
                         style={{ background: "#111111", boxShadow: "0 4px 14px rgba(0,0,0,0.3)" }}
@@ -528,21 +449,41 @@ export function LocationBrowse({ location, tables }: Props) {
                   <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
                     Select Start Time
                   </label>
-                  <div className="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto scrollbar-hide">
-                    {visibleSlots(location.opening_time, location.closing_time, date).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setSlot(s)}
-                        className="py-2.5 rounded-xl text-xs font-semibold transition-all"
-                        style={{
-                          background: inputBg,
-                          color: textSec,
-                          border: `1.5px solid ${inputBdr}`,
-                        }}
-                      >
-                        {fmt(s)}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto scrollbar-hide">
+                    {visibleSlots(location.opening_time, location.closing_time, date).map(s => {
+                      const occupied = booking ? isOccupied(booking.id, date, s) : false;
+                      if (occupied) {
+                        return (
+                          <div
+                            key={s}
+                            title="Already in your cart"
+                            className="flex flex-col items-center justify-center py-2.5 rounded-xl text-xs font-bold select-none pointer-events-none gap-0.5"
+                            style={{
+                              background: "#10B981",
+                              color: "#fff",
+                              border: "1.5px solid #059669",
+                            }}
+                          >
+                            <Check className="h-3 w-3" />
+                            {fmt(s)}
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => setSlot(s)}
+                          className="py-2.5 rounded-xl text-xs font-semibold transition-all"
+                          style={{
+                            background: inputBg,
+                            color: textSec,
+                            border: `1.5px solid ${inputBdr}`,
+                          }}
+                        >
+                          {fmt(s)}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
