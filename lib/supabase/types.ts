@@ -91,7 +91,7 @@ export interface Database {
           id: string;
           location_id: string;
           name: string;
-          type: "snooker" | "pool" | "ps5";
+          type: "snooker" | "pool" | "ps5" | "foosball";
           size: string | null;
           description: string | null;
           image_url: string | null;
@@ -104,7 +104,7 @@ export interface Database {
           id?: string;
           location_id: string;
           name: string;
-          type: "snooker" | "pool" | "ps5";
+          type: "snooker" | "pool" | "ps5" | "foosball";
           size?: string | null;
           description?: string | null;
           image_url?: string | null;

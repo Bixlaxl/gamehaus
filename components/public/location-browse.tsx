@@ -565,8 +565,8 @@ export function LocationBrowse({ location, tables }: Props) {
               <button
                 className="w-full py-4 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98] disabled:opacity-40"
                 style={{
-                  background: "#D4541A",
-                  boxShadow: slot ? "0 8px 24px rgba(212,84,26,0.35)" : "none",
+                  background: "#111111",
+                  boxShadow: slot ? "0 8px 24px rgba(0,0,0,0.35)" : "none",
                 }}
                 disabled={!slot}
                 onClick={() => addToCart(booking)}

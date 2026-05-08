@@ -63,16 +63,11 @@ export default function LocationsPage() {
 
   const upsertMutation = useMutation({
     mutationFn: async (values: LocationForm) => {
-      if (editing) {
-        const { error } = await supabase
-          .from("locations")
-          .update(values)
-          .eq("id", editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("locations").insert(values);
-        if (error) throw error;
-      }
+      const res = editing
+        ? await fetch(`/api/locations/${editing.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) })
+        : await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["locations"] });
@@ -84,11 +79,9 @@ export default function LocationsPage() {
 
   const softDeleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("locations")
-        .update({ is_active: false })
-        .eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/locations/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["locations"] });
@@ -98,11 +91,9 @@ export default function LocationsPage() {
 
   const reactivateMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("locations")
-        .update({ is_active: true })
-        .eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/locations/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: true }) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["locations"] }),
   });
