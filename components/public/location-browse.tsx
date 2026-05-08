@@ -48,10 +48,14 @@ function visibleSlots(opening: string, closing: string, dateStr: string): string
   const today = new Date().toISOString().split("T")[0];
   const filterByTime = dateStr === today;
   const now = new Date();
-  const curRaw = now.getHours() * 60 + now.getMinutes();
-  // In a midnight-crossing session, early-morning curRaw values (0–openMins) are
-  // actually "late" in the session — shift them into the 24h+ zone for comparison.
-  const curMins = (crossesMidnight && curRaw < openMins) ? curRaw + 24 * 60 : curRaw;
+  const curRaw   = now.getHours() * 60 + now.getMinutes();
+  const closeMins = ch * 60 + cm;
+  // midnight-crossing: curRaw < closeMins means we're in the early-morning part of
+  // the session (e.g. 1 AM) → shift into 24h+ zone. Otherwise (e.g. 7 AM before
+  // opening) we're outside the session → start filter from openMins, showing all slots.
+  const curMins = crossesMidnight
+    ? (curRaw < closeMins ? curRaw + 24 * 60 : openMins)
+    : curRaw;
 
   const list: string[] = [];
   for (let m = openMins; m <= end; m += 30) {
