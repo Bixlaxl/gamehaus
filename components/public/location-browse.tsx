@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import type { Location, Table } from "@/lib/supabase/types";
-import { ShoppingCart, ArrowLeft, X, ChevronRight, Clock, Check } from "lucide-react";
+import { ShoppingCart, ArrowLeft, X, ChevronRight, Check } from "lucide-react";
 import { useTheme } from "next-themes";
 
 /* ── Type config ─────────────────────────── */
@@ -25,7 +25,7 @@ function isOpen(opening: string, closing: string) {
   const cur = now.getHours() * 60 + now.getMinutes();
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
-  const openMins = oh * 60 + om;
+  const openMins  = oh * 60 + om;
   const closeMins = ch * 60 + cm;
   if (closeMins < openMins) return cur >= openMins || cur < closeMins;
   return cur >= openMins && cur < closeMins;
@@ -38,49 +38,47 @@ function fmt(t: string) {
   return `${hr}${m ? `:${String(m).padStart(2, "0")}` : ""} ${ap}`;
 }
 
+/* Returns the HH:MM string 15 minutes after slotStart */
+function slotEndTime(slotStart: string): string {
+  const [h, m] = slotStart.split(":").map(Number);
+  const total = h * 60 + m + 15;
+  const eh = Math.floor(total / 60) % 24;
+  const em = total % 60;
+  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+}
+
+/* 15-min slots from opening to (closing - 15), filtered to current time on today */
 function visibleSlots(opening: string, closing: string, dateStr: string): string[] {
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
-  const openMins = oh * 60 + om;
-  let end = ch * 60 + cm - 30;
+  const openMins  = oh * 60 + om;
+  const closeMins = ch * 60 + cm;
+  let end = closeMins - 15;
   const crossesMidnight = end < openMins;
   if (crossesMidnight) end += 24 * 60;
 
   const today = new Date().toISOString().split("T")[0];
   const filterByTime = dateStr === today;
-  const now = new Date();
-  const curRaw   = now.getHours() * 60 + now.getMinutes();
-  const closeMins = ch * 60 + cm;
-  // midnight-crossing: three cases based on curRaw vs closeMins vs openMins:
-  //   1. curRaw < closeMins  → early morning (e.g. 1 AM), in post-midnight session window → shift into 24h+ zone
-  //   2. curRaw >= openMins  → daytime during session (e.g. 2 PM) → filter from current time
-  //   3. else                → before opening (e.g. 7 AM) → show all slots from opening
+  const now    = new Date();
+  const curRaw = now.getHours() * 60 + now.getMinutes();
+  // Round up to next 15-min boundary so we never show a slot that's already started
+  const curRounded = Math.ceil(curRaw / 15) * 15;
+
+  // midnight-crossing: three cases:
+  //   1. curRaw < closeMins  → early-morning post-midnight session → shift into 24h+ zone
+  //   2. curRaw >= openMins  → daytime during session → filter from current rounded time
+  //   3. else                → before opening → show all slots from opening
   const curMins = crossesMidnight
-    ? (curRaw < closeMins ? curRaw + 24 * 60 : curRaw >= openMins ? curRaw : openMins)
-    : curRaw;
+    ? (curRaw < closeMins ? curRounded + 24 * 60 : curRaw >= openMins ? curRounded : openMins)
+    : curRounded;
 
   const list: string[] = [];
-  for (let m = openMins; m <= end; m += 30) {
+  for (let m = openMins; m <= end; m += 15) {
     if (filterByTime && m < curMins) continue;
     const norm = m % (24 * 60);
     list.push(`${String(Math.floor(norm / 60)).padStart(2, "0")}:${String(norm % 60).padStart(2, "0")}`);
   }
   return list;
-}
-
-/* Max bookable duration for a given slot before closing */
-function maxBookableMins(slotStr: string, opening: string, closing: string): number {
-  const [sh, sm] = slotStr.split(":").map(Number);
-  const [oh, om] = opening.split(":").map(Number);
-  const [ch, cm] = closing.split(":").map(Number);
-  const openMins  = oh * 60 + om;
-  let slotRaw  = sh * 60 + sm;
-  let closeRaw = ch * 60 + cm;
-  if (closeRaw < openMins) {
-    closeRaw += 24 * 60;
-    if (slotRaw < openMins) slotRaw += 24 * 60;
-  }
-  return Math.max(0, closeRaw - slotRaw);
 }
 
 /* 7-day date strip */
@@ -98,33 +96,44 @@ function buildDays() {
   return days;
 }
 
-const DURATIONS = [30, 60, 90, 120, 180];
-
 /* ── Component ───────────────────────────── */
 interface Props { location: Location; tables: Table[] }
 
 export function LocationBrowse({ location, tables }: Props) {
   const cart = useCartStore();
   const { resolvedTheme } = useTheme();
-  const [mounted, setMounted]       = useState(false);
-  const [filter, setFilter]         = useState("all");
-  const [date, setDate]             = useState(new Date().toISOString().split("T")[0]);
-  const [booking, setBooking]       = useState<Table | null>(null);
-  const [slot, setSlot]             = useState<string | null>(null);
-  const [dur, setDur]               = useState(60);
-  const [errorImgs, setErrorImgs]   = useState<Set<string>>(new Set());
+  const [mounted, setMounted]         = useState(false);
+  const [filter, setFilter]           = useState("all");
+  const [date, setDate]               = useState(new Date().toISOString().split("T")[0]);
+  const [booking, setBooking]         = useState<Table | null>(null);
+  const [selectedSlots, setSelected]  = useState<string[]>([]);
+  const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
+
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { cart.setLocation(location.id); }, [location.id]);
 
-  const dark     = !mounted ? false : resolvedTheme === "dark";
-  const open     = isOpen(location.opening_time, location.closing_time);
-  const types    = ["all", ...new Set(tables.map(t => t.type))];
-  const shown    = filter === "all" ? tables : tables.filter(t => t.type === filter);
-  const days     = useMemo(buildDays, []);
+  const dark      = !mounted ? false : resolvedTheme === "dark";
+  const open      = isOpen(location.opening_time, location.closing_time);
+  const types     = ["all", ...new Set(tables.map(t => t.type))];
+  const shown     = filter === "all" ? tables : tables.filter(t => t.type === filter);
+  const days      = useMemo(buildDays, []);
   const cartCount = cart.items.length;
 
-  // Returns true if slotTime on slotDate falls within any existing cart booking for tableId.
-  // e.g. booking 1 PM for 1h → both 1:00 and 1:30 are occupied.
+  /* All slots for the current sheet date */
+  const allSlots = booking
+    ? visibleSlots(location.opening_time, location.closing_time, date)
+    : [];
+
+  /* Derived totals from slot selection */
+  const selMins  = selectedSlots.length * 15;
+  const selLabel = selMins === 0 ? "" : selMins >= 60
+    ? `${Math.floor(selMins / 60)}h${selMins % 60 ? ` ${selMins % 60}m` : ""}`
+    : `${selMins}m`;
+  const selTotal = (booking && selMins > 0)
+    ? formatCurrency((selMins / 60) * booking.hourly_rate)
+    : "";
+
+  /* True if slotTime on slotDate falls inside any cart booking for tableId */
   function isOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
     const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
     return cart.items.some(item => {
@@ -133,6 +142,79 @@ export function LocationBrowse({ location, tables }: Props) {
       const endMs   = new Date(item.scheduledEnd).getTime();
       return slotMs >= startMs && slotMs < endMs;
     });
+  }
+
+  function openSheet(table: Table) {
+    setBooking(table);
+    setSelected([]);
+  }
+
+  function closeSheet() {
+    setBooking(null);
+    setSelected([]);
+  }
+
+  /*
+   * Click logic:
+   *  - nothing selected          → select this slot
+   *  - same single slot clicked  → deselect (toggle off)
+   *  - before current start      → reset to this slot
+   *  - within selection          → shrink: deselect from this slot onwards
+   *  - after selection end       → extend, stopping before any occupied slot
+   */
+  function handleSlotClick(s: string) {
+    if (!booking) return;
+    const idx = allSlots.indexOf(s);
+    if (selectedSlots.length === 0) {
+      setSelected([s]);
+      return;
+    }
+    const startIdx = allSlots.indexOf(selectedSlots[0]);
+    const endIdx   = allSlots.indexOf(selectedSlots[selectedSlots.length - 1]);
+
+    if (idx < startIdx) {
+      // Before current start → reset
+      setSelected([s]);
+    } else if (idx === startIdx && selectedSlots.length === 1) {
+      // Toggle off the only selected slot
+      setSelected([]);
+    } else if (idx <= endIdx) {
+      // Shrink: keep slots before the clicked one
+      const next = allSlots.slice(startIdx, idx);
+      setSelected(next.length > 0 ? next : []);
+    } else {
+      // Extend toward clicked slot, but stop before any occupied slot
+      const range = allSlots.slice(startIdx, idx + 1);
+      const firstOcc = range.findIndex((sl, i) => i > 0 && isOccupied(booking.id, date, sl));
+      const effectiveEnd = firstOcc === -1 ? idx : startIdx + firstOcc - 1;
+      if (effectiveEnd >= startIdx) {
+        setSelected(allSlots.slice(startIdx, effectiveEnd + 1));
+      }
+    }
+  }
+
+  function addToCart(t: Table) {
+    if (selectedSlots.length === 0) return;
+    const firstSlot = selectedSlots[0];
+    const lastSlot  = selectedSlots[selectedSlots.length - 1];
+    const startIso  = new Date(`${date}T${firstSlot}:00`).toISOString();
+    const endStr    = slotEndTime(lastSlot);
+    // Handle midnight crossing: if end time is earlier than start, it's next day
+    const endDate   = endStr < firstSlot ? addOneDay(date) : date;
+    const endIso    = new Date(`${endDate}T${endStr}:00`).toISOString();
+    const durationMins = selectedSlots.length * 15;
+
+    if (cart.items.some(i => i.tableId === t.id && i.scheduledStart === startIso)) {
+      closeSheet();
+      return;
+    }
+    cart.addItem({
+      tableId: t.id, tableName: t.name, tableType: t.type,
+      ratePerHour: t.hourly_rate,
+      scheduledStart: startIso, scheduledEnd: endIso,
+      durationMins, amount: (durationMins / 60) * t.hourly_rate,
+    });
+    closeSheet();
   }
 
   /* theme tokens */
@@ -148,37 +230,7 @@ export function LocationBrowse({ location, tables }: Props) {
   const inputBdr = dark ? "#2A2A2A" : "#DDD";
   const dateBg   = dark ? "#111"    : "#FFF";
 
-  const sheetType  = booking ? cfg(booking.type) : cfg("snooker");
-  const maxDur     = (booking && slot) ? maxBookableMins(slot, location.opening_time, location.closing_time) : Infinity;
-  const validDurs  = DURATIONS.filter(d => d <= maxDur);
-  const safeDur    = validDurs.includes(dur) ? dur : (validDurs[validDurs.length - 1] ?? 30);
-  const total      = booking ? formatCurrency((safeDur / 60) * booking.hourly_rate) : "";
-
-  function openSheet(table: Table, preSlot?: string) {
-    setBooking(table);
-    setSlot(preSlot ?? null);
-    setDur(60);
-  }
-
-  function addToCart(t: Table) {
-    if (!slot) return;
-    const startIso = new Date(`${date}T${slot}:00`).toISOString();
-    if (cart.items.some(i => i.tableId === t.id && i.scheduledStart === startIso)) {
-      setBooking(null);
-      setSlot(null);
-      return;
-    }
-    const start = new Date(startIso);
-    const end   = new Date(start.getTime() + safeDur * 60_000);
-    cart.addItem({
-      tableId: t.id, tableName: t.name, tableType: t.type,
-      ratePerHour: t.hourly_rate,
-      scheduledStart: start.toISOString(), scheduledEnd: end.toISOString(),
-      durationMins: safeDur, amount: (safeDur / 60) * t.hourly_rate,
-    });
-    setBooking(null);
-    setSlot(null);
-  }
+  const sheetType = booking ? cfg(booking.type) : cfg("snooker");
 
   return (
     <div className="min-h-screen" style={{ background: bg }}>
@@ -238,7 +290,7 @@ export function LocationBrowse({ location, tables }: Props) {
             return (
               <button
                 key={d.iso}
-                onClick={() => setDate(d.iso)}
+                onClick={() => { setDate(d.iso); setSelected([]); }}
                 className="shrink-0 flex flex-col items-center px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-200"
                 style={{
                   background:  active ? "#111111" : dateBg,
@@ -295,7 +347,6 @@ export function LocationBrowse({ location, tables }: Props) {
           {shown.map((table, i) => {
             const tc        = cfg(table.type);
             const imgFailed = errorImgs.has(table.id);
-
             return (
               <div
                 key={table.id}
@@ -309,18 +360,15 @@ export function LocationBrowse({ location, tables }: Props) {
                 <div
                   className="rounded-2xl overflow-hidden border h-full flex flex-col"
                   style={{
-                    background: surface,
-                    borderColor: border,
+                    background: surface, borderColor: border,
                     boxShadow: dark ? "0 2px 20px rgba(0,0,0,0.5)" : "0 2px 12px rgba(0,0,0,0.07)",
                   }}
                 >
-                  {/* Image */}
                   <div className="relative overflow-hidden shrink-0" style={{ aspectRatio: "16/9" }}>
                     {table.image_url && !imgFailed ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={table.image_url}
-                        alt={table.name}
+                        src={table.image_url} alt={table.name}
                         className="w-full h-full object-cover"
                         onError={() => setErrorImgs(p => new Set([...p, table.id]))}
                       />
@@ -329,7 +377,6 @@ export function LocationBrowse({ location, tables }: Props) {
                         <span className="text-5xl opacity-25">{tc.emoji}</span>
                       </div>
                     )}
-                    {/* overlay on real images */}
                     {table.image_url && !imgFailed && (
                       <div className="absolute inset-0" style={{ background: "linear-gradient(to top,rgba(0,0,0,0.35) 0%,transparent 50%)" }} />
                     )}
@@ -340,15 +387,13 @@ export function LocationBrowse({ location, tables }: Props) {
                       className="absolute top-3 right-3 text-xs font-bold px-2.5 py-1 rounded-full"
                       style={{
                         background: dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.92)",
-                        color: tc.accent,
-                        backdropFilter: "blur(8px)",
+                        color: tc.accent, backdropFilter: "blur(8px)",
                       }}
                     >
                       {formatCurrency(table.hourly_rate)}/hr
                     </span>
                   </div>
 
-                  {/* Info */}
                   <div className="p-4 flex flex-col flex-1">
                     <h3 className="font-bold text-[16px] leading-tight capitalize mb-0.5" style={{ color: textPri }}>
                       {table.name}
@@ -358,7 +403,6 @@ export function LocationBrowse({ location, tables }: Props) {
                         {[table.size, table.description].filter(Boolean).join(" · ")}
                       </p>
                     )}
-
                     <div className="mt-auto">
                       <button
                         className="w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
@@ -389,7 +433,7 @@ export function LocationBrowse({ location, tables }: Props) {
           <div
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
             style={{ animation: "fadeIn 200ms ease-out" }}
-            onClick={() => setBooking(null)}
+            onClick={closeSheet}
           />
           <div
             className="fixed bottom-0 left-0 right-0 z-50 overflow-y-auto scrollbar-hide"
@@ -406,22 +450,22 @@ export function LocationBrowse({ location, tables }: Props) {
             </div>
 
             <div className="px-5 pt-2 pb-10 max-w-lg mx-auto space-y-5">
+
               {/* Header */}
               <div className="flex items-start justify-between">
                 <div>
                   <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full text-white mb-2" style={{ background: sheetType.accent }}>
-                    {sheetType.emoji} {sheetType.label}
-                    {booking.size ? ` · ${booking.size}` : ""}
+                    {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
                   </span>
                   <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
                   <p className="text-sm mt-0.5" style={{ color: textSec }}>{formatCurrency(booking.hourly_rate)}/hr</p>
                 </div>
-                <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={() => setBooking(null)}>
+                <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* Selected date + time summary */}
+              {/* Date + live selection summary */}
               <div
                 className="flex items-center justify-between px-4 py-3 rounded-xl"
                 style={{ background: inputBg, border: `1.5px solid ${inputBdr}` }}
@@ -432,106 +476,89 @@ export function LocationBrowse({ location, tables }: Props) {
                     {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
                   </p>
                 </div>
-                {slot && (
+                {selectedSlots.length > 0 && (
                   <>
                     <div className="w-px h-8" style={{ background: inputBdr }} />
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: textMut }}>Start Time</p>
-                      <p className="text-sm font-semibold" style={{ color: textPri }}>{fmt(slot)}</p>
+                    <div className="text-right">
+                      <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: textMut }}>Selected</p>
+                      <p className="text-sm font-semibold" style={{ color: textPri }}>
+                        {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
+                      </p>
                     </div>
                   </>
                 )}
               </div>
 
-              {/* Time slots — shown if none pre-selected */}
-              {!slot && (
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
-                    Select Start Time
-                  </label>
-                  <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto scrollbar-hide">
-                    {visibleSlots(location.opening_time, location.closing_time, date).map(s => {
-                      const occupied = booking ? isOccupied(booking.id, date, s) : false;
+              {/* Slot grid — 3 cols, range format, selectable / occupied */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
+                  Select Time Slots
+                </label>
+
+                {allSlots.length === 0 ? (
+                  <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto scrollbar-hide pr-1">
+                    {allSlots.map(s => {
+                      const occupied = isOccupied(booking.id, date, s);
+                      const selected = selectedSlots.includes(s);
+
                       if (occupied) {
                         return (
                           <div
                             key={s}
                             title="Already in your cart"
-                            className="flex flex-col items-center justify-center py-2.5 rounded-xl text-xs font-bold select-none pointer-events-none gap-0.5"
-                            style={{
-                              background: "#10B981",
-                              color: "#fff",
-                              border: "1.5px solid #059669",
-                            }}
+                            className="flex flex-col items-center justify-center py-3 rounded-xl select-none pointer-events-none gap-0.5"
+                            style={{ background: "#10B981", border: "1.5px solid #059669" }}
                           >
-                            <Check className="h-3 w-3" />
-                            {fmt(s)}
+                            <Check className="h-3 w-3 text-white" />
+                            <span className="text-[10px] font-bold text-white leading-tight">{fmt(s)}</span>
+                            <span className="text-[9px] text-white/70 leading-tight">{fmt(slotEndTime(s))}</span>
                           </div>
                         );
                       }
+
                       return (
                         <button
                           key={s}
-                          onClick={() => setSlot(s)}
-                          className="py-2.5 rounded-xl text-xs font-semibold transition-all"
+                          onClick={() => handleSlotClick(s)}
+                          className="flex flex-col items-center justify-center py-3 rounded-xl transition-all active:scale-95 gap-0.5"
                           style={{
-                            background: inputBg,
-                            color: textSec,
-                            border: `1.5px solid ${inputBdr}`,
+                            background: selected ? sheetType.accent : inputBg,
+                            border: `1.5px solid ${selected ? sheetType.accent : inputBdr}`,
+                            boxShadow: selected ? `0 4px 12px ${sheetType.accent}40` : "none",
                           }}
                         >
-                          {fmt(s)}
+                          <span
+                            className="text-[11px] font-bold leading-tight"
+                            style={{ color: selected ? "#fff" : textPri }}
+                          >
+                            {fmt(s)}
+                          </span>
+                          <span
+                            className="text-[9px] leading-tight"
+                            style={{ color: selected ? "rgba(255,255,255,0.7)" : textMut }}
+                          >
+                            {fmt(slotEndTime(s))}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                </div>
-              )}
-
-              {/* Change time link */}
-              {slot && (
-                <button
-                  className="text-xs font-semibold underline"
-                  style={{ color: sheetType.accent }}
-                  onClick={() => setSlot(null)}
-                >
-                  Change time
-                </button>
-              )}
-
-              {/* Duration */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
-                  Duration
-                </label>
-                <div className="flex gap-2 flex-wrap">
-                  {validDurs.map(d => {
-                    const active = safeDur === d;
-                    const label  = d >= 60 ? `${Math.floor(d / 60)}h${d % 60 ? ` ${d % 60}m` : ""}` : `${d}m`;
-                    return (
-                      <button
-                        key={d}
-                        onClick={() => setDur(d)}
-                        className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                        style={{
-                          background: active ? sheetType.accent : inputBg,
-                          color:      active ? "#FFF" : textSec,
-                          border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
-                          boxShadow:  active ? `0 4px 12px ${sheetType.accent}40` : "none",
-                        }}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
+                )}
               </div>
 
-              {/* Total */}
-              {slot && (
-                <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: inputBg, border: `1.5px solid ${inputBdr}` }}>
-                  <span className="text-sm" style={{ color: textSec }}>Total</span>
-                  <span className="text-xl font-bold" style={{ color: sheetType.accent }}>{total}</span>
+              {/* Duration + total — only when slots selected */}
+              {selectedSlots.length > 0 && (
+                <div
+                  className="flex items-center justify-between px-4 py-3 rounded-xl"
+                  style={{ background: inputBg, border: `1.5px solid ${inputBdr}` }}
+                >
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: textMut }}>Duration</p>
+                    <p className="text-sm font-semibold" style={{ color: textPri }}>{selLabel}</p>
+                  </div>
+                  <span className="text-2xl font-bold" style={{ color: sheetType.accent }}>{selTotal}</span>
                 </div>
               )}
 
@@ -540,12 +567,14 @@ export function LocationBrowse({ location, tables }: Props) {
                 className="w-full py-4 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98] disabled:opacity-40"
                 style={{
                   background: "#111111",
-                  boxShadow: slot ? "0 8px 24px rgba(0,0,0,0.35)" : "none",
+                  boxShadow: selectedSlots.length > 0 ? "0 8px 24px rgba(0,0,0,0.35)" : "none",
                 }}
-                disabled={!slot}
+                disabled={selectedSlots.length === 0}
                 onClick={() => addToCart(booking)}
               >
-                {slot ? `Add to Cart — ${total}` : "Select a time slot above"}
+                {selectedSlots.length > 0
+                  ? `Add to Cart — ${selTotal} · ${selLabel}`
+                  : "Tap slots above to select"}
               </button>
             </div>
           </div>
@@ -553,4 +582,10 @@ export function LocationBrowse({ location, tables }: Props) {
       )}
     </div>
   );
+}
+
+function addOneDay(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split("T")[0];
 }
