@@ -51,11 +51,12 @@ function visibleSlots(opening: string, closing: string, dateStr: string): string
   const now = new Date();
   const curRaw   = now.getHours() * 60 + now.getMinutes();
   const closeMins = ch * 60 + cm;
-  // midnight-crossing: curRaw < closeMins means we're in the early-morning part of
-  // the session (e.g. 1 AM) → shift into 24h+ zone. Otherwise (e.g. 7 AM before
-  // opening) we're outside the session → start filter from openMins, showing all slots.
+  // midnight-crossing: three cases based on curRaw vs closeMins vs openMins:
+  //   1. curRaw < closeMins  → early morning (e.g. 1 AM), in post-midnight session window → shift into 24h+ zone
+  //   2. curRaw >= openMins  → daytime during session (e.g. 2 PM) → filter from current time
+  //   3. else                → before opening (e.g. 7 AM) → show all slots from opening
   const curMins = crossesMidnight
-    ? (curRaw < closeMins ? curRaw + 24 * 60 : openMins)
+    ? (curRaw < closeMins ? curRaw + 24 * 60 : curRaw >= openMins ? curRaw : openMins)
     : curRaw;
 
   const list: string[] = [];
@@ -113,8 +114,7 @@ export function LocationBrowse({ location, tables }: Props) {
   const [dur, setDur]               = useState(60);
   const [errorImgs, setErrorImgs]   = useState<Set<string>>(new Set());
   useEffect(() => { setMounted(true); }, []);
-
-  if (cart.locationId !== location.id) cart.setLocation(location.id);
+  useEffect(() => { cart.setLocation(location.id); }, [location.id]);
 
   const dark     = !mounted ? false : resolvedTheme === "dark";
   const open     = isOpen(location.opening_time, location.closing_time);

@@ -26,7 +26,11 @@ export const useCartStore = create<CartStore>()(
     (set) => ({
       locationId: null,
       items: [],
-      setLocation: (locationId) => set({ locationId }),
+      setLocation: (locationId) =>
+        set((state) => ({
+          locationId,
+          items: state.locationId !== null && state.locationId !== locationId ? [] : state.items,
+        })),
       addItem: (item) =>
         set((state) => ({ items: [...state.items, item] })),
       removeItem: (tableId, scheduledStart) =>
