@@ -294,8 +294,12 @@ export function LocationBrowse({ location, tables }: Props) {
             const slots      = visibleSlots(location.opening_time, location.closing_time, date);
             const isExpanded = expandedSlots.has(table.id);
             const SHOW       = 4;
-            const displaySlots = isExpanded ? slots : slots.slice(0, SHOW);
-            const hasMore    = slots.length > SHOW && !isExpanded;
+            // Auto-expand if a booked slot would otherwise be hidden past the first 4
+            const hasBookedSlot = slots.some(s =>
+              bookedKeys.has(`${table.id}::${new Date(`${date}T${s}:00`).toISOString()}`)
+            );
+            const displaySlots = (isExpanded || hasBookedSlot) ? slots : slots.slice(0, SHOW);
+            const hasMore    = slots.length > SHOW && !isExpanded && !hasBookedSlot;
 
             return (
               <div
