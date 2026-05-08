@@ -125,6 +125,12 @@ export function LocationBrowse({ location, tables }: Props) {
   const days     = useMemo(buildDays, []);
   const cartCount = cart.items.length;
 
+  // Pre-compute booked slot keys for O(1) lookup: "tableId::scheduledStartISO"
+  const bookedKeys = useMemo(
+    () => new Set(cart.items.map(i => `${i.tableId}::${i.scheduledStart}`)),
+    [cart.items]
+  );
+
   /* theme tokens */
   const bg       = dark ? "#0A0A0A" : "#F7F5F2";
   const surface  = dark ? "#111"    : "#FFFFFF";
@@ -370,28 +376,27 @@ export function LocationBrowse({ location, tables }: Props) {
                           </div>
                           <div className="flex flex-wrap gap-1.5 mb-3">
                             {displaySlots.map(s => {
-                              const inCart = cart.items.some(
-                                i => i.tableId === table.id &&
-                                  i.scheduledStart === new Date(`${date}T${s}:00`).toISOString()
-                              );
+                              const slotIso = new Date(`${date}T${s}:00`).toISOString();
+                              const inCart  = bookedKeys.has(`${table.id}::${slotIso}`);
+
                               if (inCart) {
                                 return (
                                   <div
                                     key={s}
-                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold select-none"
+                                    title="Already in your cart"
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold select-none pointer-events-none"
                                     style={{
-                                      background: dark ? "#1E1E1E" : "#E5E7EB",
-                                      color: dark ? "#444" : "#9CA3AF",
-                                      border: `1.5px dashed ${dark ? "#2A2A2A" : "#D1D5DB"}`,
-                                      cursor: "not-allowed",
-                                      textDecoration: "line-through",
+                                      background: "#10B981",
+                                      color: "#fff",
+                                      border: "1.5px solid #059669",
                                     }}
                                   >
-                                    <Check className="h-3 w-3 shrink-0" style={{ color: dark ? "#444" : "#9CA3AF" }} />
+                                    <Check className="h-3 w-3 shrink-0" />
                                     {fmt(s)}
                                   </div>
                                 );
                               }
+
                               return (
                                 <button
                                   key={s}
@@ -401,7 +406,6 @@ export function LocationBrowse({ location, tables }: Props) {
                                     background: chipBg,
                                     color: textSec,
                                     border: `1.5px solid ${border}`,
-                                    cursor: "pointer",
                                   }}
                                   onMouseEnter={e => {
                                     (e.currentTarget as HTMLButtonElement).style.background = "#111111";

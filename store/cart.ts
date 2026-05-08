@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface CartItem {
   tableId: string;
@@ -20,17 +21,24 @@ interface CartStore {
   clearCart: () => void;
 }
 
-export const useCartStore = create<CartStore>((set) => ({
-  locationId: null,
-  items: [],
-  setLocation: (locationId) => set({ locationId }),
-  addItem: (item) =>
-    set((state) => ({ items: [...state.items, item] })),
-  removeItem: (tableId, scheduledStart) =>
-    set((state) => ({
-      items: state.items.filter(
-        (i) => !(i.tableId === tableId && i.scheduledStart === scheduledStart)
-      ),
-    })),
-  clearCart: () => set({ items: [], locationId: null }),
-}));
+export const useCartStore = create<CartStore>()(
+  persist(
+    (set) => ({
+      locationId: null,
+      items: [],
+      setLocation: (locationId) => set({ locationId }),
+      addItem: (item) =>
+        set((state) => ({ items: [...state.items, item] })),
+      removeItem: (tableId, scheduledStart) =>
+        set((state) => ({
+          items: state.items.filter(
+            (i) => !(i.tableId === tableId && i.scheduledStart === scheduledStart)
+          ),
+        })),
+      clearCart: () => set({ items: [], locationId: null }),
+    }),
+    {
+      name: "gamehaus-cart",
+    }
+  )
+);
