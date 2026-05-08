@@ -10,9 +10,10 @@ import { useTheme } from "next-themes";
 
 /* ── Type config ─────────────────────────── */
 const TYPE: Record<string, { label: string; emoji: string; accent: string; grad: string }> = {
-  snooker: { label: "Snooker", emoji: "🎱", accent: "#D4541A", grad: "linear-gradient(135deg,#D4541A 0%,#7A2508 100%)" },
-  pool:    { label: "Pool",    emoji: "🎱", accent: "#1E6B4A", grad: "linear-gradient(135deg,#1E6B4A 0%,#0B3324 100%)" },
-  ps5:     { label: "PS5",     emoji: "🎮", accent: "#6D28D9", grad: "linear-gradient(135deg,#6D28D9 0%,#3B0D8E 100%)" },
+  snooker:  { label: "Snooker",  emoji: "🎱", accent: "#D4541A", grad: "linear-gradient(135deg,#D4541A 0%,#7A2508 100%)" },
+  pool:     { label: "Pool",     emoji: "🎱", accent: "#1E6B4A", grad: "linear-gradient(135deg,#1E6B4A 0%,#0B3324 100%)" },
+  ps5:      { label: "PS5",      emoji: "🎮", accent: "#6D28D9", grad: "linear-gradient(135deg,#6D28D9 0%,#3B0D8E 100%)" },
+  foosball: { label: "Foosball", emoji: "⚽", accent: "#B45309", grad: "linear-gradient(135deg,#B45309 0%,#6B3203 100%)" },
 };
 function cfg(type: string) {
   return TYPE[type] ?? { label: type, emoji: "🎯", accent: "#555", grad: "linear-gradient(135deg,#444,#222)" };
@@ -407,7 +408,7 @@ export function LocationBrowse({ location, tables }: Props) {
 
                       <button
                         className="w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
-                        style={{ background: "#D4541A", boxShadow: "0 4px 14px rgba(212,84,26,0.3)" }}
+                        style={{ background: "#111111", boxShadow: "0 4px 14px rgba(0,0,0,0.3)" }}
                         onClick={() => openSheet(table)}
                       >
                         Book Now <ChevronRight className="h-4 w-4" />

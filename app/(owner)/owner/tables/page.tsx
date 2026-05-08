@@ -30,7 +30,7 @@ const supabase = createClient();
 type TableForm = {
   location_id: string;
   name: string;
-  type: "snooker" | "pool" | "ps5";
+  type: "snooker" | "pool" | "ps5" | "foosball";
   size: string;
   description: string;
   hourly_rate: string;
@@ -216,6 +216,7 @@ export default function TablesPage() {
     snooker: "🎱",
     pool: "🎱",
     ps5: "🎮",
+    foosball: "⚽",
   };
 
   return (
@@ -371,6 +372,7 @@ export default function TablesPage() {
                     <SelectItem value="snooker">Snooker</SelectItem>
                     <SelectItem value="pool">Pool</SelectItem>
                     <SelectItem value="ps5">PS5</SelectItem>
+                    <SelectItem value="foosball">Foosball</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
