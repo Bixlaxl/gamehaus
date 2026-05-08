@@ -250,7 +250,7 @@ export function LocationBrowse({ location, tables }: Props) {
           {types.map(t => {
             const active = filter === t;
             const tc     = t === "all" ? null : TYPE[t];
-            const accent = tc?.accent ?? "#D4541A";
+            const accent = t === "all" ? "#111111" : (tc?.accent ?? "#111111");
             const count  = t === "all" ? tables.length : tables.filter(tb => tb.type === t).length;
             return (
               <button
@@ -369,30 +369,42 @@ export function LocationBrowse({ location, tables }: Props) {
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-1.5 mb-3">
-                            {displaySlots.map(s => (
-                              <button
-                                key={s}
-                                onClick={() => openSheet(table, s)}
-                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
-                                style={{
-                                  background: chipBg,
-                                  color: textSec,
-                                  border: `1.5px solid ${border}`,
-                                }}
-                                onMouseEnter={e => {
-                                  (e.currentTarget as HTMLButtonElement).style.background = "#D4541A";
-                                  (e.currentTarget as HTMLButtonElement).style.color = "#FFF";
-                                  (e.currentTarget as HTMLButtonElement).style.borderColor = "#D4541A";
-                                }}
-                                onMouseLeave={e => {
-                                  (e.currentTarget as HTMLButtonElement).style.background = chipBg;
-                                  (e.currentTarget as HTMLButtonElement).style.color = textSec;
-                                  (e.currentTarget as HTMLButtonElement).style.borderColor = border;
-                                }}
-                              >
-                                {fmt(s)}
-                              </button>
-                            ))}
+                            {displaySlots.map(s => {
+                              const inCart = cart.items.some(
+                                i => i.tableId === table.id &&
+                                  i.scheduledStart === new Date(`${date}T${s}:00`).toISOString()
+                              );
+                              return (
+                                <button
+                                  key={s}
+                                  disabled={inCart}
+                                  onClick={() => !inCart && openSheet(table, s)}
+                                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                                  style={{
+                                    background: inCart ? (dark ? "#1A1A1A" : "#F0F0F0") : chipBg,
+                                    color: inCart ? textMut : textSec,
+                                    border: `1.5px solid ${inCart ? (dark ? "#2A2A2A" : "#DDD") : border}`,
+                                    opacity: inCart ? 0.55 : 1,
+                                    cursor: inCart ? "not-allowed" : "pointer",
+                                    textDecoration: inCart ? "line-through" : "none",
+                                  }}
+                                  onMouseEnter={e => {
+                                    if (inCart) return;
+                                    (e.currentTarget as HTMLButtonElement).style.background = "#111111";
+                                    (e.currentTarget as HTMLButtonElement).style.color = "#FFF";
+                                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#111111";
+                                  }}
+                                  onMouseLeave={e => {
+                                    if (inCart) return;
+                                    (e.currentTarget as HTMLButtonElement).style.background = chipBg;
+                                    (e.currentTarget as HTMLButtonElement).style.color = textSec;
+                                    (e.currentTarget as HTMLButtonElement).style.borderColor = border;
+                                  }}
+                                >
+                                  {fmt(s)}
+                                </button>
+                              );
+                            })}
                             {hasMore && (
                               <button
                                 onClick={() => setExpandedSlots(p => new Set([...p, table.id]))}
