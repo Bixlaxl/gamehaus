@@ -205,7 +205,7 @@ export function LocationBrowse({ location, tables }: Props) {
           <Link href={`/${location.slug}/book`} className="shrink-0">
             <button
               className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white"
-              style={{ background: "#D4541A" }}
+              style={{ background: "#111111" }}
             >
               <ShoppingCart className="h-4 w-4" />
               <span>Cart</span>
@@ -231,10 +231,10 @@ export function LocationBrowse({ location, tables }: Props) {
                 onClick={() => setDate(d.iso)}
                 className="shrink-0 flex flex-col items-center px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-200"
                 style={{
-                  background:  active ? "#D4541A" : dateBg,
+                  background:  active ? "#111111" : dateBg,
                   color:       active ? "#FFF" : textSec,
-                  border:      `1.5px solid ${active ? "#D4541A" : border}`,
-                  boxShadow:   active ? "0 4px 14px rgba(212,84,26,0.3)" : dark ? "none" : "0 1px 4px rgba(0,0,0,0.06)",
+                  border:      `1.5px solid ${active ? "#111111" : border}`,
+                  boxShadow:   active ? "0 4px 14px rgba(0,0,0,0.25)" : dark ? "none" : "0 1px 4px rgba(0,0,0,0.06)",
                   transform:   active ? "scale(1.04)" : "scale(1)",
                 }}
               >

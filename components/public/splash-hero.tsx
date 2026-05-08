@@ -265,7 +265,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
 
                       <div
                         className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-white text-sm transition-opacity group-hover:opacity-90 active:scale-95"
-                        style={{ background: accent }}
+                        style={{ background: "#111111" }}
                       >
                         Book a Table
                         <ChevronRight className="h-4 w-4" />
