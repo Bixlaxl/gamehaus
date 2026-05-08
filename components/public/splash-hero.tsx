@@ -25,7 +25,6 @@ function isOpenNow(opening: string, closing: string): boolean {
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const openMins = oh * 60 + om;
   const closeMins = ch * 60 + cm;
-  // crosses midnight (e.g. 11:00 → 02:00)
   if (closeMins < openMins) return nowMins >= openMins || nowMins < closeMins;
   return nowMins >= openMins && nowMins < closeMins;
 }
@@ -39,7 +38,7 @@ function formatTime(t: string): string {
 
 export function SplashHero({ locations }: { locations: Location[] }) {
   const [phase, setPhase] = useState<Phase>("loading");
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -53,7 +52,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
 
   const isDark = !mounted ? false : resolvedTheme === "dark";
 
-  // Theme-aware colors
   const bg        = isDark ? "#0A0A0A" : "#F5F3EE";
   const cardBg    = isDark ? "#111111" : "#FFFFFF";
   const cardBorder= isDark ? "#1E1E1E" : "#E8E4DC";
@@ -76,7 +74,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
               : "none",
           }}
         >
-          {/* Orange glow */}
           <div
             className="absolute rounded-full pointer-events-none"
             style={{
@@ -87,7 +84,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             }}
           />
 
-          {/* Logo */}
           <div
             style={{
               opacity:   phase === "loading" ? 0 : 1,
@@ -108,7 +104,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             />
           </div>
 
-          {/* Tagline */}
           <div
             className="mt-5 text-center"
             style={{
@@ -125,13 +120,10 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             </p>
           </div>
 
-          {/* Leading edge — orange wipe line visible as curtain rises */}
           <div
             className="absolute bottom-0 left-0 right-0"
             style={{ height: 3, background: "linear-gradient(90deg, transparent, #D4541A 20%, #FF7A45 50%, #D4541A 80%, transparent)" }}
           />
-
-          {/* Growing bottom accent during hold */}
           <div
             className="absolute bottom-[3px] left-0 h-[1px]"
             style={{
@@ -159,7 +151,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Theme toggle */}
             {mounted && (
               <button
                 onClick={() => setTheme(isDark ? "light" : "dark")}
