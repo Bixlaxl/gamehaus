@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import type { Location, Table } from "@/lib/supabase/types";
-import { ShoppingCart, ArrowLeft, X, ChevronRight, Clock } from "lucide-react";
+import { ShoppingCart, ArrowLeft, X, ChevronRight, Clock, Check } from "lucide-react";
 import { useTheme } from "next-themes";
 
 /* ── Type config ─────────────────────────── */
@@ -374,28 +374,41 @@ export function LocationBrowse({ location, tables }: Props) {
                                 i => i.tableId === table.id &&
                                   i.scheduledStart === new Date(`${date}T${s}:00`).toISOString()
                               );
+                              if (inCart) {
+                                return (
+                                  <div
+                                    key={s}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold select-none"
+                                    style={{
+                                      background: dark ? "#1E1E1E" : "#E5E7EB",
+                                      color: dark ? "#444" : "#9CA3AF",
+                                      border: `1.5px dashed ${dark ? "#2A2A2A" : "#D1D5DB"}`,
+                                      cursor: "not-allowed",
+                                      textDecoration: "line-through",
+                                    }}
+                                  >
+                                    <Check className="h-3 w-3 shrink-0" style={{ color: dark ? "#444" : "#9CA3AF" }} />
+                                    {fmt(s)}
+                                  </div>
+                                );
+                              }
                               return (
                                 <button
                                   key={s}
-                                  disabled={inCart}
-                                  onClick={() => !inCart && openSheet(table, s)}
-                                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                                  onClick={() => openSheet(table, s)}
+                                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
                                   style={{
-                                    background: inCart ? (dark ? "#1A1A1A" : "#F0F0F0") : chipBg,
-                                    color: inCart ? textMut : textSec,
-                                    border: `1.5px solid ${inCart ? (dark ? "#2A2A2A" : "#DDD") : border}`,
-                                    opacity: inCart ? 0.55 : 1,
-                                    cursor: inCart ? "not-allowed" : "pointer",
-                                    textDecoration: inCart ? "line-through" : "none",
+                                    background: chipBg,
+                                    color: textSec,
+                                    border: `1.5px solid ${border}`,
+                                    cursor: "pointer",
                                   }}
                                   onMouseEnter={e => {
-                                    if (inCart) return;
                                     (e.currentTarget as HTMLButtonElement).style.background = "#111111";
                                     (e.currentTarget as HTMLButtonElement).style.color = "#FFF";
                                     (e.currentTarget as HTMLButtonElement).style.borderColor = "#111111";
                                   }}
                                   onMouseLeave={e => {
-                                    if (inCart) return;
                                     (e.currentTarget as HTMLButtonElement).style.background = chipBg;
                                     (e.currentTarget as HTMLButtonElement).style.color = textSec;
                                     (e.currentTarget as HTMLButtonElement).style.borderColor = border;
