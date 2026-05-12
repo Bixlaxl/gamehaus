@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { User, Location } from "@/lib/supabase/types";
-import { Plus } from "lucide-react";
+import { Plus, Eye, EyeOff } from "lucide-react";
 
 const supabase = createClient();
 
@@ -36,6 +36,15 @@ export default function StaffPage() {
     location_id: "",
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+
+  function toggleReveal(id: string) {
+    setRevealedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   const { data: locations } = useQuery({
     queryKey: ["locations"],
@@ -114,52 +123,56 @@ export default function StaffPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Name
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Email
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Location
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Status
-              </th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Password</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {staff?.map((s) => (
-              <tr key={s.id}>
-                <td className="px-4 py-3 font-medium text-gray-900">
-                  {s.name}
-                </td>
-                <td className="px-4 py-3 text-gray-500">{s.email}</td>
-                <td className="px-4 py-3 text-gray-500">
-                  {s.locations?.name ?? "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge variant={s.is_active ? "success" : "secondary"}>
-                    {s.is_active ? "Active" : "Inactive"}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      toggleActiveMutation.mutate({
-                        id: s.id,
-                        active: !s.is_active,
-                      })
-                    }
-                  >
-                    {s.is_active ? "Deactivate" : "Reactivate"}
-                  </Button>
-                </td>
-              </tr>
-            ))}
+            {staff?.map((s) => {
+              const revealed = revealedIds.has(s.id);
+              return (
+                <tr key={s.id}>
+                  <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
+                  <td className="px-4 py-3 text-gray-500">{s.email}</td>
+                  <td className="px-4 py-3">
+                    {s.login_password ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm text-gray-700">
+                          {revealed ? s.login_password : "••••••••"}
+                        </span>
+                        <button
+                          onClick={() => toggleReveal(s.id)}
+                          className="text-gray-400 hover:text-gray-700 transition-colors"
+                        >
+                          {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{s.locations?.name ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={s.is_active ? "success" : "secondary"}>
+                      {s.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleActiveMutation.mutate({ id: s.id, active: !s.is_active })}
+                    >
+                      {s.is_active ? "Deactivate" : "Reactivate"}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
             {staff?.length === 0 && (
               <tr>
                 <td

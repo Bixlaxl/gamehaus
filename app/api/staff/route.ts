@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     email,
     role: "staff",
     location_id,
+    login_password: password,
   });
 
   if (dbError) {

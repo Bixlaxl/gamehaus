@@ -57,6 +57,7 @@ export interface Database {
           location_id: string | null;
           is_active: boolean;
           created_at: string;
+          login_password: string | null;
         };
         Insert: {
           id: string;
@@ -66,6 +67,7 @@ export interface Database {
           location_id?: string | null;
           is_active?: boolean;
           created_at?: string;
+          login_password?: string | null;
         };
         Update: {
           id?: string;
@@ -75,6 +77,7 @@ export interface Database {
           location_id?: string | null;
           is_active?: boolean;
           created_at?: string;
+          login_password?: string | null;
         };
         Relationships: [
           {
