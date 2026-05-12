@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client"; // only used for auth sign-out
 import { usePOSStore } from "@/store/pos";
-import { LogOut } from "lucide-react";
+import { LogOut, UserPlus, QrCode, Clock } from "lucide-react";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
 import { TableGrid } from "./table-grid";
 import { OrderPanel } from "./order-panel";
-import { BottomBar } from "./bottom-bar";
 import { WalkInSlider } from "./walk-in-slider";
 import { CheckinSlider } from "./checkin-slider";
 import { UpcomingDrawer } from "./upcoming-drawer";
@@ -164,26 +163,28 @@ export function POSScreen({
     if (rawOrders) setOpenOrders(rawOrders);
   }, [rawOrders, setOpenOrders]);
 
+  const { setWalkInOpen, setCheckinOpen, setUpcomingOpen } = usePOSStore();
+
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
+    <div className="h-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
+
+      {/* ── Header ──────────────────────────────────── */}
+      <header className="shrink-0 flex items-center justify-between px-5 h-14 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-white">{locationName}</span>
-          <span className="text-gray-400 text-sm">·</span>
-          <span className="text-gray-300 text-sm">{staffName}</span>
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-bold text-slate-100">{locationName}</span>
+          <span className="text-slate-700">·</span>
+          <span className="text-slate-400 text-sm">{staffName}</span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-gray-300 text-sm font-mono">
+          <span className="text-slate-300 text-sm font-mono tabular-nums">
             {now.toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
+              hour: "2-digit", minute: "2-digit", second: "2-digit",
             })}
           </span>
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm transition-colors"
+            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-200 text-sm transition-colors"
           >
             <LogOut className="h-4 w-4" />
             Sign out
@@ -191,21 +192,52 @@ export function POSScreen({
         </div>
       </header>
 
-      {/* Alerts bar */}
       <POSAlerts />
 
-      {/* Main content */}
+      {/* ── Main ────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-72 shrink-0 border-r border-gray-700 overflow-y-auto p-3 bg-gray-900">
-          <TableGrid />
+
+        {/* Left sidebar — tables + actions */}
+        <div className="w-80 shrink-0 flex flex-col border-r border-slate-800 bg-slate-900">
+
+          {/* Tables list — scrollable */}
+          <div className="flex-1 overflow-y-auto p-3">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-1 mb-2">
+              Tables
+            </p>
+            <TableGrid />
+          </div>
+
+          {/* Action buttons — pinned to sidebar bottom */}
+          <div className="shrink-0 p-3 border-t border-slate-800 space-y-2">
+            <button
+              onClick={() => setWalkInOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors"
+            >
+              <UserPlus className="h-4 w-4" /> New Walk-in
+            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setCheckinOpen(true)}
+                className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium transition-colors"
+              >
+                <QrCode className="h-3.5 w-3.5" /> Check-in
+              </button>
+              <button
+                onClick={() => setUpcomingOpen(true)}
+                className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium transition-colors"
+              >
+                <Clock className="h-3.5 w-3.5" /> Upcoming
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
+
+        {/* Right — order detail */}
+        <div className="flex-1 overflow-y-auto bg-slate-950">
           <OrderPanel locationId={locationId} />
         </div>
       </div>
-
-      {/* Bottom action bar */}
-      <BottomBar locationId={locationId} />
 
       {/* Modals & sliders */}
       <WalkInSlider locationId={locationId} />

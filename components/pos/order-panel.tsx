@@ -4,45 +4,44 @@ import { useState } from "react";
 import { usePOSStore, getSelectedOrder } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatCurrency, formatCountdown, cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Square, Timer, CheckCircle2 } from "lucide-react";
 import type { OrderItem } from "@/lib/supabase/types";
 
 interface OrderPanelProps {
   locationId: string;
 }
 
-export function OrderPanel({ locationId: _locationId }: OrderPanelProps) {
-  const store = usePOSStore();
-  const selectedOrder = getSelectedOrder(store);
-  const now = store.now;
+function initials(name: string) {
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
 
-  const [addExtraOpen, setAddExtraOpen] = useState(false);
-  const [extraForm, setExtraForm] = useState({
-    name: "",
-    price: "",
-    quantity: "1",
-  });
-  const [extraLoading, setExtraLoading] = useState(false);
+export function OrderPanel({ locationId: _locationId }: OrderPanelProps) {
+  const store        = usePOSStore();
+  const selectedOrder = getSelectedOrder(store);
+  const now          = store.now;
+
+  const [addExtraOpen,  setAddExtraOpen]  = useState(false);
+  const [extraForm,     setExtraForm]     = useState({ name: "", price: "", quantity: "1" });
+  const [extraLoading,  setExtraLoading]  = useState(false);
 
   if (!selectedOrder) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500">
-        <div className="text-center">
-          <p className="text-lg">No order selected</p>
-          <p className="text-sm mt-1">Tap a table or start a new walk-in</p>
+      <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-6">
+        <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center">
+          <Square className="h-6 w-6 text-slate-600" />
+        </div>
+        <div>
+          <p className="text-slate-300 font-medium">No order selected</p>
+          <p className="text-slate-600 text-sm mt-0.5">Select a table or start a new walk-in</p>
         </div>
       </div>
     );
   }
 
-  const activeItems = selectedOrder.items.filter(
-    (i) => i.status !== "cancelled" && !i.is_deleted
-  );
+  const activeItems  = selectedOrder.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
   const activeExtras = selectedOrder.extras.filter((e) => !e.is_deleted);
-
-  const bill = calculateBill(activeItems, activeExtras, now);
+  const bill         = calculateBill(activeItems, activeExtras, now);
+  const hasRunning   = activeItems.some((i) => i.status === "running");
 
   async function stopSession(item: OrderItem) {
     const res = await fetch("/api/sessions/stop", {
@@ -63,8 +62,8 @@ export function OrderPanel({ locationId: _locationId }: OrderPanelProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: extraForm.name,
-        price: parseFloat(extraForm.price),
+        name:     extraForm.name,
+        price:    parseFloat(extraForm.price),
         quantity: parseInt(extraForm.quantity),
       }),
     });
@@ -76,116 +75,131 @@ export function OrderPanel({ locationId: _locationId }: OrderPanelProps) {
   }
 
   async function deleteExtra(extraId: string) {
-    await fetch(`/api/orders/${selectedOrder!.id}/extras/${extraId}`, {
-      method: "DELETE",
-    });
+    await fetch(`/api/orders/${selectedOrder!.id}/extras/${extraId}`, { method: "DELETE" });
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-850">
-      {/* Customer header */}
-      <div className="px-5 py-4 border-b border-gray-700 bg-gray-800">
+    <div className="h-full flex flex-col">
+
+      {/* ── Customer header ─────────────────────────── */}
+      <div className="shrink-0 px-6 py-4 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-white">
-              {selectedOrder.customer_name}
-            </p>
-            {selectedOrder.customer_phone && (
-              <p className="text-sm text-gray-400">
-                📞 {selectedOrder.customer_phone}
-              </p>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
+              {initials(selectedOrder.customer_name)}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-100 leading-tight">{selectedOrder.customer_name}</p>
+              {selectedOrder.customer_phone && (
+                <p className="text-xs text-slate-400 mt-0.5">{selectedOrder.customer_phone}</p>
+              )}
+            </div>
           </div>
-          <span className="text-xs text-gray-500 uppercase">
+          <span className={cn(
+            "shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide",
+            selectedOrder.type === "walk_in"
+              ? "bg-blue-500/15 text-blue-400"
+              : "bg-violet-500/15 text-violet-400"
+          )}>
             {selectedOrder.type === "walk_in" ? "Walk-in" : "Online"}
           </span>
         </div>
       </div>
 
-      {/* Table sessions */}
+      {/* ── Sessions + extras ───────────────────────── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-        {activeItems.map((item) => {
-          const isRunning = item.status === "running";
-          const lineBill = calculateBill([item], [], now);
-          const liveAmount = lineBill.subtotal;
 
-          let countdown = "";
+        {/* Table sessions */}
+        {activeItems.map((item) => {
+          const isRunning  = item.status === "running";
+          const lineBill   = calculateBill([item], [], now);
+          const liveAmount = lineBill.subtotal;
+          const tableInfo  = item.table ?? { name: "Table", type: "snooker" };
+
+          let countdown  = "";
           let isOvertime = false;
           if (isRunning && item.expected_end) {
             const expectedEnd = new Date(item.expected_end);
-            countdown = formatCountdown(expectedEnd, now);
+            countdown  = formatCountdown(expectedEnd, now);
             isOvertime = expectedEnd.getTime() < now.getTime();
           }
-
-          const tableInfo = item.table ?? { name: "Table", type: "snooker" };
 
           return (
             <div
               key={item.id}
               className={cn(
-                "bg-gray-800 rounded-lg p-4 border",
-                isRunning && !isOvertime && "border-green-600",
-                isRunning && isOvertime && "border-red-500",
-                !isRunning && "border-gray-700"
+                "rounded-xl border bg-slate-800 p-4",
+                isRunning && !isOvertime && "border-emerald-500/40",
+                isRunning && isOvertime  && "border-red-500/40",
+                !isRunning               && "border-slate-700"
               )}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-white">
-                    {(tableInfo as { name: string }).name}
-                  </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-slate-100 text-sm">
+                      {(tableInfo as { name: string }).name}
+                    </p>
+                    {isRunning && (
+                      <span className={cn(
+                        "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide",
+                        isOvertime ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400"
+                      )}>
+                        <span className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          isOvertime ? "bg-red-400 animate-pulse" : "bg-emerald-400 animate-pulse"
+                        )} />
+                        {isOvertime ? "Overtime" : "Running"}
+                      </span>
+                    )}
+                    {item.status === "scheduled" && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-amber-500/15 text-amber-400">
+                        Scheduled
+                      </span>
+                    )}
+                    {item.status === "finished" && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-slate-700 text-slate-400">
+                        Finished
+                      </span>
+                    )}
+                  </div>
+
                   {isRunning && (
-                    <p
-                      className={cn(
-                        "text-sm font-mono",
-                        isOvertime ? "text-red-400" : "text-green-400"
-                      )}
-                    >
+                    <p className={cn(
+                      "text-xs font-mono font-semibold mt-1 tabular-nums",
+                      isOvertime ? "text-red-400" : "text-emerald-400"
+                    )}>
                       {isOvertime ? "OVERTIME" : countdown + " remaining"}
                     </p>
                   )}
-                  {item.status === "scheduled" && (
-                    <p className="text-sm text-amber-400">Scheduled</p>
-                  )}
-                  {item.status === "finished" && (
-                    <p className="text-sm text-gray-400">Finished</p>
-                  )}
                 </div>
-                <div className="text-right">
-                  <p className="text-white font-semibold">
-                    {formatCurrency(liveAmount)}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    ₹{item.rate_per_hour}/hr
-                  </p>
+
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-slate-100">{formatCurrency(liveAmount)}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">₹{item.rate_per_hour}/hr</p>
                 </div>
               </div>
 
               {isRunning && (
                 <div className="flex gap-2 mt-3">
-                  <Button
-                    size="sm"
-                    variant="destructive"
+                  <button
                     onClick={() => stopSession(item)}
-                    className="flex-1"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
                   >
-                    Stop
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
+                    <Square className="h-3.5 w-3.5 fill-current" /> Stop
+                  </button>
+                  <button
                     onClick={() => store.setExtendModalItem(item)}
-                    className="flex-1 border-gray-600 text-white hover:bg-gray-700"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold transition-colors"
                   >
-                    Extend
-                  </Button>
+                    <Timer className="h-3.5 w-3.5" /> Extend
+                  </button>
                 </div>
               )}
 
               {item.status === "scheduled" && (
-                <Button
-                  size="sm"
-                  className="mt-3 w-full bg-green-600 hover:bg-green-700"
+                <button
+                  className="mt-3 w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors"
                   onClick={async () => {
                     await fetch("/api/sessions/start", {
                       method: "POST",
@@ -194,137 +208,126 @@ export function OrderPanel({ locationId: _locationId }: OrderPanelProps) {
                     });
                   }}
                 >
-                  Start Session
-                </Button>
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Start Session
+                </button>
               )}
             </div>
           );
         })}
 
-        {/* Extras */}
-        <div className="border-t border-gray-700 pt-3">
-          <p className="text-xs text-gray-500 uppercase mb-2">Extras</p>
-          {activeExtras.map((extra) => (
-            <div
-              key={extra.id}
-              className="flex items-center justify-between py-1.5"
-            >
-              <div>
-                <span className="text-sm text-white">{extra.name}</span>
-                <span className="text-xs text-gray-400 ml-2">
-                  ×{extra.quantity}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-white">
-                  {formatCurrency(extra.price * extra.quantity)}
-                </span>
-                <button
-                  onClick={() => deleteExtra(extra.id)}
-                  className="text-gray-500 hover:text-red-400 transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
+        {/* ── Extras ──────────────────────────────── */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50">
+          <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Extras</p>
+            {!addExtraOpen && (
+              <button
+                onClick={() => setAddExtraOpen(true)}
+                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+              >
+                <Plus className="h-3 w-3" /> Add
+              </button>
+            )}
+          </div>
 
-          {/* Add extra inline */}
-          {addExtraOpen ? (
-            <div className="bg-gray-800 rounded-lg p-3 mt-2 space-y-2 border border-gray-600">
-              <Input
-                placeholder="Item name"
-                value={extraForm.name}
-                onChange={(e) =>
-                  setExtraForm({ ...extraForm, name: e.target.value })
-                }
-                className="bg-gray-700 border-gray-600 text-white"
-              />
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Price"
-                  value={extraForm.price}
-                  onChange={(e) =>
-                    setExtraForm({ ...extraForm, price: e.target.value })
-                  }
-                  className="bg-gray-700 border-gray-600 text-white"
-                />
-                <Input
-                  type="number"
-                  placeholder="Qty"
-                  value={extraForm.quantity}
-                  onChange={(e) =>
-                    setExtraForm({ ...extraForm, quantity: e.target.value })
-                  }
-                  className="bg-gray-700 border-gray-600 text-white w-20"
-                />
+          <div className="p-3 space-y-1">
+            {activeExtras.length === 0 && !addExtraOpen && (
+              <p className="text-xs text-slate-600 text-center py-2">No extras added</p>
+            )}
+
+            {activeExtras.map((extra) => (
+              <div key={extra.id} className="flex items-center justify-between py-1.5 px-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm text-slate-200 truncate">{extra.name}</span>
+                  <span className="text-xs text-slate-500 shrink-0">×{extra.quantity}</span>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="text-sm font-medium text-slate-200">
+                    {formatCurrency(extra.price * extra.quantity)}
+                  </span>
+                  <button
+                    onClick={() => deleteExtra(extra.id)}
+                    className="text-slate-600 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={addExtra}
-                  disabled={extraLoading}
-                  className="flex-1"
-                >
-                  Add
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setAddExtraOpen(false)}
-                  className="border-gray-600 text-white hover:bg-gray-700"
-                >
-                  Cancel
-                </Button>
+            ))}
+
+            {addExtraOpen && (
+              <div className="pt-2 space-y-2">
+                <input
+                  placeholder="Item name (e.g. Coke)"
+                  value={extraForm.name}
+                  onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Price (₹)"
+                    value={extraForm.price}
+                    onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
+                    className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Qty"
+                    value={extraForm.quantity}
+                    onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
+                    className="w-20 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={addExtra}
+                    disabled={extraLoading}
+                    className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+                  >
+                    {extraLoading ? "Adding..." : "Add Extra"}
+                  </button>
+                  <button
+                    onClick={() => setAddExtraOpen(false)}
+                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setAddExtraOpen(true)}
-              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white mt-2 transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Beverage / Extra
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Bill summary + finalize */}
-      <div className="px-5 py-4 border-t border-gray-700 bg-gray-800 space-y-2 shrink-0">
+      {/* ── Bill footer ─────────────────────────────── */}
+      <div className="shrink-0 px-5 py-4 bg-slate-900 border-t border-slate-800 space-y-2">
         {bill.discountAmount > 0 && (
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Discount</span>
-            <span className="text-green-400">
-              -{formatCurrency(bill.discountAmount)}
-            </span>
+            <span className="text-slate-400">Discount</span>
+            <span className="text-emerald-400 font-medium">−{formatCurrency(bill.discountAmount)}</span>
           </div>
         )}
         {bill.advancePaid > 0 && (
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Advance paid</span>
-            <span className="text-green-400">
-              -{formatCurrency(bill.advancePaid)}
-            </span>
+            <span className="text-slate-400">Advance paid</span>
+            <span className="text-emerald-400 font-medium">−{formatCurrency(bill.advancePaid)}</span>
           </div>
         )}
-        <div className="flex justify-between items-center">
-          <span className="font-semibold text-white">Subtotal</span>
-          <span className="text-xl font-bold text-white">
-            {formatCurrency(bill.subtotal)}
+
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-sm text-slate-400">Total due</span>
+          <span className="text-2xl font-bold text-slate-100 tabular-nums">
+            {formatCurrency(bill.totalDue)}
           </span>
         </div>
-        <Button
-          size="xl"
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold"
+
+        <button
           onClick={() => store.setFinalizeOrderId(selectedOrder.id)}
-          disabled={activeItems.some((i) => i.status === "running")}
+          disabled={hasRunning}
+          className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-colors"
         >
-          Finalize Bill
-          {activeItems.some((i) => i.status === "running") &&
-            " (stop sessions first)"}
-        </Button>
+          {hasRunning ? "Stop all sessions to finalize" : "Finalize & Collect Payment"}
+        </button>
       </div>
     </div>
   );
