@@ -96,7 +96,8 @@ export default function CheckoutPage() {
   const [customer, setCustomer]       = useState<CustomerLookup | null>(null);
   const [lookingUp, setLookingUp]     = useState(false);
   const [redeemInput, setRedeemInput] = useState("0");
-  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lookupTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitting   = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -141,6 +142,7 @@ export default function CheckoutPage() {
   }
 
   async function checkout() {
+    if (submitting.current) return;
     if (!name.trim() || !phone.trim()) {
       setError("Name and phone are required");
       return;
@@ -149,6 +151,7 @@ export default function CheckoutPage() {
       setError("Cart is empty");
       return;
     }
+    submitting.current = true;
     setLoading(true);
     setError(null);
 
@@ -202,6 +205,7 @@ export default function CheckoutPage() {
     if (!rpBody.success) {
       setError(rpBody.error);
       setLoading(false);
+      submitting.current = false;
       return;
     }
 
@@ -223,11 +227,14 @@ export default function CheckoutPage() {
     const rzp = new window.Razorpay(options);
     rzp.open();
     setLoading(false);
+    submitting.current = false;
   }
 
   async function demoPay() {
+    if (submitting.current) return;
     if (!name.trim() || !phone.trim()) { setError("Name and phone are required"); return; }
     if (cart.items.length === 0) { setError("Cart is empty"); return; }
+    submitting.current = true;
     setLoading(true);
     setError(null);
 
@@ -254,7 +261,7 @@ export default function CheckoutPage() {
       | { success: true;  data: { order_id: string } }
       | { success: false; error: string };
 
-    if (!orderBody.success) { setError(orderBody.error); setLoading(false); return; }
+    if (!orderBody.success) { setError(orderBody.error); setLoading(false); submitting.current = false; return; }
 
     const { order_id } = orderBody.data;
 
@@ -265,7 +272,7 @@ export default function CheckoutPage() {
     });
 
     const confirmBody = await confirmRes.json() as { success: boolean; error?: string };
-    if (!confirmBody.success) { setError(confirmBody.error ?? "Demo confirm failed"); setLoading(false); return; }
+    if (!confirmBody.success) { setError(confirmBody.error ?? "Demo confirm failed"); setLoading(false); submitting.current = false; return; }
 
     cart.clearCart();
     router.push(`/booking/${order_id}?demo=1`);
