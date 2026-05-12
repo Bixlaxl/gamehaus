@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore, getSelectedOrder } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Banknote, Smartphone, CreditCard } from "lucide-react";
+import { Banknote, Smartphone, CreditCard, Star } from "lucide-react";
 
 interface FinalizeBillModalProps {
   locationId: string;
@@ -20,26 +20,64 @@ interface FinalizeBillModalProps {
 
 type PaymentMethod = "cash" | "upi" | "card";
 
+interface CustomerInfo {
+  points_balance: number;
+  name: string | null;
+}
+
 export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
-  const store = usePOSStore();
+  const store         = usePOSStore();
   const selectedOrder = getSelectedOrder(store);
-  const isOpen = !!store.finalizeOrderId;
-  const qc = useQueryClient();
+  const isOpen        = !!store.finalizeOrderId;
+  const qc            = useQueryClient();
+  const now           = store.now;
 
-  const [method, setMethod] = useState<PaymentMethod | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const orderId       = store.finalizeOrderId;
+  const savedPoints   = orderId ? (store.pointsToRedeem[orderId] ?? 0) : 0;
 
-  const now = store.now;
+  const [method,       setMethod]       = useState<PaymentMethod | null>(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [redeemInput,  setRedeemInput]  = useState(String(savedPoints));
+
+  const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
   const activeItems =
-    selectedOrder?.items.filter(
-      (i) => i.status !== "cancelled" && !i.is_deleted
-    ) ?? [];
+    selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
   const activeExtras =
     selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
 
-  const bill = calculateBill(activeItems, activeExtras, now);
+  const bill      = calculateBill(activeItems, activeExtras, now);
+  const maxRedeem = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
+  const clampedRedeem  = Math.min(redeemPoints, maxRedeem);
+  const finalDue       = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
+  const pointsToEarn   = Math.floor(finalDue / 100);
+
+  // Load customer info when modal opens
+  useEffect(() => {
+    if (!isOpen || !selectedOrder?.customer_phone) {
+      setCustomerInfo(null);
+      return;
+    }
+    fetch(`/api/customers/lookup?phone=${encodeURIComponent(selectedOrder.customer_phone)}`)
+      .then((r) => r.json())
+      .then((data: { found: boolean; customer: CustomerInfo | null }) => {
+        setCustomerInfo(data.customer);
+      })
+      .catch(() => setCustomerInfo(null));
+  }, [isOpen, selectedOrder?.customer_phone]);
+
+  // Sync redeemInput when savedPoints changes (e.g. modal re-opens)
+  useEffect(() => {
+    setRedeemInput(String(savedPoints));
+  }, [savedPoints, isOpen]);
+
+  function handleRedeemChange(val: string) {
+    setRedeemInput(val);
+    const n = Math.max(0, parseInt(val) || 0);
+    if (orderId) store.setPointsToRedeem(orderId, Math.min(n, maxRedeem));
+  }
 
   function close() {
     store.setFinalizeOrderId(null);
@@ -53,13 +91,16 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     setError(null);
 
     const res = await fetch(`/api/orders/${store.finalizeOrderId}/finalize`, {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payment_method: method }),
+      body: JSON.stringify({
+        payment_method:  method,
+        points_redeemed: clampedRedeem,
+      }),
     });
 
     const body = await res.json() as
-      | { success: true }
+      | { success: true;  data: { total_due: number; points_earned: number } }
       | { success: false; error: string };
 
     if (!body.success) {
@@ -76,9 +117,9 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   }
 
   const methodOptions: { value: PaymentMethod; label: string; icon: React.ReactNode }[] = [
-    { value: "cash", label: "Cash", icon: <Banknote className="h-5 w-5" /> },
-    { value: "upi", label: "UPI", icon: <Smartphone className="h-5 w-5" /> },
-    { value: "card", label: "Card", icon: <CreditCard className="h-5 w-5" /> },
+    { value: "cash", label: "Cash",  icon: <Banknote  className="h-5 w-5" /> },
+    { value: "upi",  label: "UPI",   icon: <Smartphone className="h-5 w-5" /> },
+    { value: "card", label: "Card",  icon: <CreditCard className="h-5 w-5" /> },
   ];
 
   return (
@@ -93,17 +134,13 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
           <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
             {bill.tableLines.map((line) => (
               <div key={line.id} className="flex justify-between">
-                <span className="text-gray-300">
-                  {line.label} ({line.durationMins}m)
-                </span>
+                <span className="text-gray-300">{line.label} ({line.durationMins}m)</span>
                 <span className="text-white">{formatCurrency(line.amount)}</span>
               </div>
             ))}
             {bill.extraLines.map((line) => (
               <div key={line.id} className="flex justify-between">
-                <span className="text-gray-300">
-                  {line.name} ×{line.quantity}
-                </span>
+                <span className="text-gray-300">{line.name} ×{line.quantity}</span>
                 <span className="text-white">{formatCurrency(line.amount)}</span>
               </div>
             ))}
@@ -114,26 +151,60 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
             {bill.discountAmount > 0 && (
               <div className="flex justify-between">
                 <span className="text-green-400">Discount</span>
-                <span className="text-green-400">
-                  -{formatCurrency(bill.discountAmount)}
-                </span>
+                <span className="text-green-400">-{formatCurrency(bill.discountAmount)}</span>
               </div>
             )}
             {bill.advancePaid > 0 && (
               <div className="flex justify-between">
                 <span className="text-green-400">Advance paid</span>
-                <span className="text-green-400">
-                  -{formatCurrency(bill.advancePaid)}
-                </span>
+                <span className="text-green-400">-{formatCurrency(bill.advancePaid)}</span>
+              </div>
+            )}
+            {clampedRedeem > 0 && (
+              <div className="flex justify-between">
+                <span className="text-amber-400">Points redeemed ({clampedRedeem} pts)</span>
+                <span className="text-amber-400">-{formatCurrency(clampedRedeem)}</span>
               </div>
             )}
             <div className="border-t border-gray-600 pt-2 flex justify-between text-lg font-bold">
               <span>Total Due</span>
-              <span className="text-green-400">
-                {formatCurrency(bill.totalDue)}
-              </span>
+              <span className="text-green-400">{formatCurrency(finalDue)}</span>
             </div>
           </div>
+
+          {/* Loyalty points */}
+          {selectedOrder?.customer_phone && (
+            <div className="bg-gray-700 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-400" />
+                  <span className="text-sm font-medium text-white">Loyalty Points</span>
+                </div>
+                <span className="text-xs text-amber-300">
+                  {customerInfo ? `${customerInfo.points_balance} available` : "Loading..."}
+                </span>
+              </div>
+
+              {customerInfo && customerInfo.points_balance > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 shrink-0">Redeem</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={maxRedeem}
+                    value={redeemInput}
+                    onChange={(e) => handleRedeemChange(e.target.value)}
+                    className="w-20 bg-gray-600 border border-gray-500 text-white text-sm rounded px-2 py-1"
+                  />
+                  <span className="text-xs text-gray-400">/ {maxRedeem} pts (₹{maxRedeem})</span>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Will earn <span className="text-amber-300 font-medium">{pointsToEarn} pts</span> from this visit
+              </p>
+            </div>
+          )}
 
           {/* Payment method */}
           <div className="space-y-2">
@@ -164,9 +235,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
             onClick={confirmPayment}
             disabled={!method || loading}
           >
-            {loading
-              ? "Processing..."
-              : `Collect ${formatCurrency(bill.totalDue)}`}
+            {loading ? "Processing..." : `Collect ${formatCurrency(finalDue)}`}
           </Button>
         </div>
       </DialogContent>

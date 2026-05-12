@@ -6,8 +6,9 @@ import { z } from "zod";
 import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 
 const schema = z.object({
-  payment_method: z.enum(["cash", "upi", "card"]),
-  coupon_code: z.string().optional(),
+  payment_method:  z.enum(["cash", "upi", "card"]),
+  coupon_code:     z.string().optional(),
+  points_redeemed: z.number().int().min(0).optional().default(0),
 });
 
 export async function POST(
@@ -25,7 +26,7 @@ export async function POST(
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { payment_method, coupon_code } = parsed.data;
+  const { payment_method, coupon_code, points_redeemed } = parsed.data;
 
   // Fetch full order
   const { data: order, error: orderError } = await supabase
@@ -37,7 +38,6 @@ export async function POST(
   if (orderError || !order) {
     return NextResponse.json(err("Order not found", "NOT_FOUND"), { status: 404 });
   }
-
   if (order.status !== "open") {
     return NextResponse.json(err("Order is not open", "INVALID_STATE"), { status: 400 });
   }
@@ -85,17 +85,37 @@ export async function POST(
     order.advance_paid
   );
 
+  // Validate points — customer must have enough
+  let validatedPoints = points_redeemed;
+  if (validatedPoints > 0 && order.customer_phone) {
+    const { data: profile } = await supabase
+      .from("customer_profiles")
+      .select("points_balance")
+      .eq("phone", order.customer_phone)
+      .single();
+
+    const balance = profile?.points_balance ?? 0;
+    validatedPoints = Math.min(validatedPoints, balance, Math.floor(bill.totalDue));
+  } else {
+    validatedPoints = 0;
+  }
+
+  // Apply points discount on top of what calculateBill returned
+  const finalDue    = Math.max(0, Math.round((bill.totalDue - validatedPoints) * 100) / 100);
+  const pointsEarned = Math.floor(finalDue / 100);
+
   // Update order with final amounts
   const { error: finalizeError } = await supabase
     .from("orders")
     .update({
-      status: "finalized",
-      subtotal: bill.subtotal,
+      status:          "finalized",
+      subtotal:        bill.subtotal,
       discount_amount: bill.discountAmount,
-      total_amount: bill.subtotal - bill.discountAmount,
-      amount_due: bill.totalDue,
-      finalized_at: now.toISOString(),
-      coupon_id: coupon?.id ?? order.coupon_id,
+      total_amount:    bill.subtotal - bill.discountAmount,
+      amount_due:      finalDue,
+      points_redeemed: validatedPoints,
+      finalized_at:    now.toISOString(),
+      coupon_id:       coupon?.id ?? order.coupon_id,
     })
     .eq("id", orderId);
 
@@ -105,10 +125,10 @@ export async function POST(
 
   // Create payment record
   const { error: paymentError } = await supabase.from("payments").insert({
-    order_id: orderId,
-    amount: bill.totalDue,
-    method: payment_method,
-    status: "completed",
+    order_id:     orderId,
+    amount:       finalDue,
+    method:       payment_method,
+    status:       "completed",
     collected_by: user.id,
     collected_at: now.toISOString(),
   });
@@ -125,11 +145,11 @@ export async function POST(
       .eq("id", coupon.id);
   }
 
-  // Update customer profile stats
+  // Update customer loyalty points + profile stats
   if (order.customer_phone) {
     const { data: profile } = await supabase
       .from("customer_profiles")
-      .select("visit_count, total_spent")
+      .select("points_balance, visit_count, total_spent")
       .eq("phone", order.customer_phone)
       .single();
 
@@ -137,21 +157,27 @@ export async function POST(
       await supabase
         .from("customer_profiles")
         .update({
-          visit_count: profile.visit_count + 1,
-          total_spent: profile.total_spent + bill.totalDue,
-          last_visit_at: now.toISOString(),
+          points_balance: Math.max(0, profile.points_balance - validatedPoints + pointsEarned),
+          visit_count:    profile.visit_count + 1,
+          total_spent:    profile.total_spent + finalDue,
+          last_visit_at:  now.toISOString(),
         })
         .eq("phone", order.customer_phone);
     } else {
       await supabase.from("customer_profiles").insert({
-        phone: order.customer_phone,
-        name: order.customer_name,
-        visit_count: 1,
-        total_spent: bill.totalDue,
-        last_visit_at: now.toISOString(),
+        phone:          order.customer_phone,
+        name:           order.customer_name,
+        points_balance: pointsEarned,
+        visit_count:    1,
+        total_spent:    finalDue,
+        last_visit_at:  now.toISOString(),
       });
     }
   }
 
-  return NextResponse.json(ok({ total_due: bill.totalDue }));
+  return NextResponse.json(ok({
+    total_due:      finalDue,
+    points_redeemed: validatedPoints,
+    points_earned:   pointsEarned,
+  }));
 }

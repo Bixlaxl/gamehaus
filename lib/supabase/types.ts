@@ -200,6 +200,7 @@ export interface Database {
           total_amount: number | null;
           advance_paid: number;
           amount_due: number | null;
+          points_redeemed: number;
           created_by: string | null;
           created_at: string;
           finalized_at: string | null;
@@ -217,6 +218,7 @@ export interface Database {
           total_amount?: number | null;
           advance_paid?: number;
           amount_due?: number | null;
+          points_redeemed?: number;
           created_by?: string | null;
           created_at?: string;
           finalized_at?: string | null;
@@ -234,6 +236,7 @@ export interface Database {
           total_amount?: number | null;
           advance_paid?: number;
           amount_due?: number | null;
+          points_redeemed?: number;
           created_by?: string | null;
           created_at?: string;
           finalized_at?: string | null;
@@ -558,6 +561,7 @@ export interface Database {
           name: string | null;
           visit_count: number;
           total_spent: number;
+          points_balance: number;
           last_visit_at: string | null;
           created_at: string;
         };
@@ -567,6 +571,7 @@ export interface Database {
           name?: string | null;
           visit_count?: number;
           total_spent?: number;
+          points_balance?: number;
           last_visit_at?: string | null;
           created_at?: string;
         };
@@ -576,6 +581,7 @@ export interface Database {
           name?: string | null;
           visit_count?: number;
           total_spent?: number;
+          points_balance?: number;
           last_visit_at?: string | null;
           created_at?: string;
         };

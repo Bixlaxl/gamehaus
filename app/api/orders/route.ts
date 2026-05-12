@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { location_id, type, customer_name, customer_phone, items } = parsed.data;
+  const { location_id, type, customer_name, customer_phone, items, points_redeemed } = parsed.data;
 
   // Online orders: public customers aren't logged in, use admin client
   // Walk-in orders: require staff authentication
@@ -31,8 +31,9 @@ export async function POST(request: Request) {
       location_id,
       type,
       customer_name,
-      customer_phone: customer_phone ?? null,
-      created_by: createdBy,
+      customer_phone:  customer_phone ?? null,
+      points_redeemed: points_redeemed ?? 0,
+      created_by:      createdBy,
     })
     .select()
     .single();

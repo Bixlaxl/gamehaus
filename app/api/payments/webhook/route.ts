@@ -42,17 +42,54 @@ export async function POST(request: Request) {
       .single();
 
     if (paymentRow) {
+      const now = new Date().toISOString();
+
       // Mark payment completed
       await admin.from("payments").update({
-        status: "completed",
+        status:              "completed",
         razorpay_payment_id: payment.id,
-        collected_at: new Date().toISOString(),
+        collected_at:        now,
       }).eq("id", paymentRow.id);
 
-      // Update order's advance_paid so POS shows what was already collected
+      // Update order's advance_paid
       await admin.from("orders").update({
         advance_paid: paymentRow.amount,
       }).eq("id", paymentRow.order_id);
+
+      // Award loyalty points — fetch order for phone + points_redeemed
+      const { data: order } = await admin
+        .from("orders")
+        .select("customer_phone, customer_name, points_redeemed")
+        .eq("id", paymentRow.order_id)
+        .single();
+
+      if (order?.customer_phone) {
+        const pointsEarned = Math.floor(paymentRow.amount / 100);
+        const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
+
+        const { data: profile } = await admin
+          .from("customer_profiles")
+          .select("points_balance, visit_count, total_spent")
+          .eq("phone", order.customer_phone)
+          .single();
+
+        if (profile) {
+          await admin.from("customer_profiles").update({
+            points_balance: Math.max(0, profile.points_balance + netPoints),
+            total_spent:    profile.total_spent + paymentRow.amount,
+            last_visit_at:  now,
+          }).eq("phone", order.customer_phone);
+        } else {
+          await admin.from("customer_profiles").insert({
+            phone:          order.customer_phone,
+            name:           order.customer_name,
+            points_balance: Math.max(0, netPoints),
+            visit_count:    1,
+            total_spent:    paymentRow.amount,
+            last_visit_at:  now,
+          });
+        }
+      }
     }
   }
 

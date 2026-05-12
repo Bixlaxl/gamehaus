@@ -449,7 +449,7 @@ export function LocationBrowse({ location, tables }: Props) {
               <div className="w-10 h-1 rounded-full" style={{ background: inputBdr }} />
             </div>
 
-            <div className="px-5 pt-2 pb-10 max-w-lg mx-auto space-y-5">
+            <div className="px-4 sm:px-5 pt-2 pb-10 max-w-lg mx-auto space-y-5">
 
               {/* Header */}
               <div className="flex items-start justify-between">
@@ -498,7 +498,7 @@ export function LocationBrowse({ location, tables }: Props) {
                 {allSlots.length === 0 ? (
                   <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto scrollbar-hide pr-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2 max-h-64 sm:max-h-72 overflow-y-auto scrollbar-hide pr-1">
                     {allSlots.map(s => {
                       const occupied = isOccupied(booking.id, date, s);
                       const selected = selectedSlots.includes(s);

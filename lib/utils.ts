@@ -22,6 +22,17 @@ export function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
+export function formatElapsed(startTime: Date, now: Date): string {
+  const diffMs = now.getTime() - startTime.getTime();
+  if (diffMs <= 0) return "00:00";
+  const totalSecs = Math.floor(diffMs / 1000);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 export function formatCountdown(endTime: Date, now: Date): string {
   const diffMs = endTime.getTime() - now.getTime();
   if (diffMs <= 0) return "00:00";

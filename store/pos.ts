@@ -23,10 +23,12 @@ interface POSStore {
 
   // UI state
   walkInOpen: boolean;
+  walkInPrefilledTableId: string | null;
   checkinOpen: boolean;
   upcomingOpen: boolean;
   extendModalItem: OrderItem | null;
   finalizeOrderId: string | null;
+  pointsToRedeem: Record<string, number>; // orderId → points to redeem
 
   // Actions
   setNow: (now: Date) => void;
@@ -34,10 +36,12 @@ interface POSStore {
   setOpenOrders: (orders: POSOrder[]) => void;
   selectOrder: (orderId: string | null) => void;
   setWalkInOpen: (open: boolean) => void;
+  setWalkInWithTable: (tableId: string) => void;
   setCheckinOpen: (open: boolean) => void;
   setUpcomingOpen: (open: boolean) => void;
   setExtendModalItem: (item: OrderItem | null) => void;
   setFinalizeOrderId: (id: string | null) => void;
+  setPointsToRedeem: (orderId: string, points: number) => void;
 
   // Realtime handlers
   handleOrderItemChange: (payload: RealtimePostgresChangesPayload<OrderItem>) => void;
@@ -51,20 +55,25 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   openOrders: [],
   selectedOrderId: null,
   walkInOpen: false,
+  walkInPrefilledTableId: null,
   checkinOpen: false,
   upcomingOpen: false,
   extendModalItem: null,
   finalizeOrderId: null,
+  pointsToRedeem: {},
 
   setNow: (now) => set({ now }),
   setTables: (tables) => set({ tables }),
   setOpenOrders: (openOrders) => set({ openOrders }),
   selectOrder: (selectedOrderId) => set({ selectedOrderId }),
-  setWalkInOpen: (walkInOpen) => set({ walkInOpen }),
+  setWalkInOpen: (walkInOpen) => set({ walkInOpen, walkInPrefilledTableId: walkInOpen ? null : null }),
+  setWalkInWithTable: (tableId) => set({ walkInOpen: true, walkInPrefilledTableId: tableId }),
   setCheckinOpen: (checkinOpen) => set({ checkinOpen }),
   setUpcomingOpen: (upcomingOpen) => set({ upcomingOpen }),
   setExtendModalItem: (extendModalItem) => set({ extendModalItem }),
   setFinalizeOrderId: (finalizeOrderId) => set({ finalizeOrderId }),
+  setPointsToRedeem: (orderId, points) =>
+    set((state) => ({ pointsToRedeem: { ...state.pointsToRedeem, [orderId]: points } })),
 
   handleOrderItemChange: (payload) => {
     const { eventType, new: newRow, old: oldRow } = payload;

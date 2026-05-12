@@ -56,13 +56,9 @@ export function SplashHero({ locations }: { locations: Location[] }) {
   const isDark = !mounted ? false : resolvedTheme === "dark";
 
   const bg        = isDark ? "#0A0A0A" : "#F5F3EE";
-  const cardBg    = isDark ? "#111111" : "#FFFFFF";
-  const cardBorder= isDark ? "#1E1E1E" : "#E8E4DC";
-  const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
+const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
   const textSec   = isDark ? "#666666" : "#888888";
   const textMuted = isDark ? "#444444" : "#AAAAAA";
-  const btnBg     = isDark ? "#FFFFFF" : "#111111";
-  const btnText   = isDark ? "#111111" : "#FFFFFF";
 
   return (
     <div className="relative min-h-screen transition-colors duration-300" style={{ background: bg }}>
@@ -75,7 +71,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             background: "#0A0A0A",
             transform: phase === "exit" ? "translateY(-100%)" : "translateY(0)",
             transition: phase === "exit"
-              ? "transform 950ms cubic-bezier(0.76, 0, 0.24, 1)"
+              ? "transform 1100ms cubic-bezier(0.22, 1, 0.36, 1)"
               : "none",
           }}
         >
@@ -104,23 +100,23 @@ export function SplashHero({ locations }: { locations: Location[] }) {
               width={190}
               height={190}
               priority
-              className="rounded-full"
+              className="rounded-full w-36 h-36 sm:w-[190px] sm:h-[190px]"
               onLoad={onImageReady}
             />
           </div>
 
           <div
-            className="mt-5 text-center"
+            className="mt-4 sm:mt-5 text-center px-6"
             style={{
               opacity:   phase === "hold" ? 1 : 0,
               transform: phase === "hold" ? "translateY(0)" : "translateY(10px)",
               transition: "opacity 500ms ease-in-out, transform 500ms ease-out",
             }}
           >
-            <p className="text-[#DDDDDD] text-sm font-bold tracking-[0.3em] uppercase">
+            <p className="text-[#DDDDDD] text-sm font-bold tracking-[0.2em] sm:tracking-[0.3em] uppercase">
               Snookers &amp; Gaming
             </p>
-            <p className="text-[#AAAAAA] text-xs font-bold tracking-[0.2em] uppercase mt-1">
+            <p className="text-[#AAAAAA] text-xs font-bold tracking-[0.15em] sm:tracking-[0.2em] uppercase mt-1">
               by Nerf Turf
             </p>
           </div>
@@ -144,26 +140,24 @@ export function SplashHero({ locations }: { locations: Location[] }) {
       <div>
         {/* Header */}
         <header
-          className="flex items-center justify-between px-5 pt-5 pb-2 max-w-5xl mx-auto"
+          className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-2 max-w-5xl mx-auto"
           style={{
             opacity:   phase === "gone" ? 1 : 0,
             transform: phase === "gone" ? "translateY(0)" : "translateY(-12px)",
             transition: "opacity 500ms ease-out, transform 500ms ease-out",
           }}
         >
-          <div className="w-14 h-14 rounded-full overflow-hidden shrink-0">
-            <Image src="/image.png" alt="Gamehaus" width={56} height={56} className="object-cover" />
+          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full overflow-hidden shrink-0">
+            <Image src="/image.png" alt="Gamehaus" width={80} height={80} className="object-cover w-full h-full" />
           </div>
 
           <div className="flex items-center gap-3">
             {mounted && (
               <button
                 onClick={() => setTheme(isDark ? "light" : "dark")}
-                className="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
-                style={{
-                  background: isDark ? "#1A1A1A" : "#E8E4DC",
-                  color: isDark ? "#888" : "#666",
-                }}
+                className="flex items-center justify-center w-8 h-8 rounded-full border transition-colors
+                  bg-[#111111] text-white border-[#111111] hover:bg-white hover:text-[#111111]
+                  dark:bg-white dark:text-[#111111] dark:border-white dark:hover:bg-[#111111] dark:hover:text-white"
                 aria-label="Toggle theme"
               >
                 {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
@@ -171,8 +165,9 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             )}
             <button
               onClick={() => { setAdminLoading(true); router.push("/login"); }}
-              className="flex items-center gap-1.5 text-xs transition-colors"
-              style={{ color: textMuted }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors
+                bg-[#111111] text-white border-[#111111] hover:bg-white hover:text-[#111111]
+                dark:bg-white dark:text-[#111111] dark:border-white dark:hover:bg-[#111111] dark:hover:text-white"
             >
               {adminLoading
                 ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -184,7 +179,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
 
         {/* Hero */}
         <div
-          className="px-5 pt-10 pb-10 max-w-5xl mx-auto"
+          className="px-4 sm:px-5 pt-8 sm:pt-10 pb-8 sm:pb-10 max-w-5xl mx-auto"
           style={{
             opacity:   phase === "gone" ? 1 : 0,
             transform: phase === "gone" ? "translateY(0)" : "translateY(24px)",
@@ -201,7 +196,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
         </div>
 
         {/* Locations */}
-        <div className="px-4 pb-16 max-w-5xl mx-auto">
+        <div className="px-4 pb-20 max-w-5xl mx-auto">
           <p
             className="text-xs font-semibold tracking-widest uppercase px-1 mb-5"
             style={{
@@ -220,53 +215,52 @@ export function SplashHero({ locations }: { locations: Location[] }) {
               const delay  = 180 + i * 120;
 
               return (
-                <Link key={loc.id} href={`/${loc.slug}`} className="block group">
+                <Link key={loc.id} href={`/${loc.slug}`} className="block group active:scale-[0.98] transition-transform duration-150">
                   <div
-                    className="relative rounded-2xl overflow-hidden border h-full flex flex-col transition-shadow group-hover:shadow-lg"
                     style={{
-                      background:  cardBg,
-                      borderColor: cardBorder,
-                      boxShadow: isDark ? "0 4px 40px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.08)",
                       opacity:   phase === "gone" ? 1 : 0,
                       transform: phase === "gone" ? "translateY(0)" : "translateY(32px)",
-                      transition: `opacity 600ms ${delay}ms ease-out, transform 600ms ${delay}ms cubic-bezier(0.22,1,0.36,1), box-shadow 200ms`,
+                      transition: `opacity 600ms ${delay}ms ease-out, transform 600ms ${delay}ms cubic-bezier(0.22,1,0.36,1)`,
                     }}
                   >
-                    <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: accent }} />
+                    <div className="relative rounded-2xl overflow-hidden border transition-colors duration-200
+                      bg-[#111111] border-[#111111] hover:bg-white
+                      dark:bg-white dark:border-white dark:hover:bg-[#111111]">
 
-                    <div className="p-5 md:p-6 flex flex-col flex-1">
-                      <div className="flex items-start justify-between gap-3 mb-4">
-                        <h2 className="text-xl md:text-2xl font-bold leading-tight" style={{ color: textPri }}>
-                          {loc.name}
-                        </h2>
-                        <span
-                          className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full"
-                          style={{
-                            background: open ? "rgba(16,185,129,0.12)" : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-                            color:      open ? "#10B981" : textMuted,
-                          }}
-                        >
-                          {open ? "Open" : "Closed"}
-                        </span>
-                      </div>
+                      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: accent }} />
 
-                      <div className="space-y-2 mb-6 flex-1">
-                        <div className="flex items-center gap-2 text-sm" style={{ color: textSec }}>
-                          <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
-                          <span>{loc.address}</span>
+                      <div className="p-5 md:p-6 flex items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-xl md:text-2xl font-bold mb-3
+                            text-white group-hover:text-[#111111]
+                            dark:text-[#111111] dark:group-hover:text-white">
+                            {loc.name}
+                          </h2>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 text-sm
+                              text-white/60 group-hover:text-[#111111]/60
+                              dark:text-[#111111]/60 dark:group-hover:text-white/60">
+                              <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
+                              <span className="truncate">{loc.address}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm
+                              text-white/60 group-hover:text-[#111111]/60
+                              dark:text-[#111111]/60 dark:group-hover:text-white/60">
+                              <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
+                              <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm" style={{ color: textSec }}>
-                          <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
-                          <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
-                        </div>
-                      </div>
 
-                      <div
-                        className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 group-hover:opacity-90 active:scale-[0.97] active:opacity-75"
-                        style={{ background: btnBg, color: btnText }}
-                      >
-                        Book a Table
-                        <ChevronRight className="h-4 w-4" />
+                        <div className="flex flex-col items-end gap-3 shrink-0">
+                          <span className={open
+                            ? "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-500"
+                            : "text-xs font-semibold px-2.5 py-1 rounded-full text-white/40 group-hover:text-[#111111]/40 dark:text-[#111111]/40 dark:group-hover:text-white/40"
+                          }>
+                            {open ? "Open" : "Closed"}
+                          </span>
+                          <ChevronRight className="h-5 w-5 text-white/40 group-hover:text-[#111111]/40 dark:text-[#111111]/40 dark:group-hover:text-white/40" />
+                        </div>
                       </div>
                     </div>
                   </div>

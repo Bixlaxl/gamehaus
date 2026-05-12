@@ -48,6 +48,7 @@ export const createOrderSchema = z.object({
   type: z.enum(["online", "walk_in"]),
   customer_name: z.string().min(1),
   customer_phone: z.string().optional(),
+  points_redeemed: z.number().int().min(0).optional().default(0),
   items: z.array(
     z.object({
       table_id: z.string().uuid(),
@@ -87,6 +88,7 @@ export const finalizeBillSchema = z.object({
   order_id: z.string().uuid(),
   payment_method: z.enum(["cash", "upi", "card"]),
   coupon_code: z.string().optional(),
+  points_redeemed: z.number().int().min(0).optional().default(0),
 });
 
 // Check-in booking
