@@ -31,11 +31,21 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Public API routes — accessible without login
+  const publicApiRoutes = [
+    "/api/payments/webhook",
+    "/api/payments/create-order",
+    "/api/payments/demo-confirm",
+    "/api/customers/lookup",
+    "/api/orders",
+  ];
+  const isPublicApi = publicApiRoutes.some(r => pathname === r || pathname.startsWith(r + "/"));
+
   // Paths that require authentication
   const requiresAuth =
     pathname.startsWith("/owner") ||
     pathname === "/pos" ||
-    (pathname.startsWith("/api/") && pathname !== "/api/payments/webhook");
+    (pathname.startsWith("/api/") && !isPublicApi);
 
   // Unauthenticated user hitting a protected route → login
   if (!user && requiresAuth) {
