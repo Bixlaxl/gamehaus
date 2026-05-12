@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Clock, ChevronRight, Lock, Sun, Moon } from "lucide-react";
+import { MapPin, Clock, ChevronRight, Lock, Sun, Moon, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 
 interface Location {
   id: string;
@@ -40,14 +41,16 @@ export function SplashHero({ locations }: { locations: Location[] }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const router = useRouter();
 
   useEffect(() => setMounted(true), []);
 
   function onImageReady() {
     setPhase("enter");
-    setTimeout(() => setPhase("hold"),  500);
-    setTimeout(() => setPhase("exit"),  2300);
-    setTimeout(() => setPhase("gone"),  3300);
+    setTimeout(() => setPhase("hold"),  300);
+    setTimeout(() => setPhase("exit"),  1400);
+    setTimeout(() => setPhase("gone"),  2100);
   }
 
   const isDark = !mounted ? false : resolvedTheme === "dark";
@@ -58,6 +61,8 @@ export function SplashHero({ locations }: { locations: Location[] }) {
   const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
   const textSec   = isDark ? "#666666" : "#888888";
   const textMuted = isDark ? "#444444" : "#AAAAAA";
+  const btnBg     = isDark ? "#FFFFFF" : "#111111";
+  const btnText   = isDark ? "#111111" : "#FFFFFF";
 
   return (
     <div className="relative min-h-screen transition-colors duration-300" style={{ background: bg }}>
@@ -146,8 +151,8 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             transition: "opacity 500ms ease-out, transform 500ms ease-out",
           }}
         >
-          <div className="w-11 h-11 rounded-full overflow-hidden shrink-0">
-            <Image src="/image.png" alt="Gamehaus" width={44} height={44} className="object-cover" />
+          <div className="w-14 h-14 rounded-full overflow-hidden shrink-0">
+            <Image src="/image.png" alt="Gamehaus" width={56} height={56} className="object-cover" />
           </div>
 
           <div className="flex items-center gap-3">
@@ -164,14 +169,16 @@ export function SplashHero({ locations }: { locations: Location[] }) {
                 {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
               </button>
             )}
-            <Link
-              href="/login"
+            <button
+              onClick={() => { setAdminLoading(true); router.push("/login"); }}
               className="flex items-center gap-1.5 text-xs transition-colors"
               style={{ color: textMuted }}
             >
-              <Lock className="h-3 w-3" />
+              {adminLoading
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Lock className="h-3 w-3" />}
               Admin
-            </Link>
+            </button>
           </div>
         </header>
 
@@ -255,8 +262,8 @@ export function SplashHero({ locations }: { locations: Location[] }) {
                       </div>
 
                       <div
-                        className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-white text-sm transition-opacity group-hover:opacity-90 active:scale-95"
-                        style={{ background: "#111111" }}
+                        className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 group-hover:opacity-90 active:scale-[0.97] active:opacity-75"
+                        style={{ background: btnBg, color: btnText }}
                       >
                         Book a Table
                         <ChevronRight className="h-4 w-4" />
