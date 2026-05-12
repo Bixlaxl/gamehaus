@@ -21,19 +21,23 @@ export async function POST(request: Request) {
 
   const { amount, currency, receipt, order_id } = parsed.data;
 
-  // Dynamic import keeps Razorpay out of the module-level bundle evaluation
-  const { default: Razorpay } = await import("razorpay");
-  const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID!,
-    key_secret: process.env.RAZORPAY_KEY_SECRET!,
-  });
-
-  const rpOrder = await razorpay.orders.create({
-    amount,
-    currency,
-    receipt,
-    notes: { order_id },
-  });
+  let rpOrder: { id: string; amount: number };
+  try {
+    const { default: Razorpay } = await import("razorpay");
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID!,
+      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    });
+    rpOrder = await razorpay.orders.create({
+      amount,
+      currency,
+      receipt,
+      notes: { order_id },
+    }) as { id: string; amount: number };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Razorpay error";
+    return NextResponse.json(err(msg, "RAZORPAY_ERROR"), { status: 502 });
+  }
 
   const admin = createAdminClient();
   await admin.from("payments").insert({
