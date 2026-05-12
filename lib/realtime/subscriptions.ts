@@ -5,10 +5,12 @@ type POSStoreInstance = ReturnType<typeof usePOSStore.getState>;
 
 export function subscribeToPOS(
   locationId: string,
-  store: Pick<
+  handlers: Pick<
     POSStoreInstance,
     "handleOrderItemChange" | "handleOrderChange" | "handleTableChange"
-  >
+  > & {
+    onInsert?: () => void; // called when a new order or booking lands — triggers a refetch
+  }
 ) {
   const supabase = createClient();
 
@@ -17,17 +19,25 @@ export function subscribeToPOS(
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "order_items" },
-      (payload) => store.handleOrderItemChange(payload as Parameters<typeof store.handleOrderItemChange>[0])
+      (payload) => handlers.handleOrderItemChange(payload as Parameters<typeof handlers.handleOrderItemChange>[0])
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "orders" },
-      (payload) => store.handleOrderChange(payload as Parameters<typeof store.handleOrderChange>[0])
+      (payload) => {
+        handlers.handleOrderChange(payload as Parameters<typeof handlers.handleOrderChange>[0]);
+        if (payload.eventType === "INSERT") handlers.onInsert?.();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "bookings" },
+      () => handlers.onInsert?.()
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "tables" },
-      (payload) => store.handleTableChange(payload as Parameters<typeof store.handleTableChange>[0])
+      (payload) => handlers.handleTableChange(payload as Parameters<typeof handlers.handleTableChange>[0])
     )
     .subscribe();
 

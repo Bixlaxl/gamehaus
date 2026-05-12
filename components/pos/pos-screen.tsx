@@ -2,8 +2,8 @@
 
 import { useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client"; // only used for auth sign-out
 import { usePOSStore } from "@/store/pos";
 import { LogOut } from "lucide-react";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
@@ -40,6 +40,8 @@ export function POSScreen({
     router.replace("/login");
   }
 
+  const qc = useQueryClient();
+
   // Use stable selectors — these function references never change
   const now = usePOSStore((s) => s.now);
   const setTables = usePOSStore((s) => s.setTables);
@@ -70,75 +72,58 @@ export function POSScreen({
     return () => clearInterval(interval);
   }, []);
 
-  // Supabase Realtime subscription
+  // Load tables via admin-client API (bypasses RLS)
+  const { data: rawTables } = useQuery({
+    queryKey: ["pos-tables", locationId],
+    queryFn: async () => {
+      const res  = await fetch(`/api/pos/tables?locationId=${locationId}`);
+      const body = await res.json() as { success: boolean; data: Table[] };
+      return body.success ? body.data : [];
+    },
+    refetchInterval: 8000,
+  });
+
+  // Load open orders via admin-client API (bypasses RLS)
+  const { data: rawOrders } = useQuery({
+    queryKey: ["pos-orders", locationId],
+    queryFn: async () => {
+      const res  = await fetch(`/api/pos/orders?locationId=${locationId}`);
+      const body = await res.json() as { success: boolean; data: POSOrder[] };
+      return body.success ? body.data : [];
+    },
+    refetchInterval: 8000,
+  });
+
+  // Load today's bookings via admin-client API (bypasses RLS)
+  const { data: rawBookings } = useQuery({
+    queryKey: ["pos-bookings", locationId],
+    queryFn: async () => {
+      const res  = await fetch(`/api/pos/bookings?locationId=${locationId}`);
+      const body = await res.json() as {
+        success: boolean;
+        data: (Booking & {
+          order: Pick<Order, "customer_name" | "customer_phone">;
+          order_item: Pick<OrderItem, "table_id">;
+        })[];
+      };
+      return body.success ? body.data : [];
+    },
+    refetchInterval: 8000,
+  });
+
+  // Supabase Realtime subscription — onInsert forces immediate refetch
   useEffect(() => {
     const unsubscribe = subscribeToPOS(locationId, {
       handleOrderItemChange,
       handleOrderChange,
       handleTableChange,
+      onInsert: () => {
+        qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+        qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      },
     });
     return unsubscribe;
-  }, [locationId, handleOrderItemChange, handleOrderChange, handleTableChange]);
-
-  // Load tables
-  const { data: rawTables } = useQuery({
-    queryKey: ["pos-tables", locationId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("tables")
-        .select("*")
-        .eq("location_id", locationId)
-        .eq("is_active", true)
-        .order("sort_order");
-      return (data ?? []) as Table[];
-    },
-    refetchInterval: 30000,
-  });
-
-  // Load open orders with items and extras
-  const { data: rawOrders } = useQuery({
-    queryKey: ["pos-orders", locationId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          items:order_items(*, table:tables(*)),
-          extras:order_extras(*)
-        `)
-        .eq("location_id", locationId)
-        .eq("status", "open");
-      return (data ?? []) as POSOrder[];
-    },
-    refetchInterval: 30000,
-  });
-
-  // Load today's bookings
-  const { data: rawBookings } = useQuery({
-    queryKey: ["pos-bookings", locationId],
-    queryFn: async () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const { data } = await supabase
-        .from("bookings")
-        .select(`
-          *,
-          order:orders(customer_name, customer_phone),
-          order_item:order_items(table_id)
-        `)
-        .gte("scheduled_start", today.toISOString())
-        .lt("scheduled_start", tomorrow.toISOString())
-        .in("status", ["confirmed"]);
-      return (data ?? []) as (Booking & {
-        order: Pick<Order, "customer_name" | "customer_phone">;
-        order_item: Pick<OrderItem, "table_id">;
-      })[];
-    },
-    refetchInterval: 30000,
-  });
+  }, [locationId, handleOrderItemChange, handleOrderChange, handleTableChange, qc]);
 
   // Merge tables with live status — stable deps, no store object
   const buildTableStatus = useCallback(() => {
