@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import type { Location } from "@/lib/supabase/types";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 const supabase = createClient();
 
@@ -60,6 +61,7 @@ export default function LocationsPage() {
   const [editing, setEditing] = useState<Location | null>(null);
   const [form, setForm] = useState<LocationForm>(defaultForm);
   const [deleteConfirm, setDeleteConfirm] = useState<Location | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const upsertMutation = useMutation({
     mutationFn: async (values: LocationForm & { editId?: string }) => {
@@ -91,21 +93,25 @@ export default function LocationsPage() {
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
+      setFormError(null);
       return { prev };
     },
     onSuccess: (_, values) => {
       qc.invalidateQueries({ queryKey: ["locations"] });
+      toast.success(values.editId ? "Location updated" : "Location created");
       if (!values.editId) {
         setDialogOpen(false);
         setEditing(null);
         setForm(defaultForm);
+        setFormError(null);
       }
     },
     onError: (err, values, ctx) => {
       if (values.editId && ctx?.prev) {
         qc.setQueryData(["locations"], ctx.prev);
-        alert((err as Error).message);
       }
+      setFormError((err as Error).message);
+      if (values.editId) setDialogOpen(true);
     },
   });
 
@@ -124,8 +130,10 @@ export default function LocationsPage() {
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onSuccess: () => toast.success("Location deactivated"),
+    onError: (err, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["locations"], ctx.prev);
+      toast.error((err as Error).message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["locations"] }),
   });
@@ -144,8 +152,10 @@ export default function LocationsPage() {
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onSuccess: () => toast.success("Location reactivated"),
+    onError: (err, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["locations"], ctx.prev);
+      toast.error((err as Error).message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["locations"] }),
   });
@@ -153,6 +163,7 @@ export default function LocationsPage() {
   function openAdd() {
     setEditing(null);
     setForm(defaultForm);
+    setFormError(null);
     setDialogOpen(true);
   }
 
@@ -167,6 +178,7 @@ export default function LocationsPage() {
       closing_time: loc.closing_time,
       timezone: loc.timezone,
     });
+    setFormError(null);
     setDialogOpen(true);
   }
 
@@ -314,10 +326,8 @@ export default function LocationsPage() {
                 />
               </div>
             </div>
-            {upsertMutation.error && (
-              <p className="text-sm text-destructive">
-                {(upsertMutation.error as Error).message}
-              </p>
+            {formError && (
+              <p className="text-sm text-destructive">{formError}</p>
             )}
             <DialogFooter>
               <Button

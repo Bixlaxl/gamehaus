@@ -22,24 +22,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { User, Location } from "@/lib/supabase/types";
-import { Plus, Eye, EyeOff } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil } from "lucide-react";
+import { toast } from "sonner";
 
 const supabase = createClient();
 
+type StaffRow = User & { locations: { name: string } | null };
+
 export default function StaffPage() {
   const qc = useQueryClient();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    location_id: "",
-  });
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Create dialog
+  const [createOpen, setCreateOpen]   = useState(false);
+  const [createForm, setCreateForm]   = useState({ name: "", email: "", password: "", location_id: "" });
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Edit dialog
+  const [editTarget, setEditTarget]   = useState<StaffRow | null>(null);
+  const [editForm, setEditForm]       = useState({ name: "", location_id: "" });
+  const [editError, setEditError]     = useState<string | null>(null);
+
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
 
   function toggleReveal(id: string) {
-    setRevealedIds(prev => {
+    setRevealedIds((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -49,10 +55,7 @@ export default function StaffPage() {
   const { data: locations } = useQuery({
     queryKey: ["locations"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("locations")
-        .select("*")
-        .eq("is_active", true);
+      const { data } = await supabase.from("locations").select("*").eq("is_active", true);
       return (data ?? []) as Location[];
     },
   });
@@ -65,39 +68,70 @@ export default function StaffPage() {
         .select("*, locations(name)")
         .eq("role", "staff")
         .order("created_at", { ascending: false });
-      return (data ?? []) as (User & { locations: { name: string } | null })[];
+      return (data ?? []) as StaffRow[];
     },
   });
 
+  // ── Create ──────────────────────────────────────────────────────────────────
   const createMutation = useMutation({
-    mutationFn: async (values: typeof form) => {
+    mutationFn: async (values: typeof createForm) => {
       const res = await fetch("/api/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      const body = (await res.json()) as
-        | { success: true }
-        | { success: false; error: string };
+      const body = (await res.json()) as { success: true } | { success: false; error: string };
       if (!body.success) throw new Error(body.error);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff"] });
-      setDialogOpen(false);
-      setForm({ name: "", email: "", password: "", location_id: "" });
-      setErrorMsg(null);
+      setCreateOpen(false);
+      setCreateForm({ name: "", email: "", password: "", location_id: "" });
+      setCreateError(null);
+      toast.success("Staff member created");
     },
-    onError: (e: Error) => setErrorMsg(e.message),
+    onError: (e: Error) => setCreateError(e.message),
   });
 
-  type StaffRow = User & { locations: { name: string } | null };
-
-  const toggleActiveMutation = useMutation({
-    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+  // ── Edit ─────────────────────────────────────────────────────────────────
+  const editMutation = useMutation({
+    mutationFn: async ({ id, name, location_id }: { id: string; name: string; location_id: string }) => {
       const { error } = await supabase
         .from("users")
-        .update({ is_active: active })
+        .update({ name, location_id: location_id || null })
         .eq("id", id);
+      if (error) throw error;
+    },
+    onMutate: async ({ id, name, location_id }) => {
+      await qc.cancelQueries({ queryKey: ["staff"] });
+      const prev = qc.getQueryData<StaffRow[]>(["staff"]);
+      const loc  = locations?.find((l) => l.id === location_id);
+      qc.setQueryData<StaffRow[]>(["staff"], (old) =>
+        (old ?? []).map((s) =>
+          s.id === id
+            ? { ...s, name, location_id: location_id || null, locations: loc ? { name: loc.name } : null }
+            : s
+        )
+      );
+      setEditTarget(null);
+      return { prev };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      toast.success("Staff member updated");
+      setEditError(null);
+    },
+    onError: (err, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["staff"], ctx.prev);
+      setEditError((err as Error).message);
+      setEditTarget((prev) => prev);
+    },
+  });
+
+  // ── Toggle active ────────────────────────────────────────────────────────
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const { error } = await supabase.from("users").update({ is_active: active }).eq("id", id);
       if (error) throw error;
     },
     onMutate: async ({ id, active }) => {
@@ -108,23 +142,25 @@ export default function StaffPage() {
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onSuccess: (_, { active }) => toast.success(active ? "Staff reactivated" : "Staff deactivated"),
+    onError: (err, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["staff"], ctx.prev);
+      toast.error((err as Error).message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["staff"] }),
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg(null);
-    createMutation.mutate(form);
+  function openEdit(s: StaffRow) {
+    setEditTarget(s);
+    setEditForm({ name: s.name, location_id: s.location_id ?? "" });
+    setEditError(null);
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Staff</h1>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Add Staff
         </Button>
@@ -175,23 +211,25 @@ export default function StaffPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleActiveMutation.mutate({ id: s.id, active: !s.is_active })}
-                    >
-                      {s.is_active ? "Deactivate" : "Reactivate"}
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="icon" onClick={() => openEdit(s)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleActiveMutation.mutate({ id: s.id, active: !s.is_active })}
+                      >
+                        {s.is_active ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
             })}
             {staff?.length === 0 && (
               <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-8 text-center text-gray-400"
-                >
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   No staff yet. Add your first staff member.
                 </td>
               </tr>
@@ -200,18 +238,22 @@ export default function StaffPage() {
         </table>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Staff Member</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            onSubmit={(e) => { e.preventDefault(); setCreateError(null); createMutation.mutate(createForm); }}
+            className="space-y-4"
+          >
             <div className="space-y-2">
               <Label htmlFor="sname">Name</Label>
               <Input
                 id="sname"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                 required
               />
             </div>
@@ -220,8 +262,8 @@ export default function StaffPage() {
               <Input
                 id="semail"
                 type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                 required
               />
             </div>
@@ -230,8 +272,8 @@ export default function StaffPage() {
               <Input
                 id="spwd"
                 type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                value={createForm.password}
+                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
                 required
                 minLength={8}
               />
@@ -239,34 +281,76 @@ export default function StaffPage() {
             <div className="space-y-2">
               <Label>Location</Label>
               <Select
-                value={form.location_id}
-                onValueChange={(v) => setForm({ ...form, location_id: v })}
+                value={createForm.location_id}
+                onValueChange={(v) => setCreateForm({ ...createForm, location_id: v })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Assign location" />
                 </SelectTrigger>
                 <SelectContent>
                   {locations?.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </SelectItem>
+                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {errorMsg && (
-              <p className="text-sm text-destructive">{errorMsg}</p>
-            )}
+            {createError && <p className="text-sm text-destructive">{createError}</p>}
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-              >
-                Cancel
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Staff Member</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!editTarget) return;
+              editMutation.mutate({ id: editTarget.id, ...editForm });
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Select
+                value={editForm.location_id}
+                onValueChange={(v) => setEditForm({ ...editForm, location_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Assign location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations?.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-gray-400">
+              To reset password, delete and re-create the staff account.
+            </p>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+              <Button type="submit" disabled={editMutation.isPending}>
+                {editMutation.isPending ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
           </form>

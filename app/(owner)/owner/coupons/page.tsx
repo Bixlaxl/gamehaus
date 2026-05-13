@@ -23,9 +23,12 @@ import {
 } from "@/components/ui/select";
 import type { Coupon, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
+import { toast } from "sonner";
 
 const supabase = createClient();
+
+type CouponRow = Coupon & { location: { name: string } | null };
 
 type CouponForm = {
   location_id: string;
@@ -47,11 +50,23 @@ const defaultForm: CouponForm = {
   max_uses: "",
 };
 
+// Convert a local YYYY-MM-DD date string to end-of-day IST (UTC+5:30)
+function toEndOfDayIST(dateStr: string): string {
+  return new Date(dateStr + "T23:59:59+05:30").toISOString();
+}
+function toStartOfDayIST(dateStr: string): string {
+  return new Date(dateStr + "T00:00:00+05:30").toISOString();
+}
+
 export default function CouponsPage() {
   const qc = useQueryClient();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<CouponForm>(defaultForm);
-  const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen]   = useState(false);
+  const [createForm, setCreateForm]   = useState<CouponForm>(defaultForm);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const [editTarget, setEditTarget]   = useState<CouponRow | null>(null);
+  const [editForm, setEditForm]       = useState<Partial<CouponForm>>({});
+  const [editError, setEditError]     = useState<string | null>(null);
 
   const { data: locations } = useQuery({
     queryKey: ["locations"],
@@ -68,34 +83,83 @@ export default function CouponsPage() {
         .from("coupons")
         .select("*, location:locations(name)")
         .order("created_at", { ascending: false });
-      return (data ?? []) as (Coupon & { location: { name: string } | null })[];
+      return (data ?? []) as CouponRow[];
     },
   });
 
+  // ── Create ──────────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: async (values: CouponForm) => {
       const { error: dbError } = await supabase.from("coupons").insert({
-        location_id: values.location_id === "all" ? null : values.location_id,
-        code: values.code.toUpperCase(),
-        discount_type: values.discount_type,
+        location_id:    values.location_id === "all" ? null : values.location_id,
+        code:           values.code.toUpperCase(),
+        discount_type:  values.discount_type,
         discount_value: parseFloat(values.discount_value),
-        valid_from: new Date(values.valid_from).toISOString(),
-        valid_until: new Date(values.valid_until + "T23:59:59Z").toISOString(),
-        max_uses: values.max_uses ? parseInt(values.max_uses) : null,
+        valid_from:     toStartOfDayIST(values.valid_from),
+        valid_until:    toEndOfDayIST(values.valid_until),
+        max_uses:       values.max_uses ? parseInt(values.max_uses) : null,
       });
       if (dbError) throw new Error(dbError.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["coupons"] });
-      setDialogOpen(false);
-      setForm(defaultForm);
-      setError(null);
+      setCreateOpen(false);
+      setCreateForm(defaultForm);
+      setCreateError(null);
+      toast.success("Coupon created");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => setCreateError(e.message),
   });
 
-  type CouponRow = Coupon & { location: { name: string } | null };
+  // ── Edit ─────────────────────────────────────────────────────────────────
+  const editMutation = useMutation({
+    mutationFn: async ({ id, values }: { id: string; values: Partial<CouponForm> }) => {
+      const { error } = await supabase.from("coupons").update({
+        ...(values.valid_until    !== undefined && { valid_until:    toEndOfDayIST(values.valid_until) }),
+        ...(values.valid_from     !== undefined && { valid_from:     toStartOfDayIST(values.valid_from) }),
+        ...(values.discount_value !== undefined && { discount_value: parseFloat(values.discount_value) }),
+        ...(values.max_uses       !== undefined && { max_uses:       values.max_uses ? parseInt(values.max_uses) : null }),
+        ...(values.location_id    !== undefined && { location_id:    values.location_id === "all" ? null : values.location_id }),
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onMutate: async ({ id, values }) => {
+      await qc.cancelQueries({ queryKey: ["coupons"] });
+      const prev = qc.getQueryData<CouponRow[]>(["coupons"]);
+      const loc  = values.location_id && values.location_id !== "all"
+        ? locations?.find((l) => l.id === values.location_id)
+        : null;
+      qc.setQueryData<CouponRow[]>(["coupons"], (old) =>
+        (old ?? []).map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                valid_until:    values.valid_until ? toEndOfDayIST(values.valid_until) : c.valid_until,
+                valid_from:     values.valid_from  ? toStartOfDayIST(values.valid_from) : c.valid_from,
+                discount_value: values.discount_value ? parseFloat(values.discount_value) : c.discount_value,
+                max_uses:       values.max_uses !== undefined ? (values.max_uses ? parseInt(values.max_uses) : null) : c.max_uses,
+                location_id:    values.location_id === "all" ? null : (values.location_id ?? c.location_id),
+                location:       values.location_id !== undefined ? (loc ? { name: loc.name } : null) : c.location,
+              }
+            : c
+        )
+      );
+      setEditTarget(null);
+      return { prev };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["coupons"] });
+      toast.success("Coupon updated");
+      setEditError(null);
+    },
+    onError: (err, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+      setEditError((err as Error).message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
+  });
 
+  // ── Toggle active ────────────────────────────────────────────────────────
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
       await supabase.from("coupons").update({ is_active: false }).eq("id", id);
@@ -108,8 +172,10 @@ export default function CouponsPage() {
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onSuccess: () => toast.success("Coupon deactivated"),
+    onError: (err, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+      toast.error((err as Error).message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
   });
@@ -126,16 +192,24 @@ export default function CouponsPage() {
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onSuccess: () => toast.success("Coupon reactivated"),
+    onError: (err, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+      toast.error((err as Error).message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    createMutation.mutate(form);
+  function openEdit(c: CouponRow) {
+    setEditTarget(c);
+    setEditForm({
+      location_id:    c.location_id ?? "all",
+      discount_value: String(c.discount_value),
+      valid_from:     c.valid_from.split("T")[0],
+      valid_until:    c.valid_until.split("T")[0],
+      max_uses:       c.max_uses !== null ? String(c.max_uses) : "",
+    });
+    setEditError(null);
   }
 
   const now = new Date();
@@ -144,7 +218,7 @@ export default function CouponsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Coupons</h1>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           New Coupon
         </Button>
@@ -171,15 +245,11 @@ export default function CouponsPage() {
           </thead>
           <tbody className="divide-y">
             {coupons?.map((coupon) => {
-              const expired = new Date(coupon.valid_until) < now;
-              const exhausted =
-                coupon.max_uses !== null &&
-                coupon.used_count >= coupon.max_uses;
+              const expired   = new Date(coupon.valid_until) < now;
+              const exhausted = coupon.max_uses !== null && coupon.used_count >= coupon.max_uses;
               return (
                 <tr key={coupon.id}>
-                  <td className="px-4 py-3 font-mono font-semibold text-gray-900">
-                    {coupon.code}
-                  </td>
+                  <td className="px-4 py-3 font-mono font-semibold text-gray-900">{coupon.code}</td>
                   <td className="px-4 py-3 text-gray-700">
                     {coupon.discount_type === "percent"
                       ? `${coupon.discount_value}%`
@@ -196,50 +266,32 @@ export default function CouponsPage() {
                     {coupon.max_uses !== null && ` / ${coupon.max_uses}`}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge
-                      variant={
-                        !coupon.is_active || expired || exhausted
-                          ? "secondary"
-                          : "success"
-                      }
-                    >
-                      {!coupon.is_active
-                        ? "Inactive"
-                        : expired
-                        ? "Expired"
-                        : exhausted
-                        ? "Exhausted"
-                        : "Active"}
+                    <Badge variant={!coupon.is_active || expired || exhausted ? "secondary" : "success"}>
+                      {!coupon.is_active ? "Inactive" : expired ? "Expired" : exhausted ? "Exhausted" : "Active"}
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {coupon.is_active ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => deactivateMutation.mutate(coupon.id)}
-                      >
-                        Deactivate
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="icon" onClick={() => openEdit(coupon)}>
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => reactivateMutation.mutate(coupon.id)}
-                      >
-                        Activate
-                      </Button>
-                    )}
+                      {coupon.is_active ? (
+                        <Button variant="outline" size="sm" onClick={() => deactivateMutation.mutate(coupon.id)}>
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => reactivateMutation.mutate(coupon.id)}>
+                          Activate
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
             })}
             {coupons?.length === 0 && (
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-gray-400"
-                >
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                   No coupons yet
                 </td>
               </tr>
@@ -248,19 +300,21 @@ export default function CouponsPage() {
         </table>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New Coupon</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            onSubmit={(e) => { e.preventDefault(); setCreateError(null); createMutation.mutate(createForm); }}
+            className="space-y-4"
+          >
             <div className="space-y-2">
               <Label>Code</Label>
               <Input
-                value={form.code}
-                onChange={(e) =>
-                  setForm({ ...form, code: e.target.value.toUpperCase() })
-                }
+                value={createForm.code}
+                onChange={(e) => setCreateForm({ ...createForm, code: e.target.value.toUpperCase() })}
                 placeholder="SUMMER20"
                 required
               />
@@ -269,14 +323,10 @@ export default function CouponsPage() {
               <div className="space-y-2">
                 <Label>Type</Label>
                 <Select
-                  value={form.discount_type}
-                  onValueChange={(v) =>
-                    setForm({ ...form, discount_type: v as "percent" | "flat" })
-                  }
+                  value={createForm.discount_type}
+                  onValueChange={(v) => setCreateForm({ ...createForm, discount_type: v as "percent" | "flat" })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="percent">Percent (%)</SelectItem>
                     <SelectItem value="flat">Flat (₹)</SelectItem>
@@ -287,30 +337,23 @@ export default function CouponsPage() {
                 <Label>Value</Label>
                 <Input
                   type="number"
-                  value={form.discount_value}
-                  onChange={(e) =>
-                    setForm({ ...form, discount_value: e.target.value })
-                  }
-                  required
-                  min="0"
+                  value={createForm.discount_value}
+                  onChange={(e) => setCreateForm({ ...createForm, discount_value: e.target.value })}
+                  required min="0"
                 />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Location scope</Label>
               <Select
-                value={form.location_id}
-                onValueChange={(v) => setForm({ ...form, location_id: v })}
+                value={createForm.location_id}
+                onValueChange={(v) => setCreateForm({ ...createForm, location_id: v })}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All locations</SelectItem>
                   {locations?.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </SelectItem>
+                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -320,10 +363,8 @@ export default function CouponsPage() {
                 <Label>Valid from</Label>
                 <Input
                   type="date"
-                  value={form.valid_from}
-                  onChange={(e) =>
-                    setForm({ ...form, valid_from: e.target.value })
-                  }
+                  value={createForm.valid_from}
+                  onChange={(e) => setCreateForm({ ...createForm, valid_from: e.target.value })}
                   required
                 />
               </div>
@@ -331,37 +372,107 @@ export default function CouponsPage() {
                 <Label>Valid until</Label>
                 <Input
                   type="date"
-                  value={form.valid_until}
-                  onChange={(e) =>
-                    setForm({ ...form, valid_until: e.target.value })
-                  }
+                  value={createForm.valid_until}
+                  onChange={(e) => setCreateForm({ ...createForm, valid_until: e.target.value })}
                   required
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Max uses (leave blank for unlimited)</Label>
+              <Label>Max uses (blank = unlimited)</Label>
               <Input
                 type="number"
-                value={form.max_uses}
-                onChange={(e) =>
-                  setForm({ ...form, max_uses: e.target.value })
-                }
+                value={createForm.max_uses}
+                onChange={(e) => setCreateForm({ ...createForm, max_uses: e.target.value })}
                 min="1"
                 placeholder="Unlimited"
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {createError && <p className="text-sm text-destructive">{createError}</p>}
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-              >
-                Cancel
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Coupon — {editTarget?.code}</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!editTarget) return;
+              editMutation.mutate({ id: editTarget.id, values: editForm });
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Discount value ({editTarget?.discount_type === "percent" ? "%" : "₹"})</Label>
+              <Input
+                type="number"
+                value={editForm.discount_value ?? ""}
+                onChange={(e) => setEditForm({ ...editForm, discount_value: e.target.value })}
+                min="0"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Location scope</Label>
+              <Select
+                value={editForm.location_id ?? "all"}
+                onValueChange={(v) => setEditForm({ ...editForm, location_id: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  {locations?.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Valid from</Label>
+                <Input
+                  type="date"
+                  value={editForm.valid_from ?? ""}
+                  onChange={(e) => setEditForm({ ...editForm, valid_from: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Valid until</Label>
+                <Input
+                  type="date"
+                  value={editForm.valid_until ?? ""}
+                  onChange={(e) => setEditForm({ ...editForm, valid_until: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Max uses (blank = unlimited)</Label>
+              <Input
+                type="number"
+                value={editForm.max_uses ?? ""}
+                onChange={(e) => setEditForm({ ...editForm, max_uses: e.target.value })}
+                min="1"
+                placeholder="Unlimited"
+              />
+            </div>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+              <Button type="submit" disabled={editMutation.isPending}>
+                {editMutation.isPending ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
           </form>

@@ -16,8 +16,8 @@ const navItems = [
   { href: "/owner/tables",    label: "Tables",    icon: Grid3X3 },
   { href: "/owner/staff",     label: "Staff",     icon: Users },
   { href: "/owner/bookings",  label: "Bookings",  icon: BookOpen },
-  { href: "/owner/reports",   label: "Reports",   icon: BarChart2 },
   { href: "/owner/coupons",   label: "Coupons",   icon: Tag },
+  { href: "/owner/reports",   label: "Reports",   icon: BarChart2 },
   { href: "/owner/settings",  label: "Settings",  icon: Settings },
 ];
 

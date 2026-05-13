@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
+import { DashboardRefresh } from "@/components/owner/dashboard-refresh";
 import {
   TrendingUp, Zap, Calendar, Receipt,
   ArrowUpRight, ArrowDownRight, Minus,
@@ -205,13 +206,16 @@ export default async function OwnerDashboard() {
     <div className="space-y-6">
 
       {/* ── Header ── */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Overview</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          {now.toLocaleDateString("en-IN", {
-            weekday: "long", day: "numeric", month: "long", year: "numeric",
-          })}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Overview</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {now.toLocaleDateString("en-IN", {
+              weekday: "long", day: "numeric", month: "long", year: "numeric",
+            })}
+          </p>
+        </div>
+        <DashboardRefresh />
       </div>
 
       {/* ── Stat cards ── */}
