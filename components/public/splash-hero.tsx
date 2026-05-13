@@ -211,11 +211,11 @@ const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {locations.map((loc, i) => {
               const open   = isOpenNow(loc.opening_time, loc.closing_time);
-              const accent = i === 0 ? "#D4541A" : "#1E6B4A";
+              const accent = i === 0 ? "#D4541A" : "#C4893A";
               const delay  = 180 + i * 120;
 
               return (
-                <Link key={loc.id} href={`/${loc.slug}`} className="block group active:scale-[0.98] transition-transform duration-150">
+                <Link key={loc.id} href={`/${loc.slug}`} className="block group active:scale-[0.985] transition-transform duration-150">
                   <div
                     style={{
                       opacity:   phase === "gone" ? 1 : 0,
@@ -223,29 +223,27 @@ const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
                       transition: `opacity 600ms ${delay}ms ease-out, transform 600ms ${delay}ms cubic-bezier(0.22,1,0.36,1)`,
                     }}
                   >
-                    <div className="relative rounded-2xl overflow-hidden border transition-colors duration-200
-                      bg-[#111111] border-[#111111] hover:bg-white
-                      dark:bg-white dark:border-white dark:hover:bg-[#111111]">
-
-                      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: accent }} />
+                    <div
+                      className="relative rounded-2xl overflow-hidden border transition-all duration-200
+                        bg-white border-[#E8E3D9]
+                        hover:border-[#D4541A]/40 hover:shadow-[0_4px_24px_rgba(212,84,26,0.10)]
+                        dark:bg-[#141414] dark:border-[#272727]
+                        dark:hover:border-[#D4541A]/30 dark:hover:bg-[#1A1A1A]"
+                    >
+                      {/* top accent bar */}
+                      <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: accent }} />
 
                       <div className="p-5 md:p-6 flex items-center gap-4">
                         <div className="flex-1 min-w-0">
-                          <h2 className="text-xl md:text-2xl font-bold mb-3
-                            text-white group-hover:text-[#111111]
-                            dark:text-[#111111] dark:group-hover:text-white">
+                          <h2 className="text-xl md:text-2xl font-bold mb-3 text-gray-900 dark:text-white">
                             {loc.name}
                           </h2>
                           <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 text-sm
-                              text-white/60 group-hover:text-[#111111]/60
-                              dark:text-[#111111]/60 dark:group-hover:text-white/60">
+                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#666]">
                               <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
                               <span className="truncate">{loc.address}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm
-                              text-white/60 group-hover:text-[#111111]/60
-                              dark:text-[#111111]/60 dark:group-hover:text-white/60">
+                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#666]">
                               <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
                               <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
                             </div>
@@ -254,12 +252,15 @@ const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
 
                         <div className="flex flex-col items-end gap-3 shrink-0">
                           <span className={open
-                            ? "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-500"
-                            : "text-xs font-semibold px-2.5 py-1 rounded-full text-white/40 group-hover:text-[#111111]/40 dark:text-[#111111]/40 dark:group-hover:text-white/40"
+                            ? "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-[#222] text-gray-400 dark:text-[#555]"
                           }>
                             {open ? "Open" : "Closed"}
                           </span>
-                          <ChevronRight className="h-5 w-5 text-white/40 group-hover:text-[#111111]/40 dark:text-[#111111]/40 dark:group-hover:text-white/40" />
+                          <ChevronRight
+                            className="h-5 w-5 transition-transform duration-150 group-hover:translate-x-0.5"
+                            style={{ color: accent + "80" }}
+                          />
                         </div>
                       </div>
                     </div>
