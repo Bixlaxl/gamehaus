@@ -34,17 +34,19 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
   // Filter by location (via joined order) and strip internal field
+  type BookingRow = typeof data extends (infer T)[] | null ? T : never;
   const filtered = (data ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((b: any) => b.order?.location_id === locationId)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((b: any) => ({
-      ...b,
-      order: {
-        customer_name:  b.order.customer_name,
-        customer_phone: b.order.customer_phone,
-      },
-    }));
+    .filter((b: BookingRow) => (b.order as { location_id: string } | null)?.location_id === locationId)
+    .map((b: BookingRow) => {
+      const order = b.order as { customer_name: string; customer_phone: string | null; location_id: string } | null;
+      return {
+        ...b,
+        order: {
+          customer_name:  order?.customer_name,
+          customer_phone: order?.customer_phone,
+        },
+      };
+    });
 
   return NextResponse.json(ok(filtered));
 }
