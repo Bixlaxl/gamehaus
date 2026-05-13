@@ -5,14 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore, getSelectedOrder } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatCurrency } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Banknote, Smartphone, CreditCard, Star } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Banknote, Smartphone, CreditCard, Star, X, CheckCircle2 } from "lucide-react";
+import type { Order, Booking } from "@/lib/supabase/types";
 
 interface FinalizeBillModalProps {
   locationId: string;
@@ -25,6 +20,10 @@ interface CustomerInfo {
   name: string | null;
 }
 
+type HandoverBooking = Pick<Booking, "id" | "scheduled_start" | "scheduled_end"> & {
+  order: Pick<Order, "customer_name" | "customer_phone">;
+};
+
 export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   const store         = usePOSStore();
   const selectedOrder = getSelectedOrder(store);
@@ -32,43 +31,39 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   const qc            = useQueryClient();
   const now           = store.now;
 
-  const orderId       = store.finalizeOrderId;
-  const savedPoints   = orderId ? (store.pointsToRedeem[orderId] ?? 0) : 0;
+  const orderId     = store.finalizeOrderId;
+  const savedPoints = orderId ? (store.pointsToRedeem[orderId] ?? 0) : 0;
 
-  const [method,       setMethod]       = useState<PaymentMethod | null>(null);
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState<string | null>(null);
-  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
-  const [redeemInput,  setRedeemInput]  = useState(String(savedPoints));
+  const [method,           setMethod]           = useState<PaymentMethod | null>(null);
+  const [loading,          setLoading]          = useState(false);
+  const [error,            setError]            = useState<string | null>(null);
+  const [customerInfo,     setCustomerInfo]     = useState<CustomerInfo | null>(null);
+  const [redeemInput,      setRedeemInput]      = useState(String(savedPoints));
+  const [step,             setStep]             = useState<"bill" | "handover">("bill");
+  const [handoverBookings, setHandoverBookings] = useState<HandoverBooking[]>([]);
+  const [handoverLoading,  setHandoverLoading]  = useState<string | null>(null);
 
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
-  const activeItems =
-    selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
-  const activeExtras =
-    selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
+  const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
+  const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
 
-  const bill      = calculateBill(activeItems, activeExtras, now);
-  const maxRedeem = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
-  const clampedRedeem  = Math.min(redeemPoints, maxRedeem);
-  const finalDue       = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
-  const pointsToEarn   = Math.floor(finalDue / 100);
+  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0);
+  const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= bill.scheduledSubtotal;
+  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
+  const clampedRedeem = Math.min(redeemPoints, maxRedeem);
+  const finalDue      = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
+  const pointsToEarn  = Math.floor(finalDue / 100);
 
-  // Load customer info when modal opens
   useEffect(() => {
-    if (!isOpen || !selectedOrder?.customer_phone) {
-      setCustomerInfo(null);
-      return;
-    }
+    setCustomerInfo(null);
+    if (!isOpen || !selectedOrder?.customer_phone) return;
     fetch(`/api/customers/lookup?phone=${encodeURIComponent(selectedOrder.customer_phone)}`)
       .then((r) => r.json())
-      .then((data: { found: boolean; customer: CustomerInfo | null }) => {
-        setCustomerInfo(data.customer);
-      })
-      .catch(() => setCustomerInfo(null));
+      .then((data: { found: boolean; customer: CustomerInfo | null }) => setCustomerInfo(data.customer))
+      .catch(() => {});
   }, [isOpen, selectedOrder?.customer_phone]);
 
-  // Sync redeemInput when savedPoints changes (e.g. modal re-opens)
   useEffect(() => {
     setRedeemInput(String(savedPoints));
   }, [savedPoints, isOpen]);
@@ -83,6 +78,9 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     store.setFinalizeOrderId(null);
     setMethod(null);
     setError(null);
+    setStep("bill");
+    setHandoverBookings([]);
+    setHandoverLoading(null);
   }
 
   async function confirmPayment() {
@@ -93,10 +91,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     const res = await fetch(`/api/orders/${store.finalizeOrderId}/finalize`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        payment_method:  method,
-        points_redeemed: clampedRedeem,
-      }),
+      body: JSON.stringify({ payment_method: method, points_redeemed: clampedRedeem }),
     });
 
     const body = await res.json() as
@@ -109,134 +104,297 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
       return;
     }
 
-    qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    // Capture handovers from current table state BEFORE queries invalidate
+    const finalizedTableIds = new Set((selectedOrder?.items ?? []).map((i) => i.table_id));
+    const handovers: HandoverBooking[] = store.tables
+      .filter((t) => finalizedTableIds.has(t.id) && t.upcomingBooking !== null)
+      .map((t) => ({
+        id:              t.upcomingBooking!.id,
+        scheduled_start: t.upcomingBooking!.scheduled_start,
+        scheduled_end:   t.upcomingBooking!.scheduled_end,
+        order:           t.upcomingBooking!.order,
+      }));
+
+    qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+    qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
+    qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
     store.selectOrder(null);
-    close();
     setLoading(false);
+
+    if (handovers.length > 0) {
+      setHandoverBookings(handovers);
+      setStep("handover");
+    } else {
+      close();
+    }
   }
 
-  const methodOptions: { value: PaymentMethod; label: string; icon: React.ReactNode }[] = [
-    { value: "cash", label: "Cash",  icon: <Banknote  className="h-5 w-5" /> },
-    { value: "upi",  label: "UPI",   icon: <Smartphone className="h-5 w-5" /> },
-    { value: "card", label: "Card",  icon: <CreditCard className="h-5 w-5" /> },
+  async function doCheckIn(bookingId: string) {
+    setHandoverLoading(bookingId);
+    const res  = await fetch(`/api/bookings/${bookingId}/checkin`, { method: "POST" });
+    const body = await res.json() as
+      | { success: true;  data: { order_id: string } }
+      | { success: false; error: string };
+
+    if (body.success) {
+      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      store.selectOrder(body.data.order_id);
+    }
+    close();
+  }
+
+  const paymentMethods: { value: PaymentMethod; label: string; icon: React.ReactNode }[] = [
+    { value: "cash", label: "Cash", icon: <Banknote  className="h-5 w-5" /> },
+    { value: "upi",  label: "UPI",  icon: <Smartphone className="h-5 w-5" /> },
+    { value: "card", label: "Card", icon: <CreditCard className="h-5 w-5" /> },
   ];
+
+  if (step === "handover") {
+    return (
+      <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
+        <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+          <div className="px-5 py-6 space-y-5">
+            {/* Success indicator */}
+            <div className="text-center space-y-2">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mx-auto"
+                style={{ background: "rgba(16,185,129,0.1)" }}
+              >
+                <CheckCircle2 className="h-6 w-6" style={{ color: "#10b981" }} />
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 dark:text-white">Payment collected!</p>
+                <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">
+                  {handoverBookings.length === 1
+                    ? "Next booking is ready to check in"
+                    : `${handoverBookings.length} upcoming bookings ready`}
+                </p>
+              </div>
+            </div>
+
+            {/* Handover cards */}
+            <div className="space-y-3">
+              {handoverBookings.map((booking) => (
+                <div
+                  key={booking.id}
+                  className="rounded-xl p-4 bg-white dark:bg-[#111] border-2 border-amber-200 dark:border-[rgba(245,158,11,0.3)]"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-gray-900 dark:text-white text-sm truncate">
+                        {booking.order.customer_name}
+                      </p>
+                      {booking.order.customer_phone && (
+                        <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">
+                          {booking.order.customer_phone}
+                        </p>
+                      )}
+                      <p className="text-xs font-mono font-semibold mt-1.5 tabular-nums" style={{ color: "#f59e0b" }}>
+                        {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        {" → "}
+                        {new Date(booking.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => doCheckIn(booking.id)}
+                      disabled={!!handoverLoading}
+                      className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-85 disabled:opacity-40"
+                      style={{ background: "#10b981" }}
+                    >
+                      {handoverLoading === booking.id ? "…" : "Check In"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Skip */}
+            <button
+              onClick={close}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-gray-500 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              Skip for now
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="bg-gray-800 border-gray-700 text-white max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Finalize Bill</DialogTitle>
+      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Finalize Bill</DialogTitle>
+            <button
+              onClick={close}
+              className="text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
+
           {/* Bill breakdown */}
-          <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
-            {bill.tableLines.map((line) => (
-              <div key={line.id} className="flex justify-between">
-                <span className="text-gray-300">{line.label} ({line.durationMins}m)</span>
-                <span className="text-white">{formatCurrency(line.amount)}</span>
-              </div>
-            ))}
+          <div className="rounded-xl p-4 space-y-2 text-sm bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
+            {fullyPrePaid ? (
+              <>
+                <div className="flex justify-between text-xs" style={{ color: "#10b981" }}>
+                  <span>Session pre-paid online</span><span>✓ covered</span>
+                </div>
+                {bill.tableLines.filter((l) => l.overtimeMins > 0).map((line) => {
+                  const ti = activeItems.find((i) => i.id === line.id);
+                  const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
+                  return (
+                    <div key={line.id} className="flex justify-between">
+                      <span className="text-gray-500 dark:text-[#888]">{tn} — overtime {line.overtimeMins}m</span>
+                      <span className="text-gray-900 dark:text-white">{formatCurrency(line.overtimeAmount)}</span>
+                    </div>
+                  );
+                })}
+              </>
+            ) : (
+              bill.tableLines.map((line) => {
+                const ti = activeItems.find((i) => i.id === line.id);
+                const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
+                return (
+                  <div key={line.id} className="flex justify-between">
+                    <span className="text-gray-500 dark:text-[#888]">{tn} ({line.durationMins}m)</span>
+                    <span className="text-gray-900 dark:text-white">{formatCurrency(line.amount)}</span>
+                  </div>
+                );
+              })
+            )}
+
             {bill.extraLines.map((line) => (
               <div key={line.id} className="flex justify-between">
-                <span className="text-gray-300">{line.name} ×{line.quantity}</span>
-                <span className="text-white">{formatCurrency(line.amount)}</span>
+                <span className="text-gray-500 dark:text-[#888]">{line.name} ×{line.quantity}</span>
+                <span className="text-gray-900 dark:text-white">{formatCurrency(line.amount)}</span>
               </div>
             ))}
-            <div className="border-t border-gray-600 pt-2 flex justify-between font-medium">
-              <span className="text-gray-300">Subtotal</span>
-              <span className="text-white">{formatCurrency(bill.subtotal)}</span>
-            </div>
-            {bill.discountAmount > 0 && (
-              <div className="flex justify-between">
-                <span className="text-green-400">Discount</span>
-                <span className="text-green-400">-{formatCurrency(bill.discountAmount)}</span>
+
+            {!fullyPrePaid && (
+              <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-[#2A2A2A]">
+                <span className="text-gray-500 dark:text-[#666]">Subtotal</span>
+                <span className="text-gray-900 dark:text-white">{formatCurrency(bill.subtotal)}</span>
               </div>
             )}
-            {bill.advancePaid > 0 && (
+
+            {bill.discountAmount > 0 && (
               <div className="flex justify-between">
-                <span className="text-green-400">Advance paid</span>
-                <span className="text-green-400">-{formatCurrency(bill.advancePaid)}</span>
+                <span style={{ color: "#10b981" }}>Discount</span>
+                <span style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
+              </div>
+            )}
+            {!fullyPrePaid && bill.advancePaid > 0 && (
+              <div className="flex justify-between">
+                <span style={{ color: "#10b981" }}>Advance paid</span>
+                <span style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
               </div>
             )}
             {clampedRedeem > 0 && (
               <div className="flex justify-between">
-                <span className="text-amber-400">Points redeemed ({clampedRedeem} pts)</span>
-                <span className="text-amber-400">-{formatCurrency(clampedRedeem)}</span>
+                <span style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
+                <span style={{ color: "#f59e0b" }}>−{formatCurrency(clampedRedeem)}</span>
               </div>
             )}
-            <div className="border-t border-gray-600 pt-2 flex justify-between text-lg font-bold">
-              <span>Total Due</span>
-              <span className="text-green-400">{formatCurrency(finalDue)}</span>
+
+            <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200 dark:border-[#2A2A2A]">
+              <span className="text-gray-900 dark:text-white">Total Due</span>
+              <span style={{ color: "#D4541A" }}>{formatCurrency(finalDue)}</span>
             </div>
           </div>
 
           {/* Loyalty points */}
           {selectedOrder?.customer_phone && (
-            <div className="bg-gray-700 rounded-lg p-3 space-y-2">
+            <div className="rounded-xl p-4 space-y-2.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-amber-400" />
-                  <span className="text-sm font-medium text-white">Loyalty Points</span>
+                  <Star className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Loyalty Points</span>
                 </div>
-                <span className="text-xs text-amber-300">
-                  {customerInfo ? `${customerInfo.points_balance} available` : "Loading..."}
+                <span className="text-xs" style={{ color: "#f59e0b" }}>
+                  {customerInfo ? `${customerInfo.points_balance} pts` : "Loading..."}
                 </span>
               </div>
 
               {customerInfo && customerInfo.points_balance > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 shrink-0">Redeem</span>
+                  <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
                   <input
                     type="number"
                     min="0"
                     max={maxRedeem}
                     value={redeemInput}
                     onChange={(e) => handleRedeemChange(e.target.value)}
-                    className="w-20 bg-gray-600 border border-gray-500 text-white text-sm rounded px-2 py-1"
+                    className="w-20 text-sm rounded-lg px-2 py-1 outline-none transition-colors
+                      bg-gray-100 dark:bg-[#1A1A1A]
+                      border border-gray-200 dark:border-[#2A2A2A]
+                      text-gray-900 dark:text-white
+                      focus:border-[#f59e0b]"
                   />
-                  <span className="text-xs text-gray-400">/ {maxRedeem} pts (₹{maxRedeem})</span>
+                  <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
                 </div>
               )}
 
-              <p className="text-xs text-gray-500">
-                Will earn <span className="text-amber-300 font-medium">{pointsToEarn} pts</span> from this visit
+              <p className="text-xs text-gray-400 dark:text-[#555]">
+                Will earn{" "}
+                <span className="font-semibold" style={{ color: "#f59e0b" }}>{pointsToEarn} pts</span>{" "}
+                from this visit
               </p>
             </div>
           )}
 
           {/* Payment method */}
           <div className="space-y-2">
-            <p className="text-sm text-gray-400">Payment method</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+              Payment method
+            </p>
             <div className="grid grid-cols-3 gap-2">
-              {methodOptions.map((opt) => (
+              {paymentMethods.map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => setMethod(opt.value)}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all ${
+                  className={`flex flex-col items-center gap-2 py-3 rounded-xl transition-all ${
                     method === opt.value
-                      ? "border-blue-500 bg-blue-500/10"
-                      : "border-gray-600 hover:border-gray-400"
+                      ? ""
+                      : "bg-gray-100 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] text-gray-500 dark:text-[#888]"
                   }`}
+                  style={
+                    method === opt.value
+                      ? { background: "rgba(212,84,26,0.1)", border: "1px solid #D4541A", color: "#D4541A" }
+                      : {}
+                  }
                 >
                   {opt.icon}
-                  <span className="text-xs">{opt.label}</span>
+                  <span className="text-xs font-semibold">{opt.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && (
+            <p
+              className="text-sm rounded-lg px-3 py-2"
+              style={{ background: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
+            >
+              {error}
+            </p>
+          )}
 
-          <Button
-            className="w-full bg-green-600 hover:bg-green-700 font-bold"
-            size="lg"
+          <button
             onClick={confirmPayment}
             disabled={!method || loading}
+            className="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-30"
+            style={{ background: "#D4541A" }}
           >
             {loading ? "Processing..." : `Collect ${formatCurrency(finalDue)}`}
-          </Button>
+          </button>
         </div>
       </DialogContent>
     </Dialog>

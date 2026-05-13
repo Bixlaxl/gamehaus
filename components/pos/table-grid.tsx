@@ -1,8 +1,9 @@
 "use client";
 
 import { usePOSStore } from "@/store/pos";
-import { calculateBill } from "@/lib/billing/engine";
-import { formatElapsed, formatCountdown, formatCurrency, cn } from "@/lib/utils";
+import { calculateBill, GRACE_MINS } from "@/lib/billing/engine";
+import { formatElapsed, formatCountdown, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const typeIcon: Record<string, string> = {
   snooker:  "🎱",
@@ -12,11 +13,11 @@ const typeIcon: Record<string, string> = {
 };
 
 export function TableGrid() {
-  const { tables, now, openOrders, selectOrder, selectedOrderId, setWalkInWithTable } =
+  const { tables, now, openOrders, selectedOrderId, setWalkInWithTable, setTableSessionsTableId } =
     usePOSStore();
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {tables.map((table) => {
         const item    = table.activeOrderItem;
         const booking = table.upcomingBooking;
@@ -31,67 +32,78 @@ export function TableGrid() {
 
         let liveBill         = 0;
         let isOvertime       = false;
+        let isGrace          = false;
         let isFiveMinWarning = false;
         let countdown        = "";
         let elapsed          = "";
 
         if (isRunning && item) {
-          liveBill = calculateBill([item], [], now).totalDue;
+          liveBill = calculateBill([item], [], now).subtotal;
           if (item.actual_start) elapsed = formatElapsed(new Date(item.actual_start), now);
           if (item.expected_end) {
-            const expectedEnd    = new Date(item.expected_end);
-            const diffMs         = expectedEnd.getTime() - now.getTime();
-            isOvertime           = diffMs < 0;
-            isFiveMinWarning     = diffMs > 0 && diffMs < 5 * 60 * 1000;
-            countdown            = formatCountdown(expectedEnd, now);
+            const exp    = new Date(item.expected_end);
+            const diffMs = exp.getTime() - now.getTime();
+            const otMs   = -diffMs; // positive when past expected_end
+
+            isFiveMinWarning = diffMs > 0 && diffMs < 5 * 60 * 1000;
+            isGrace          = otMs > 0 && otMs <= GRACE_MINS * 60 * 1000 && !booking;
+            isOvertime       = diffMs < 0 && !isGrace;
+            countdown        = isGrace
+              ? formatCountdown(new Date(exp.getTime() + GRACE_MINS * 60 * 1000), now)
+              : formatCountdown(exp, now);
           }
         }
 
-        const isSelected = order?.id === selectedOrderId;
+        const isSelected    = order?.id === selectedOrderId;
+        const hasNextBooking = !!booking;
+        const showHandover  = isRunning && isOvertime && hasNextBooking;
+
+        // Status badge
+        const badge = isRunning
+          ? { label: showHandover ? "Handover" : isOvertime ? "OT" : isGrace ? "Grace" : "Live",
+              color: showHandover ? "#f97316" : isOvertime ? "#ef4444" : (isGrace || isFiveMinWarning) ? "#f59e0b" : "#10b981",
+              bg:    showHandover ? "rgba(249,115,22,0.1)" : isOvertime ? "rgba(239,68,68,0.1)" : (isGrace || isFiveMinWarning) ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)" }
+          : isBooked
+          ? { label: "Booked", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" }
+          : null;
 
         return (
           <button
             key={table.id}
-            onClick={() => {
-              if (isIdle) setWalkInWithTable(table.id);
-              else if (order) selectOrder(order.id);
-            }}
+            onClick={() => isIdle ? setWalkInWithTable(table.id) : setTableSessionsTableId(table.id)}
             className={cn(
-              "w-full text-left rounded-xl border-l-[3px] bg-slate-800 hover:bg-slate-750 transition-all duration-150 px-3.5 py-3",
-              isRunning && !isOvertime && !isFiveMinWarning && "border-l-emerald-500",
-              isRunning && isFiveMinWarning                  && "border-l-amber-400",
-              isRunning && isOvertime                        && "border-l-red-500",
-              isBooked                                       && "border-l-amber-500",
-              isIdle                                         && "border-l-slate-700 hover:border-l-slate-500",
-              isSelected && "ring-1 ring-inset ring-blue-500"
+              "w-full text-left rounded-lg transition-all duration-100 active:scale-[0.98]",
+              isSelected
+                ? "bg-orange-50 hover:bg-orange-100 dark:bg-[rgba(212,84,26,0.06)] dark:hover:bg-[rgba(212,84,26,0.1)] border border-orange-200 dark:border-[rgba(212,84,26,0.25)]"
+                : isRunning
+                ? showHandover
+                  ? "bg-white hover:bg-orange-50 dark:bg-[#111] dark:hover:bg-[rgba(249,115,22,0.05)] border-2 border-orange-300 dark:border-[rgba(249,115,22,0.35)]"
+                  : isOvertime
+                  ? "bg-white hover:bg-red-50 dark:bg-[#111] dark:hover:bg-[rgba(239,68,68,0.05)] border-2 border-red-300 dark:border-[rgba(239,68,68,0.35)]"
+                  : (isGrace || isFiveMinWarning)
+                  ? "bg-white hover:bg-amber-50 dark:bg-[#111] dark:hover:bg-[rgba(245,158,11,0.05)] border-2 border-amber-300 dark:border-[rgba(245,158,11,0.35)]"
+                  : "bg-white hover:bg-emerald-50 dark:bg-[#111] dark:hover:bg-[rgba(16,185,129,0.05)] border-2 border-emerald-300 dark:border-[rgba(16,185,129,0.35)]"
+                : isBooked
+                ? "bg-white hover:bg-amber-50 dark:bg-[#111] dark:hover:bg-[rgba(245,158,11,0.04)] border-2 border-amber-200 dark:border-[rgba(245,158,11,0.25)]"
+                : "bg-white hover:bg-gray-50 dark:bg-[#111] dark:hover:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]"
             )}
+            style={{ padding: isIdle ? "8px 10px" : "10px 10px" }}
           >
-            {/* Name + status pill */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
-                <span className="font-semibold text-sm text-slate-100">{table.name}</span>
+            {/* Row 1: icon + name + badge */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm shrink-0">{typeIcon[table.type] ?? "🎱"}</span>
+                <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{table.name}</span>
               </div>
-
-              {isRunning && (
-                <span className={cn(
-                  "text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide",
-                  isOvertime
-                    ? "bg-red-500/20 text-red-400"
-                    : isFiveMinWarning
-                      ? "bg-amber-500/20 text-amber-400"
-                      : "bg-emerald-500/20 text-emerald-400"
-                )}>
-                  {isOvertime ? "OT" : "Live"}
+              {badge ? (
+                <span
+                  className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                  style={{ background: badge.bg, color: badge.color }}
+                >
+                  {badge.label}
                 </span>
-              )}
-              {isBooked && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-amber-500/15 text-amber-400">
-                  Booked
-                </span>
-              )}
-              {isIdle && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-slate-700 text-slate-500">
+              ) : (
+                <span className="text-[9px] font-semibold shrink-0 text-gray-300 dark:text-[#3A3A3A]">
                   Idle
                 </span>
               )}
@@ -101,47 +113,43 @@ export function TableGrid() {
             {isRunning && item && (
               <div className="mt-2 space-y-1">
                 {order?.customer_name && (
-                  <p className="text-xs text-slate-300 font-medium truncate">{order.customer_name}</p>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{order.customer_name}</p>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500 font-mono tabular-nums">{elapsed}</span>
-                  <span className={cn(
-                    "text-xs font-mono font-semibold tabular-nums",
-                    isOvertime ? "text-red-400" : isFiveMinWarning ? "text-amber-400" : "text-emerald-400"
-                  )}>
-                    {isOvertime ? "OVERTIME" : countdown + " left"}
+                  <span className="text-[11px] font-mono tabular-nums text-gray-400 dark:text-[#555]">
+                    {elapsed}
+                  </span>
+                  <span
+                    className="text-[11px] font-mono font-semibold tabular-nums"
+                    style={{ color: showHandover ? "#f97316" : isOvertime ? "#ef4444" : (isGrace || isFiveMinWarning) ? "#f59e0b" : "#10b981" }}
+                  >
+                    {showHandover ? "handover" : isOvertime ? `+${countdown} OT` : isGrace ? `${countdown} grace` : countdown + " left"}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-medium">{formatCurrency(liveBill)}</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: "#D4541A" }}>{formatCurrency(liveBill)}</p>
               </div>
             )}
 
             {/* Booked details */}
             {isBooked && booking && (
-              <div className="mt-2 space-y-0.5">
-                <p className="text-xs text-slate-300 font-medium truncate">
-                  {booking.order?.customer_name}
-                </p>
-                <p className="text-xs text-amber-400 font-medium">
-                  {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", {
-                    hour: "2-digit", minute: "2-digit",
-                  })}
+              <div className="mt-1.5 space-y-0.5">
+                <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{booking.order?.customer_name}</p>
+                <p className="text-[11px] font-mono" style={{ color: "#f59e0b" }}>
+                  {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
             )}
 
-            {/* Idle */}
+            {/* Idle hint */}
             {isIdle && (
-              <p className="text-xs text-slate-600 mt-1.5">Tap to start walk-in</p>
+              <p className="text-[10px] mt-0.5 text-gray-300 dark:text-[#333]">Tap to start</p>
             )}
           </button>
         );
       })}
 
       {tables.length === 0 && (
-        <div className="py-10 text-center">
-          <p className="text-slate-600 text-sm">No tables configured</p>
-        </div>
+        <p className="py-8 text-center text-xs text-gray-400 dark:text-[#444]">No tables configured</p>
       )}
     </div>
   );

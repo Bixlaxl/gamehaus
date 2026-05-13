@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { stopSessionSchema, ok, err } from "@/lib/validators/schemas";
 import { calculateBill } from "@/lib/billing/engine";
-import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
+import type { OrderItem } from "@/lib/supabase/types";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -16,8 +17,9 @@ export async function POST(request: Request) {
   }
 
   const { order_item_id } = parsed.data;
+  const admin = createAdminClient();
 
-  const { data: item, error: itemError } = await supabase
+  const { data: item, error: itemError } = await admin
     .from("order_items")
     .select("*")
     .eq("id", order_item_id)
@@ -35,7 +37,7 @@ export async function POST(request: Request) {
   const bill = calculateBill([item as OrderItem], [], now);
   const finalAmount = bill.tableLines[0]?.amount ?? 0;
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin
     .from("order_items")
     .update({
       status: "finished",
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
   }
 
   // Check if all items in this order are now finished — prompt to finalize
-  const { data: allItems } = await supabase
+  const { data: allItems } = await admin
     .from("order_items")
     .select("status, is_deleted")
     .eq("order_id", item.order_id);

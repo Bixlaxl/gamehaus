@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { addExtraSchema, ok, err } from "@/lib/validators/schemas";
 
 export async function POST(
@@ -17,8 +18,9 @@ export async function POST(
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  // Verify order exists and is open
-  const { data: order } = await supabase
+  const admin = createAdminClient();
+
+  const { data: order } = await admin
     .from("orders")
     .select("status")
     .eq("id", orderId)
@@ -30,7 +32,7 @@ export async function POST(
 
   const { name, price, quantity } = parsed.data;
 
-  const { data: extra, error } = await supabase
+  const { data: extra, error } = await admin
     .from("order_extras")
     .insert({
       order_id: orderId,

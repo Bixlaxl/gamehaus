@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { extendSessionSchema, ok, err } from "@/lib/validators/schemas";
 
 const BUFFER_MINS = 10;
@@ -16,8 +17,9 @@ export async function POST(request: Request) {
   }
 
   const { order_item_id, extend_mins } = parsed.data;
+  const admin = createAdminClient();
 
-  const { data: item, error: itemError } = await supabase
+  const { data: item, error: itemError } = await admin
     .from("order_items")
     .select("*")
     .eq("id", order_item_id)
@@ -42,7 +44,7 @@ export async function POST(request: Request) {
   // Check for confirmed online bookings on this table that would conflict (10-min buffer)
   const bufferTime = new Date(newExpectedEnd.getTime() + BUFFER_MINS * 60 * 1000);
 
-  const { data: conflictingBookings } = await supabase
+  const { data: conflictingBookings } = await admin
     .from("bookings")
     .select(`
       id,
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin
     .from("order_items")
     .update({
       expected_end: newExpectedEnd.toISOString(),

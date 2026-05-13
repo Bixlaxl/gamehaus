@@ -29,6 +29,7 @@ interface POSStore {
   extendModalItem: OrderItem | null;
   finalizeOrderId: string | null;
   pointsToRedeem: Record<string, number>; // orderId → points to redeem
+  tableSessionsTableId: string | null;
 
   // Actions
   setNow: (now: Date) => void;
@@ -42,6 +43,12 @@ interface POSStore {
   setExtendModalItem: (item: OrderItem | null) => void;
   setFinalizeOrderId: (id: string | null) => void;
   setPointsToRedeem: (orderId: string, points: number) => void;
+  setTableSessionsTableId: (id: string | null) => void;
+
+  // Optimistic patches — update store immediately, no server wait
+  patchOrderItem: (itemId: string, patch: Partial<OrderItem>) => void;
+  addOrderExtra: (orderId: string, extra: OrderExtra) => void;
+  removeOrderExtra: (orderId: string, extraId: string) => void;
 
   // Realtime handlers
   handleOrderItemChange: (payload: RealtimePostgresChangesPayload<OrderItem>) => void;
@@ -61,6 +68,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   extendModalItem: null,
   finalizeOrderId: null,
   pointsToRedeem: {},
+  tableSessionsTableId: null,
 
   setNow: (now) => set({ now }),
   setTables: (tables) => set({ tables }),
@@ -72,8 +80,37 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setUpcomingOpen: (upcomingOpen) => set({ upcomingOpen }),
   setExtendModalItem: (extendModalItem) => set({ extendModalItem }),
   setFinalizeOrderId: (finalizeOrderId) => set({ finalizeOrderId }),
+  setTableSessionsTableId: (tableSessionsTableId) => set({ tableSessionsTableId }),
   setPointsToRedeem: (orderId, points) =>
     set((state) => ({ pointsToRedeem: { ...state.pointsToRedeem, [orderId]: points } })),
+
+  patchOrderItem: (itemId, patch) =>
+    set((state) => ({
+      openOrders: state.openOrders.map((order) => ({
+        ...order,
+        items: order.items.map((item) =>
+          item.id === itemId ? { ...item, ...patch } : item
+        ),
+      })),
+    })),
+
+  addOrderExtra: (orderId, extra) =>
+    set((state) => ({
+      openOrders: state.openOrders.map((order) =>
+        order.id === orderId
+          ? { ...order, extras: [...order.extras, extra] }
+          : order
+      ),
+    })),
+
+  removeOrderExtra: (orderId, extraId) =>
+    set((state) => ({
+      openOrders: state.openOrders.map((order) =>
+        order.id === orderId
+          ? { ...order, extras: order.extras.filter((e) => e.id !== extraId) }
+          : order
+      ),
+    })),
 
   handleOrderItemChange: (payload) => {
     const { eventType, new: newRow, old: oldRow } = payload;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { startSessionSchema, ok, err } from "@/lib/validators/schemas";
 
 export async function POST(request: Request) {
@@ -14,9 +15,10 @@ export async function POST(request: Request) {
   }
 
   const { order_item_id } = parsed.data;
+  const admin = createAdminClient();
 
   // Fetch the order item
-  const { data: item, error: itemError } = await supabase
+  const { data: item, error: itemError } = await admin
     .from("order_items")
     .select("*, order:orders(type)")
     .eq("id", order_item_id)
@@ -34,6 +36,8 @@ export async function POST(request: Request) {
   const order = item.order as { type: string } | null;
 
   // Calculate expected_end
+  // Walk-in: duration from now (no scheduled slot to anchor to)
+  // Online: respect scheduled_end — late arrival loses that time, overtime when exceeded
   let expectedEnd: string | null = null;
   if (order?.type === "walk_in" && item.scheduled_duration_mins) {
     const end = new Date(Date.now() + item.scheduled_duration_mins * 60 * 1000);
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
     expectedEnd = item.scheduled_end;
   }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin
     .from("order_items")
     .update({
       status: "running",

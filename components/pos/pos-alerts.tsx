@@ -1,57 +1,59 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { usePOSStore } from "@/store/pos";
 
 export function POSAlerts() {
-  const { tables, now, openOrders } = usePOSStore();
+  const { tables, now } = usePOSStore();
   const beepedRef = useRef<Set<string>>(new Set());
 
-  const alerts: { id: string; message: string; type: "info" | "warning" | "urgent" }[] = [];
+  const alerts: { id: string; short: string; full: string; type: "warning" | "urgent" }[] = [];
 
   for (const table of tables) {
-    // 15 mins before next booking — call to confirm
     if (table.upcomingBooking) {
-      const start = new Date(table.upcomingBooking.scheduled_start);
+      const start  = new Date(table.upcomingBooking.scheduled_start);
       const diffMs = start.getTime() - now.getTime();
-      if (diffMs > 0 && diffMs < 15 * 60 * 1000) {
+
+      if (diffMs > 0 && diffMs < 5 * 60 * 1000) {
+        const mins = Math.ceil(diffMs / 60000);
         alerts.push({
-          id: `pre-${table.upcomingBooking.id}`,
-          message: `${table.name} — ${table.upcomingBooking.order?.customer_name} arriving at ${start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}. Call to confirm.`,
-          type: "info",
+          id:    `pre-${table.upcomingBooking.id}`,
+          short: `${table.name} · ${table.upcomingBooking.order?.customer_name} · ${mins}m`,
+          full:  `${table.name} — ${table.upcomingBooking.order?.customer_name} arriving in ${mins} min. Inform current player.`,
+          type:  "warning",
         });
       }
 
-      // After held_until — mark no-show prompt
       const heldUntil = new Date(table.upcomingBooking.held_until);
       if (now > heldUntil) {
         alerts.push({
-          id: `noshow-${table.upcomingBooking.id}`,
-          message: `${table.upcomingBooking.order?.customer_name} (${table.name}) not arrived — Mark No-Show?`,
-          type: "urgent",
+          id:    `noshow-${table.upcomingBooking.id}`,
+          short: `${table.upcomingBooking.order?.customer_name} · No-show?`,
+          full:  `${table.upcomingBooking.order?.customer_name} (${table.name}) not arrived — Mark No-Show?`,
+          type:  "urgent",
         });
       }
     }
 
-    // 5 min warning for running sessions
     if (table.activeOrderItem?.expected_end) {
-      const end = new Date(table.activeOrderItem.expected_end);
-      const diffMs = end.getTime() - now.getTime();
+      const end     = new Date(table.activeOrderItem.expected_end);
+      const diffMs  = end.getTime() - now.getTime();
       const alertId = `5min-${table.activeOrderItem.id}`;
 
       if (diffMs > 0 && diffMs < 5 * 60 * 1000) {
+        const mins = Math.ceil(diffMs / 60000);
         alerts.push({
-          id: alertId,
-          message: `${table.name} session ending in ${Math.ceil(diffMs / 60000)} min`,
-          type: "warning",
+          id:    alertId,
+          short: `${table.name} · ${mins}m left`,
+          full:  `${table.name} session ending in ${mins} min`,
+          type:  "warning",
         });
 
-        // Beep once when entering 5-min window
         if (!beepedRef.current.has(alertId)) {
           beepedRef.current.add(alertId);
           try {
-            const ctx = new AudioContext();
-            const osc = ctx.createOscillator();
+            const ctx  = new AudioContext();
+            const osc  = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(ctx.destination);
@@ -60,9 +62,7 @@ export function POSAlerts() {
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
             osc.start();
             osc.stop(ctx.currentTime + 0.5);
-          } catch {
-            // AudioContext may not be available in all contexts
-          }
+          } catch { /* ignore */ }
         }
       } else {
         beepedRef.current.delete(alertId);
@@ -73,21 +73,29 @@ export function POSAlerts() {
   if (alerts.length === 0) return null;
 
   return (
-    <div className="shrink-0 px-3 py-1.5 space-y-1 bg-gray-800 border-b border-gray-700">
-      {alerts.map((alert) => (
+    <div className="px-2.5 py-2 space-y-1 border-t border-gray-200 dark:border-[#1F1F1F]">
+      {alerts.slice(0, 3).map((alert) => (
         <div
           key={alert.id}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
-            alert.type === "urgent"
-              ? "bg-red-900/50 text-red-300 border border-red-700"
-              : alert.type === "warning"
-              ? "bg-amber-900/50 text-amber-300 border border-amber-700"
-              : "bg-blue-900/50 text-blue-300 border border-blue-700"
-          }`}
+          title={alert.full}
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs leading-tight"
+          style={{
+            background: alert.type === "urgent"
+              ? "rgba(239,68,68,0.07)"
+              : "rgba(245,158,11,0.07)",
+            border: `1px solid ${alert.type === "urgent" ? "rgba(239,68,68,0.18)" : "rgba(245,158,11,0.18)"}`,
+            color: alert.type === "urgent" ? "#f87171" : "#fbbf24",
+          }}
         >
-          <span>{alert.message}</span>
+          <span className="shrink-0 text-[10px]">{alert.type === "urgent" ? "⚠" : "⏱"}</span>
+          <span className="truncate">{alert.short}</span>
         </div>
       ))}
+      {alerts.length > 3 && (
+        <p className="text-center text-[10px] text-gray-300 dark:text-[#444]">
+          +{alerts.length - 3} more alerts
+        </p>
+      )}
     </div>
   );
 }

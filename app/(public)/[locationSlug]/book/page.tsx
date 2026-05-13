@@ -120,25 +120,34 @@ export default function CheckoutPage() {
   const clampedRedeem = Math.min(redeemPoints, maxRedeem);
   const amountToPay   = Math.max(0, baseAmount - clampedRedeem);
 
-  function handlePhoneChange(val: string) {
-    setPhone(val);
+  function triggerLookup(currentPhone: string, currentName: string) {
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
     setCustomer(null);
     setRedeemInput("0");
-    if (lookupTimer.current) clearTimeout(lookupTimer.current);
-    if (val.trim().length >= 6) {
+    // Both a valid Indian mobile number and name are required for lookup on the public site
+    const isValidIndianPhone = /^[6-9]\d{9}$/.test(currentPhone.trim());
+    if (isValidIndianPhone && currentName.trim().length >= 2) {
       setLookingUp(true);
       lookupTimer.current = setTimeout(async () => {
-        const res = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(val.trim())}`);
+        const url = `/api/customers/lookup?phone=${encodeURIComponent(currentPhone.trim())}&name=${encodeURIComponent(currentName.trim())}`;
+        const res  = await fetch(url);
         const data = await res.json() as { found: boolean; customer: CustomerLookup | null };
         setCustomer(data.customer);
-        if (data.found && data.customer?.name && !name.trim()) {
-          setName(data.customer.name);
-        }
         setLookingUp(false);
       }, 600);
     } else {
       setLookingUp(false);
     }
+  }
+
+  function handlePhoneChange(val: string) {
+    setPhone(val);
+    triggerLookup(val, name);
+  }
+
+  function handleNameChange(val: string) {
+    setName(val);
+    triggerLookup(phone, val);
   }
 
   async function checkout() {
@@ -370,7 +379,7 @@ export default function CheckoutPage() {
                 </label>
                 <input
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={e => handleNameChange(e.target.value)}
                   placeholder="Your full name"
                   className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none transition-colors"
                   style={{
@@ -453,10 +462,16 @@ export default function CheckoutPage() {
                     >
                       <CreditCard className="h-4 w-4 mb-2" style={{ color: active ? "#D4541A" : textMut }} />
                       <p className="font-semibold text-sm" style={{ color: textPri }}>
-                        {mode === "advance" ? "Reserve — ₹100" : "Pay in full"}
+                        {mode === "advance"
+                          ? `Reserve — ₹${100 * cart.items.length}`
+                          : "Pay in full"}
                       </p>
                       <p className="text-xs mt-0.5" style={{ color: textSec }}>
-                        {mode === "advance" ? "Rest at venue" : formatCurrency(subtotal)}
+                        {mode === "advance"
+                          ? cart.items.length > 1
+                            ? `₹100/table · rest at venue`
+                            : "Rest at venue"
+                          : formatCurrency(subtotal)}
                       </p>
                     </button>
                   );

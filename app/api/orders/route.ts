@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         rate_per_hour: item.rate_per_hour,
       }))
     )
-    .select("id, scheduled_start, scheduled_end");
+    .select("id, table_id, scheduled_start, scheduled_end");
 
   if (itemsError || !createdItems) {
     await admin.from("orders").update({ status: "cancelled" }).eq("id", order.id);
@@ -88,5 +88,8 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(ok({ order_id: order.id }));
+  return NextResponse.json(ok({
+    order_id: order.id,
+    items: createdItems.map((i) => ({ id: i.id, table_id: i.table_id })),
+  }));
 }

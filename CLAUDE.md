@@ -73,11 +73,27 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - Single `now: Date` updated every 1 second — all timers derive from this
 - Realtime: Supabase channel `"pos-{locationId}"` subscribes to `order_items`, `orders`, `tables`
 - `handleOrderItemChange`, `handleOrderChange`, `handleTableChange` keep store in sync
+- **Optimistic actions**: `patchOrderItem(itemId, patch)`, `addOrderExtra(orderId, extra)`, `removeOrderExtra(orderId, extraId)` — update store immediately, no server wait, revert on API error
 
 ### Billing Engine (`lib/billing/engine.ts`)
 - Pure function `calculateBill(items, extras, now, coupon?, advancePaid?)`
 - Called every second on POS for live preview; once at finalize
 - Points discount applied OUTSIDE `calculateBill` — in finalize route after `totalDue` is computed
+- Exports `GRACE_MINS = 5` and `OT_BLOCK_MINS = 15` (used by table-grid and order-panel)
+- `BillingLineItem` has `billedOTMins` field: 0 during grace, rounds up to 15-min blocks after
+
+### OT / Grace / Auto-extend
+- 5-min grace period after `expected_end`: free, no charge, "Grace" badge shown
+- After grace: charged in 15-min blocks (1 block = 15 mins at table rate)
+- **Auto-extend** (`hooks/use-auto-extend.ts`): fires automatically when a block threshold is crossed, no user action needed
+  - Skips tables that have an upcoming booking (`upcomingBooking` on `TableWithStatus`)
+  - Three refs prevent duplicates: `blocksHandled`, `lastSeenExpectedEnd` (resets counter when DB updates `expected_end`), `inFlight`
+  - Grace resets after each auto-extend (new `expected_end` moves 15 min forward)
+- Tables **with** next booking are blocked from auto-extend; staff must manually stop
+
+### Customer Lookup
+- **POS walk-in**: debounced lookup after ≥6 digits typed — phone only, no name required, auto-fills name if field empty
+- **Website checkout**: requires full Indian phone (10 digits, starts with 6/7/8/9) AND matching name before showing points balance; no name auto-fill
 
 ---
 
@@ -185,20 +201,21 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 
 ### POS Screen (`/pos`)
 - [x] Real-time table status via Supabase Realtime
-- [x] Table grid: idle / running (green border) / booked (amber border) / overtime (red, animated)
+- [x] Table grid: idle / running (green border) / booked (amber border) / grace (amber, 5-min free window) / overtime (red, animated)
 - [x] Running table shows: customer name, elapsed timer (42:17), countdown (05:23 left), live bill
 - [x] Idle table tap → opens Walk-in slider pre-filled with that table
 - [x] Running table tap → selects order in right panel
 - [x] Foosball icon fixed (⚽)
-- [x] Walk-in slider: customer name (auto-focus), phone, table multi-select, duration presets (30m/1h/1.5h/2h + custom)
+- [x] Walk-in slider: customer name (auto-focus), phone, table multi-select, duration presets (30m/1h/1.5h/2h + custom); session starts fire in **parallel** (Promise.all, not sequential)
 - [x] Walk-in creates order + immediately starts all sessions
 - [x] Check-in slider: search by name/phone, check in confirmed bookings
-- [x] Order panel: active sessions with stop/extend, extras (add/delete), bill summary
-- [x] Extend modal: +30m, +60m, custom mins (respects 10-min buffer for upcoming bookings)
-- [x] Finalize bill modal: bill breakdown, payment method (cash/upi/card), collect
+- [x] Order panel: active sessions with stop/extend, extras (add/delete), bill summary; Grace badge during 5-min grace window
+- [x] Extend modal: +30m, +60m, custom mins (respects 10-min buffer for upcoming bookings); closes **instantly** with optimistic countdown update
+- [x] Finalize bill modal: bill breakdown, payment method (cash/upi/card), collect; handover flow if a next booking exists on the freed table
 - [x] Upcoming bookings drawer
 - [x] Back-button protection (confirm before leaving POS)
 - [x] Sign out in header
+- [x] **Optimistic UI on all POS actions**: stop session, start session, extend session, add extra, delete extra — UI updates on tap, reverts on API error
 
 ### Owner Panel (`/owner/*`)
 - [x] Table CRUD (create, edit, toggle active, delete)
@@ -207,6 +224,9 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] Bookings view
 - [x] Coupon management
 - [x] Revenue reports
+- [x] **Dark left sidebar nav** — replaced top nav; 240px fixed sidebar, orange active state, initials avatar, sign out at bottom
+- [x] **Dashboard overview** — 4 stat cards (Today Revenue with ↑/↓ % vs yesterday, Live Tables, Bookings Today, Month Revenue); 7-day revenue bar chart (pure CSS, no library); Live Now panel (running tables with customer, elapsed, rate); Recent 8 orders table
+- [x] **Optimistic UI across all owner pages** — toggle/deactivate/reactivate/delete update instantly, dialogs close immediately; edit forms close on submit with optimistic cache patch; all roll back cleanly on API error
 
 ---
 
@@ -266,8 +286,10 @@ Online (webhook):
 - **Slot time math**: Midnight-crossing locations (e.g. 23:00–02:00) need 3-case logic for `curMins`.
 - **`active:` on divs**: CSS `:active` pseudo-class works on div children of `<a>` tags in browsers.
 - **Tailwind dark: prefix**: Works because next-themes adds `dark` class to `<html>`. Use this for theme-reactive styles instead of JS `isDark` variable where possible.
-- **Walk-in start flow**: Creates order → fetches `order_item` IDs by `order_id` + `table_id` → calls `/api/sessions/start` per table.
+- **Walk-in start flow**: Creates order → fetches `order_item` IDs by `order_id` + `table_id` → calls `/api/sessions/start` per table in **parallel** (`Promise.all`).
 - **Billing**: `calculateBill()` is pure, called every second. Points discount applied after it returns, in the finalize route.
+- **Optimistic updates pattern**: All fast mutations (toggle, stop, start, extend, add/delete extra) update Zustand store or TanStack Query cache immediately, then fire the API. On error, revert to previous state. On success, `invalidateQueries` for a fresh sync.
+- **Owner panel optimistic pattern**: Uses TanStack Query `onMutate` → cancel in-flight queries → snapshot previous data → patch cache → return `{ prev }` for rollback in `onError`. `onSettled` always invalidates for a fresh sync.
 - **formatElapsed** in `lib/utils.ts` — computes elapsed from `actual_start`.
 - **Razorpay script**: Use `<Script strategy="lazyOnload">` from `next/script`, NOT a plain `<script>` tag — plain tags cause a preload warning because Next.js preloads the script but it isn't used within a few seconds on page load.
 - **Mobile breakpoint**: Tailwind `sm:` = 640px. Phones are typically < 640px, tablets/desktops are ≥ 640px. Use `sm:` prefix to widen layouts at tablet and above.

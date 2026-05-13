@@ -94,18 +94,42 @@ export default function CouponsPage() {
     onError: (e: Error) => setError(e.message),
   });
 
+  type CouponRow = Coupon & { location: { name: string } | null };
+
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
       await supabase.from("coupons").update({ is_active: false }).eq("id", id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["coupons"] });
+      const prev = qc.getQueryData<CouponRow[]>(["coupons"]);
+      qc.setQueryData<CouponRow[]>(["coupons"], (old) =>
+        (old ?? []).map((c) => c.id === id ? { ...c, is_active: false } : c)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
   });
 
   const reactivateMutation = useMutation({
     mutationFn: async (id: string) => {
       await supabase.from("coupons").update({ is_active: true }).eq("id", id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["coupons"] });
+      const prev = qc.getQueryData<CouponRow[]>(["coupons"]);
+      qc.setQueryData<CouponRow[]>(["coupons"], (old) =>
+        (old ?? []).map((c) => c.id === id ? { ...c, is_active: true } : c)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
   });
 
   function handleSubmit(e: React.FormEvent) {

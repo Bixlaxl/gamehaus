@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { calculateBill } from "@/lib/billing/engine";
 import { z } from "zod";
@@ -27,9 +28,10 @@ export async function POST(
   }
 
   const { payment_method, coupon_code, points_redeemed } = parsed.data;
+  const admin = createAdminClient();
 
-  // Fetch full order
-  const { data: order, error: orderError } = await supabase
+  // Fetch full order via admin client (bypasses RLS — works for both walk-in and online orders)
+  const { data: order, error: orderError } = await admin
     .from("orders")
     .select("*, coupon:coupons(*)")
     .eq("id", orderId)
@@ -43,7 +45,7 @@ export async function POST(
   }
 
   // Ensure all items are finished
-  const { data: items } = await supabase
+  const { data: items } = await admin
     .from("order_items")
     .select("*")
     .eq("order_id", orderId)
@@ -58,7 +60,7 @@ export async function POST(
   }
 
   // Fetch extras
-  const { data: extras } = await supabase
+  const { data: extras } = await admin
     .from("order_extras")
     .select("*")
     .eq("order_id", orderId)
@@ -67,7 +69,7 @@ export async function POST(
   // Resolve coupon
   let coupon: Coupon | null = order.coupon as Coupon | null;
   if (coupon_code && !coupon) {
-    const { data: c } = await supabase
+    const { data: c } = await admin
       .from("coupons")
       .select("*")
       .eq("code", coupon_code.toUpperCase())
@@ -88,7 +90,7 @@ export async function POST(
   // Validate points — customer must have enough
   let validatedPoints = points_redeemed;
   if (validatedPoints > 0 && order.customer_phone) {
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from("customer_profiles")
       .select("points_balance")
       .eq("phone", order.customer_phone)
@@ -105,7 +107,7 @@ export async function POST(
   const pointsEarned = Math.floor(finalDue / 100);
 
   // Update order with final amounts
-  const { error: finalizeError } = await supabase
+  const { error: finalizeError } = await admin
     .from("orders")
     .update({
       status:          "finalized",
@@ -124,7 +126,7 @@ export async function POST(
   }
 
   // Create payment record
-  const { error: paymentError } = await supabase.from("payments").insert({
+  const { error: paymentError } = await admin.from("payments").insert({
     order_id:     orderId,
     amount:       finalDue,
     method:       payment_method,
@@ -139,7 +141,7 @@ export async function POST(
 
   // Increment coupon usage
   if (coupon) {
-    await supabase
+    await admin
       .from("coupons")
       .update({ used_count: coupon.used_count + 1 })
       .eq("id", coupon.id);
@@ -147,14 +149,14 @@ export async function POST(
 
   // Update customer loyalty points + profile stats
   if (order.customer_phone) {
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from("customer_profiles")
       .select("points_balance, visit_count, total_spent")
       .eq("phone", order.customer_phone)
       .single();
 
     if (profile) {
-      await supabase
+      await admin
         .from("customer_profiles")
         .update({
           points_balance: Math.max(0, profile.points_balance - validatedPoints + pointsEarned),
@@ -164,7 +166,7 @@ export async function POST(
         })
         .eq("phone", order.customer_phone);
     } else {
-      await supabase.from("customer_profiles").insert({
+      await admin.from("customer_profiles").insert({
         phone:          order.customer_phone,
         name:           order.customer_name,
         points_balance: pointsEarned,

@@ -96,7 +96,7 @@ export default function TablesPage() {
   }
 
   const upsertMutation = useMutation({
-    mutationFn: async (values: TableForm) => {
+    mutationFn: async (values: TableForm & { editId?: string }) => {
       const payload = {
         location_id: values.location_id,
         name: values.name,
@@ -107,8 +107,8 @@ export default function TablesPage() {
         sort_order: parseInt(values.sort_order),
       };
 
-      if (editing) {
-        const res = await fetch(`/api/tables/${editing.id}`, {
+      if (values.editId) {
+        const res = await fetch(`/api/tables/${values.editId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -141,11 +141,44 @@ export default function TablesPage() {
         }
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["tables"] });
+    onMutate: async (values) => {
+      if (!values.editId) return undefined;
+      await qc.cancelQueries({ queryKey: ["tables"] });
+      const prev = qc.getQueryData<Table[]>(["tables", selectedLocation]);
+      qc.setQueryData<Table[]>(["tables", selectedLocation], (old) =>
+        (old ?? []).map((t) =>
+          t.id === values.editId
+            ? {
+                ...t,
+                name:         values.name,
+                type:         values.type,
+                hourly_rate:  parseFloat(values.hourly_rate),
+                sort_order:   parseInt(values.sort_order),
+                size:         values.size || null,
+                description:  values.description || null,
+                location_id:  values.location_id,
+              }
+            : t
+        )
+      );
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
+      return { prev };
+    },
+    onSuccess: (_, values) => {
+      qc.invalidateQueries({ queryKey: ["tables"] });
+      if (!values.editId) {
+        setDialogOpen(false);
+        setEditing(null);
+        setForm(defaultForm);
+      }
+    },
+    onError: (err, values, ctx) => {
+      if (values.editId && ctx?.prev) {
+        qc.setQueryData(["tables", selectedLocation], ctx.prev);
+        alert((err as Error).message);
+      }
     },
   });
 
@@ -155,10 +188,19 @@ export default function TablesPage() {
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["tables"] });
+    onMutate: async (id) => {
       setDeleteConfirm(null);
+      await qc.cancelQueries({ queryKey: ["tables"] });
+      const prev = qc.getQueryData<Table[]>(["tables", selectedLocation]);
+      qc.setQueryData<Table[]>(["tables", selectedLocation], (old) =>
+        (old ?? []).map((t) => t.id === id ? { ...t, is_active: false } : t)
+      );
+      return { prev };
     },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["tables", selectedLocation], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["tables"] }),
   });
 
   const reactivateMutation = useMutation({
@@ -171,7 +213,18 @@ export default function TablesPage() {
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tables"] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["tables"] });
+      const prev = qc.getQueryData<Table[]>(["tables", selectedLocation]);
+      qc.setQueryData<Table[]>(["tables", selectedLocation], (old) =>
+        (old ?? []).map((t) => t.id === id ? { ...t, is_active: true } : t)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["tables", selectedLocation], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["tables"] }),
   });
 
   const permanentDeleteMutation = useMutation({
@@ -180,10 +233,19 @@ export default function TablesPage() {
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["tables"] });
+    onMutate: async (id) => {
       setPermanentDeleteConfirm(null);
+      await qc.cancelQueries({ queryKey: ["tables"] });
+      const prev = qc.getQueryData<Table[]>(["tables", selectedLocation]);
+      qc.setQueryData<Table[]>(["tables", selectedLocation], (old) =>
+        (old ?? []).filter((t) => t.id !== id)
+      );
+      return { prev };
     },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["tables", selectedLocation], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["tables"] }),
   });
 
   function openAdd() {
@@ -209,7 +271,7 @@ export default function TablesPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    upsertMutation.mutate(form);
+    upsertMutation.mutate({ ...form, editId: editing?.id });
   }
 
   const typeIcon: Record<string, string> = {

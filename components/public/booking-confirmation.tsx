@@ -9,15 +9,15 @@ interface BookingItem {
   id: string;
   table: { name: string; type: string } | null;
   booking: Array<{ scheduled_start: string; scheduled_end: string }> | null;
+  rate_per_hour: number | null;
+  scheduled_duration_mins: number | null;
 }
 
 interface Order {
   id: string;
   customer_name: string | null;
   customer_phone: string | null;
-  total_amount: number | null;
   advance_paid: number;
-  amount_due: number | null;
   items: BookingItem[] | null;
 }
 
@@ -36,6 +36,12 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
   const textSec = dark ? "#888"    : "#666";
   const textMut = dark ? "#555"    : "#AAA";
   const inputBg = dark ? "#1A1A1A" : "#F5F3EF";
+
+  const totalAmount = (order?.items ?? []).reduce((sum, item) => {
+    return sum + ((item.rate_per_hour ?? 0) * (item.scheduled_duration_mins ?? 0) / 60);
+  }, 0);
+  const advancePaid = order?.advance_paid ?? 0;
+  const amountDue   = Math.max(0, totalAmount - advancePaid);
 
   if (!order) {
     return (
@@ -130,15 +136,29 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
             <div className="flex justify-between text-sm" style={{ color: textSec }}>
               <span>Total</span>
               <span style={{ color: textPri, fontWeight: 600 }}>
-                ₹{((order.total_amount ?? 0)).toLocaleString("en-IN")}
+                ₹{totalAmount.toLocaleString("en-IN")}
               </span>
             </div>
-            {(order.amount_due ?? 0) > 0 && (
+            {advancePaid > 0 && (
+              <div className="flex justify-between text-sm" style={{ color: textSec }}>
+                <span>Paid</span>
+                <span style={{ color: "#10B981", fontWeight: 600 }}>
+                  −₹{advancePaid.toLocaleString("en-IN")}
+                </span>
+              </div>
+            )}
+            {amountDue > 0 && (
               <div className="flex justify-between text-sm" style={{ color: textSec }}>
                 <span>Pay at venue</span>
-                <span style={{ color: textPri, fontWeight: 600 }}>
-                  ₹{(order.amount_due ?? 0).toLocaleString("en-IN")}
+                <span style={{ color: textPri, fontWeight: 700 }}>
+                  ₹{amountDue.toLocaleString("en-IN")}
                 </span>
+              </div>
+            )}
+            {amountDue === 0 && advancePaid > 0 && (
+              <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
+                <span>Fully paid</span>
+                <span>✓</span>
               </div>
             )}
           </div>

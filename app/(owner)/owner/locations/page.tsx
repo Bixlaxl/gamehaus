@@ -62,18 +62,50 @@ export default function LocationsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<Location | null>(null);
 
   const upsertMutation = useMutation({
-    mutationFn: async (values: LocationForm) => {
-      const res = editing
-        ? await fetch(`/api/locations/${editing.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) })
+    mutationFn: async (values: LocationForm & { editId?: string }) => {
+      const res = values.editId
+        ? await fetch(`/api/locations/${values.editId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) })
         : await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["locations"] });
+    onMutate: async (values) => {
+      if (!values.editId) return undefined;
+      await qc.cancelQueries({ queryKey: ["locations"] });
+      const prev = qc.getQueryData<Location[]>(["locations"]);
+      qc.setQueryData<Location[]>(["locations"], (old) =>
+        (old ?? []).map((l) =>
+          l.id === values.editId
+            ? {
+                ...l,
+                name:         values.name,
+                address:      values.address,
+                phone:        values.phone || null,
+                opening_time: values.opening_time,
+                closing_time: values.closing_time,
+                timezone:     values.timezone,
+              }
+            : l
+        )
+      );
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
+      return { prev };
+    },
+    onSuccess: (_, values) => {
+      qc.invalidateQueries({ queryKey: ["locations"] });
+      if (!values.editId) {
+        setDialogOpen(false);
+        setEditing(null);
+        setForm(defaultForm);
+      }
+    },
+    onError: (err, values, ctx) => {
+      if (values.editId && ctx?.prev) {
+        qc.setQueryData(["locations"], ctx.prev);
+        alert((err as Error).message);
+      }
     },
   });
 
@@ -83,10 +115,19 @@ export default function LocationsPage() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["locations"] });
+    onMutate: async (id) => {
       setDeleteConfirm(null);
+      await qc.cancelQueries({ queryKey: ["locations"] });
+      const prev = qc.getQueryData<Location[]>(["locations"]);
+      qc.setQueryData<Location[]>(["locations"], (old) =>
+        (old ?? []).map((l) => l.id === id ? { ...l, is_active: false } : l)
+      );
+      return { prev };
     },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["locations"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["locations"] }),
   });
 
   const reactivateMutation = useMutation({
@@ -95,7 +136,18 @@ export default function LocationsPage() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["locations"] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["locations"] });
+      const prev = qc.getQueryData<Location[]>(["locations"]);
+      qc.setQueryData<Location[]>(["locations"], (old) =>
+        (old ?? []).map((l) => l.id === id ? { ...l, is_active: true } : l)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["locations"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["locations"] }),
   });
 
   function openAdd() {
@@ -120,7 +172,7 @@ export default function LocationsPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    upsertMutation.mutate(form);
+    upsertMutation.mutate({ ...form, editId: editing?.id });
   }
 
   return (

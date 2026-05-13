@@ -38,6 +38,7 @@ export async function middleware(request: NextRequest) {
     "/api/payments/demo-confirm",
     "/api/customers/lookup",
     "/api/orders",
+    "/api/tables",
   ];
   const isPublicApi = publicApiRoutes.some(r => pathname === r || pathname.startsWith(r + "/"));
 

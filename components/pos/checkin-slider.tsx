@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { X } from "lucide-react";
+import { X, Search, QrCode } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Booking, Order } from "@/lib/supabase/types";
 
@@ -14,59 +12,44 @@ interface CheckinSliderProps {
 }
 
 const supabase = createClient();
-
 type BookingWithOrder = Booking & { order: Pick<Order, "customer_name" | "customer_phone"> };
 
 export function CheckinSlider({ locationId }: CheckinSliderProps) {
   const { checkinOpen, setCheckinOpen, selectOrder } = usePOSStore();
   const qc = useQueryClient();
 
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<BookingWithOrder[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [search,     setSearch]     = useState("");
+  const [results,    setResults]    = useState<BookingWithOrder[]>([]);
+  const [searching,  setSearching]  = useState(false);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error,      setError]      = useState<string | null>(null);
 
   function close() {
-    setSearch("");
-    setResults([]);
-    setError(null);
-    setCheckinOpen(false);
+    setSearch(""); setResults([]); setError(null); setCheckinOpen(false);
   }
 
   async function doSearch() {
     if (!search.trim()) return;
-    setSearching(true);
-    setError(null);
+    setSearching(true); setError(null);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const today    = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
     const { data, error: dbError } = await supabase
       .from("bookings")
-      .select(`
-        *,
-        order:orders(customer_name, customer_phone, location_id)
-      `)
+      .select("*, order:orders(customer_name, customer_phone, location_id)")
       .eq("status", "confirmed")
       .gte("scheduled_start", today.toISOString())
       .lt("scheduled_start", tomorrow.toISOString());
 
-    if (dbError) {
-      setError(dbError.message);
-      setSearching(false);
-      return;
-    }
+    if (dbError) { setError(dbError.message); setSearching(false); return; }
 
-    const term = search.toLowerCase();
+    const term     = search.toLowerCase();
     const filtered = (data ?? []).filter((b) => {
       const o = b.order as { customer_name: string; customer_phone: string | null; location_id: string };
       return (
         o.location_id === locationId &&
-        (o.customer_name.toLowerCase().includes(term) ||
-          (o.customer_phone ?? "").includes(term))
+        (o.customer_name.toLowerCase().includes(term) || (o.customer_phone ?? "").includes(term))
       );
     }) as BookingWithOrder[];
 
@@ -75,25 +58,17 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
   }
 
   async function checkIn(booking: BookingWithOrder) {
-    setCheckingIn(booking.id);
-    setError(null);
+    setCheckingIn(booking.id); setError(null);
 
-    const res = await fetch(`/api/bookings/${booking.id}/checkin`, {
-      method: "POST",
-    });
-
+    const res  = await fetch(`/api/bookings/${booking.id}/checkin`, { method: "POST" });
     const body = await res.json() as
-      | { success: true; data: { order_id: string } }
+      | { success: true;  data: { order_id: string } }
       | { success: false; error: string };
 
-    if (!body.success) {
-      setError(body.error);
-      setCheckingIn(null);
-      return;
-    }
+    if (!body.success) { setError(body.error); setCheckingIn(null); return; }
 
-    qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+    qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
     qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
     selectOrder(body.data.order_id);
     close();
@@ -104,71 +79,114 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
 
   return (
     <div className="fixed inset-0 z-40 flex">
-      <div className="flex-1 bg-black/50" onClick={close} />
-      <div className="w-96 bg-gray-800 border-l border-gray-700 flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white">Check-in Booking</h2>
-          <button onClick={close} className="text-gray-400 hover:text-white">
+      <div className="flex-1 bg-black/50 dark:bg-black/60" onClick={close} />
+      <div className="w-96 flex flex-col bg-white dark:bg-[#111] border-l border-gray-200 dark:border-[#1F1F1F]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <div>
+            <h2 className="font-bold text-gray-900 dark:text-white text-base">Check-in</h2>
+            <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">Search by name or phone</p>
+          </div>
+          <button
+            onClick={close}
+            className="text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-3">
+        {/* Search bar */}
+        <div className="px-5 pt-5 pb-4 border-b border-gray-100 dark:border-[#1A1A1A]">
           <div className="flex gap-2">
-            <Input
+            <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && doSearch()}
-              placeholder="Name or phone number..."
-              className="bg-gray-700 border-gray-600 text-white"
+              placeholder="Name or phone..."
+              className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none transition-colors
+                bg-gray-100 dark:bg-[#1A1A1A]
+                border border-transparent
+                text-gray-900 dark:text-white
+                placeholder-gray-400 dark:placeholder-[#444]
+                focus:border-[#D4541A] focus:bg-white dark:focus:bg-[#111]"
+              autoFocus
             />
-            <Button onClick={doSearch} disabled={searching}>
-              Search
-            </Button>
+            <button
+              onClick={doSearch}
+              disabled={searching}
+              className="px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-85 disabled:opacity-40
+                bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+            >
+              {searching ? "…" : <Search className="h-4 w-4" />}
+            </button>
           </div>
+          {error && (
+            <p
+              className="text-sm rounded-lg px-3 py-2 mt-3"
+              style={{ background: "rgba(239,68,68,0.07)", color: "#f87171", border: "1px solid rgba(239,68,68,0.18)" }}
+            >
+              {error}
+            </p>
+          )}
+        </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+        {/* Results / empty state */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
 
-          <div className="space-y-2">
-            {results.map((booking) => (
-              <div
-                key={booking.id}
-                className="bg-gray-700 rounded-lg p-3 space-y-1"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-white">
-                      {booking.order?.customer_name}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(booking.scheduled_start).toLocaleTimeString(
-                        "en-IN",
-                        { hour: "2-digit", minute: "2-digit" }
-                      )}{" "}
-                      –{" "}
-                      {new Date(booking.scheduled_end).toLocaleTimeString(
-                        "en-IN",
-                        { hour: "2-digit", minute: "2-digit" }
-                      )}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700"
-                    onClick={() => checkIn(booking)}
-                    disabled={checkingIn === booking.id}
-                  >
-                    {checkingIn === booking.id ? "..." : "Check In"}
-                  </Button>
-                </div>
+          {/* Pre-search empty state */}
+          {!search && results.length === 0 && (
+            <div className="py-12 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-[#1A1A1A] flex items-center justify-center mx-auto">
+                <QrCode className="h-6 w-6 text-gray-300 dark:text-[#444]" />
               </div>
-            ))}
-            {results.length === 0 && search && !searching && (
-              <p className="text-sm text-gray-500 text-center py-4">
-                No confirmed bookings found
-              </p>
-            )}
-          </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-500 dark:text-[#666]">Find a booking</p>
+                <p className="text-xs text-gray-300 dark:text-[#444] mt-1">
+                  Type a customer name or phone number
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* No results after search */}
+          {results.length === 0 && search && !searching && (
+            <div className="py-10 text-center space-y-1">
+              <p className="text-sm font-medium text-gray-400 dark:text-[#555]">No bookings found</p>
+              <p className="text-xs text-gray-300 dark:text-[#333]">Try a different name or number</p>
+            </div>
+          )}
+
+          {/* Results */}
+          {results.map((booking) => (
+            <div
+              key={booking.id}
+              className="rounded-xl p-4 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]"
+              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 dark:text-white text-sm">{booking.order?.customer_name}</p>
+                  {booking.order?.customer_phone && (
+                    <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">{booking.order.customer_phone}</p>
+                  )}
+                  <p className="text-xs font-mono font-semibold mt-1.5 tabular-nums" style={{ color: "#f59e0b" }}>
+                    {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    {" → "}
+                    {new Date(booking.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => checkIn(booking)}
+                  disabled={checkingIn === booking.id}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-85 disabled:opacity-40"
+                  style={{ background: "#10b981" }}
+                >
+                  {checkingIn === booking.id ? "…" : "Check In"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

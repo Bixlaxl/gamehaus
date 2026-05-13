@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
 export async function DELETE(
@@ -11,7 +12,8 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
-  const { error } = await supabase
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("order_extras")
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq("id", extraId);

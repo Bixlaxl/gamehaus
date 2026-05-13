@@ -9,7 +9,8 @@ export function subscribeToPOS(
     POSStoreInstance,
     "handleOrderItemChange" | "handleOrderChange" | "handleTableChange"
   > & {
-    onInsert?: () => void; // called when a new order or booking lands — triggers a refetch
+    onInsert?: () => void;
+    onExtrasChange?: () => void;
   }
 ) {
   const supabase = createClient();
@@ -38,6 +39,11 @@ export function subscribeToPOS(
       "postgres_changes",
       { event: "*", schema: "public", table: "tables" },
       (payload) => handlers.handleTableChange(payload as Parameters<typeof handlers.handleTableChange>[0])
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "order_extras" },
+      () => handlers.onExtrasChange?.()
     )
     .subscribe();
 

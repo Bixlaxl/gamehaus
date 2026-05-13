@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     .select(`
       *,
       order:orders!inner(customer_name, customer_phone, location_id),
-      order_item:order_items(table_id)
+      order_item:order_items(table_id, status)
     `)
     .gte("scheduled_start", today.toISOString())
     .lt("scheduled_start", tomorrow.toISOString())

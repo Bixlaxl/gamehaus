@@ -90,6 +90,8 @@ export default function StaffPage() {
     onError: (e: Error) => setErrorMsg(e.message),
   });
 
+  type StaffRow = User & { locations: { name: string } | null };
+
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
       const { error } = await supabase
@@ -98,7 +100,18 @@ export default function StaffPage() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
+    onMutate: async ({ id, active }) => {
+      await qc.cancelQueries({ queryKey: ["staff"] });
+      const prev = qc.getQueryData<StaffRow[]>(["staff"]);
+      qc.setQueryData<StaffRow[]>(["staff"], (old) =>
+        (old ?? []).map((s) => s.id === id ? { ...s, is_active: active } : s)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["staff"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["staff"] }),
   });
 
   function handleSubmit(e: React.FormEvent) {

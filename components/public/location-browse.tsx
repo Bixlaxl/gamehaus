@@ -108,9 +108,23 @@ export function LocationBrowse({ location, tables }: Props) {
   const [booking, setBooking]         = useState<Table | null>(null);
   const [selectedSlots, setSelected]  = useState<string[]>([]);
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
+  const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { cart.setLocation(location.id); }, [location.id]);
+
+  // Re-fetch blocked ranges when date changes while booking sheet is open
+  useEffect(() => {
+    if (!booking) return;
+    setBlocked([]);
+    fetch(`/api/tables/${booking.id}/slots?date=${date}`)
+      .then((r) => r.json())
+      .then((body: { success: boolean; data: { start: string; end: string }[] }) => {
+        if (body.success) setBlocked(body.data);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, booking?.id]);
 
   const dark      = !mounted ? false : resolvedTheme === "dark";
   const open      = isOpen(location.opening_time, location.closing_time);
@@ -133,8 +147,8 @@ export function LocationBrowse({ location, tables }: Props) {
     ? formatCurrency((selMins / 60) * booking.hourly_rate)
     : "";
 
-  /* True if slotTime on slotDate falls inside any cart booking for tableId */
-  function isOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
+  /* Slot is in customer's own cart (show green occupied card) */
+  function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
     const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
     return cart.items.some(item => {
       if (item.tableId !== tableId) return false;
@@ -144,14 +158,36 @@ export function LocationBrowse({ location, tables }: Props) {
     });
   }
 
-  function openSheet(table: Table) {
+  /* Slot is blocked by a walk-in or confirmed booking on the server — hide it entirely */
+  function isServerBlocked(slotDate: string, slotTime: string): boolean {
+    const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
+    return blockedRanges.some(r => {
+      const startMs = new Date(r.start).getTime();
+      const endMs   = new Date(r.end).getTime();
+      return slotMs >= startMs && slotMs < endMs;
+    });
+  }
+
+  /* Combined — used for extend-stop logic */
+  function isOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
+    return isCartOccupied(tableId, slotDate, slotTime) || isServerBlocked(slotDate, slotTime);
+  }
+
+  async function openSheet(table: Table) {
     setBooking(table);
     setSelected([]);
+    setBlocked([]);
+    try {
+      const res = await fetch(`/api/tables/${table.id}/slots?date=${date}`);
+      const body = await res.json() as { success: boolean; data: { start: string; end: string }[] };
+      if (body.success) setBlocked(body.data);
+    } catch { /* ignore — degraded gracefully */ }
   }
 
   function closeSheet() {
     setBooking(null);
     setSelected([]);
+    setBlocked([]);
   }
 
   /*
@@ -500,10 +536,13 @@ export function LocationBrowse({ location, tables }: Props) {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2 max-h-64 sm:max-h-72 overflow-y-auto scrollbar-hide pr-1">
                     {allSlots.map(s => {
-                      const occupied = isOccupied(booking.id, date, s);
-                      const selected = selectedSlots.includes(s);
+                      // Server-blocked slots (walk-ins / confirmed bookings) — hide entirely
+                      if (isServerBlocked(date, s)) return null;
 
-                      if (occupied) {
+                      const cartOccupied = isCartOccupied(booking.id, date, s);
+                      const selected     = selectedSlots.includes(s);
+
+                      if (cartOccupied) {
                         return (
                           <div
                             key={s}
@@ -585,7 +624,11 @@ export function LocationBrowse({ location, tables }: Props) {
 }
 
 function addOneDay(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split("T")[0];
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const next = new Date(y, m - 1, d + 1); // local date arithmetic, no timezone shift
+  return [
+    next.getFullYear(),
+    String(next.getMonth() + 1).padStart(2, "0"),
+    String(next.getDate()).padStart(2, "0"),
+  ].join("-");
 }

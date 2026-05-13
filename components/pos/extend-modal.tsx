@@ -3,118 +3,140 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import type { OrderItem } from "@/lib/supabase/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { X } from "lucide-react";
 
 export function ExtendModal() {
-  const { extendModalItem, setExtendModalItem } = usePOSStore();
+  const store = usePOSStore();
+  const { extendModalItem, setExtendModalItem } = store;
   const qc = useQueryClient();
   const [customMins, setCustomMins] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
 
   function close() {
     setExtendModalItem(null);
-    setCustomMins("");
-    setError(null);
-    setResult(null);
+    setCustomMins(""); setError(null);
   }
 
   async function extend(mins: number) {
-    if (!extendModalItem) return;
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    if (!extendModalItem || loading) return;
+    setLoading(true); setError(null);
 
-    const res = await fetch("/api/sessions/extend", {
+    // Optimistically update the expected_end so countdown refreshes instantly
+    const prevExpectedEnd = extendModalItem.expected_end;
+    const newExpectedEnd  = new Date(
+      (prevExpectedEnd ? new Date(prevExpectedEnd) : new Date()).getTime() + mins * 60 * 1000
+    ).toISOString();
+    store.patchOrderItem(extendModalItem.id, { expected_end: newExpectedEnd });
+    close();
+
+    const res  = await fetch("/api/sessions/extend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        order_item_id: extendModalItem.id,
-        extend_mins: mins,
-      }),
+      body: JSON.stringify({ order_item_id: extendModalItem.id, extend_mins: mins }),
     });
 
     const body = await res.json() as
-      | { success: true; data: { message: string } }
+      | { success: true;  data: { new_expected_end: string; message: string } }
       | { success: false; error: string };
 
     if (!body.success) {
-      setError(body.error);
+      // Revert and surface error via alert (modal is already closed)
+      store.patchOrderItem(extendModalItem.id, { expected_end: prevExpectedEnd } as Partial<OrderItem>);
+      alert(body.error);
     } else {
-      setResult(body.data.message ?? "Session extended");
+      // Sync with server's authoritative value
+      store.patchOrderItem(extendModalItem.id, { expected_end: body.data.new_expected_end });
       qc.invalidateQueries({ queryKey: ["pos-orders"] });
-      setTimeout(close, 1500);
     }
     setLoading(false);
   }
 
   return (
     <Dialog open={!!extendModalItem} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="bg-gray-800 border-gray-700 text-white max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Extend Session</DialogTitle>
+      <DialogContent className="max-w-xs p-0 gap-0 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Extend Session</DialogTitle>
+            <button
+              onClick={close}
+              className="text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <p className="text-sm text-gray-400">
-            Extending will check for upcoming bookings (10-min buffer).
+        <div className="px-5 py-5 space-y-4">
+          <p className="text-xs text-gray-500 dark:text-[#666]">
+            Checks for upcoming bookings (10 min buffer).
           </p>
 
+          {/* Quick presets */}
           <div className="grid grid-cols-2 gap-2">
             {[30, 60].map((mins) => (
-              <Button
+              <button
                 key={mins}
-                variant="outline"
-                className="border-gray-600 hover:bg-gray-700 text-white"
                 onClick={() => extend(mins)}
                 disabled={loading}
+                className="py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-85 disabled:opacity-40
+                  bg-gray-100 dark:bg-[#161616]
+                  border border-gray-200 dark:border-[#2A2A2A]
+                  text-gray-900 dark:text-white"
               >
                 +{mins} min
-              </Button>
+              </button>
             ))}
           </div>
 
+          {/* Custom */}
           <div className="flex gap-2">
-            <Input
+            <input
               type="number"
-              placeholder="Custom (mins)"
+              placeholder="Custom mins"
               value={customMins}
               onChange={(e) => setCustomMins(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-white"
               min="5"
               max="240"
+              className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none transition-colors
+                bg-gray-100 dark:bg-[#1A1A1A]
+                border border-gray-200 dark:border-[#2A2A2A]
+                text-gray-900 dark:text-white
+                placeholder-gray-400 dark:placeholder-[#444]
+                focus:border-[#D4541A]"
             />
-            <Button
+            <button
               onClick={() => extend(parseInt(customMins))}
               disabled={loading || !customMins}
-              className="shrink-0"
+              className="px-4 py-2.5 rounded-lg font-bold text-sm text-white transition-opacity hover:opacity-85 disabled:opacity-40"
+              style={{ background: "#D4541A" }}
             >
               Extend
-            </Button>
+            </button>
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          {result && <p className="text-sm text-green-400">{result}</p>}
-        </div>
+          {error && (
+            <p
+              className="text-sm rounded-lg px-3 py-2"
+              style={{ background: "rgba(239,68,68,0.07)", color: "#f87171", border: "1px solid rgba(239,68,68,0.18)" }}
+            >
+              {error}
+            </p>
+          )}
 
-        <DialogFooter>
-          <Button
-            variant="outline"
+          <button
             onClick={close}
-            className="border-gray-600 text-white hover:bg-gray-700"
+            className="w-full py-2 rounded-xl text-sm font-medium transition-colors
+              bg-gray-100 dark:bg-[#161616]
+              border border-gray-200 dark:border-[#1F1F1F]
+              text-gray-500 dark:text-[#666]
+              hover:text-gray-900 dark:hover:text-white"
           >
             Cancel
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
