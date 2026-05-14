@@ -161,27 +161,27 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
     <div className="h-screen flex flex-col overflow-hidden bg-white dark:bg-black">
 
       {/* ── Header ── */}
-      <header className="shrink-0 flex items-center justify-between px-5 h-11 bg-white dark:bg-black border-b border-gray-200 dark:border-[#1F1F1F]">
+      <header className="shrink-0 flex items-center justify-between px-5 h-12 bg-white dark:bg-black border-b-2 border-gray-900 dark:border-white">
         <div className="flex items-center gap-3">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-bold text-gray-900 dark:text-white text-sm">{locationName}</span>
-          <span className="text-gray-200 dark:text-[#2A2A2A]">·</span>
-          <span className="text-xs font-semibold text-gray-500 dark:text-[#777]">{staffName}</span>
+          <span className="font-extrabold text-gray-900 dark:text-white text-sm tracking-tight">{locationName}</span>
+          <span className="text-gray-300 dark:text-[#333] font-bold">·</span>
+          <span className="text-xs font-bold text-gray-600 dark:text-[#aaa]">{staffName}</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span suppressHydrationWarning className="text-xs font-mono tabular-nums text-gray-400 dark:text-[#666]">
+        <div className="flex items-center gap-5">
+          <span suppressHydrationWarning className="text-sm font-bold font-mono tabular-nums text-gray-900 dark:text-white">
             {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </span>
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="p-1 rounded-md text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="p-1 rounded-md text-gray-500 dark:text-[#888] hover:text-gray-900 dark:hover:text-white transition-colors"
             title="Toggle theme"
           >
             {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
           </button>
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-xs font-bold text-gray-600 dark:text-[#aaa] hover:text-gray-900 dark:hover:text-white transition-colors"
           >
             <LogOut className="h-3.5 w-3.5" />
             Sign out
@@ -193,10 +193,10 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left sidebar */}
-        <div className="w-64 shrink-0 flex flex-col border-r border-gray-200 dark:border-[#1F1F1F]">
+        <div className="w-64 shrink-0 flex flex-col border-r-2 border-gray-900 dark:border-white">
           {/* Table list */}
           <div className="flex-1 overflow-y-auto p-2.5 space-y-px">
-            <p className="text-[9px] font-bold uppercase tracking-widest px-1 pb-2 pt-0.5 text-gray-300 dark:text-[#333]">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest px-1 pb-2 pt-0.5 text-gray-700 dark:text-[#aaa]">
               Tables
             </p>
             <TableGrid />
@@ -206,7 +206,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
           <POSAlerts />
 
           {/* Action buttons */}
-          <div className="shrink-0 p-2.5 border-t border-gray-200 dark:border-[#1F1F1F]">
+          <div className="shrink-0 p-2.5 border-t-2 border-gray-900 dark:border-white">
             <button
               onClick={() => setWalkInOpen(true)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-bold transition-colors hover:brightness-110 active:brightness-95"

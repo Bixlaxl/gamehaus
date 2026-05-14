@@ -451,11 +451,11 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
       </div>
 
       {/* ── Bill sidebar ──────────────────────────────────── */}
-      <div className="w-64 shrink-0 flex flex-col bg-gray-50 dark:bg-[#080808] border-l border-gray-100 dark:border-[#1A1A1A]">
+      <div className="w-64 shrink-0 flex flex-col bg-gray-50 dark:bg-[#080808] border-l-2 border-gray-900 dark:border-white">
 
         {/* Receipt header */}
         <div className="px-4 pt-5 pb-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-300 dark:text-[#333]">Receipt</p>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-gray-700 dark:text-[#aaa]">Receipt</p>
           <div className="mt-3 border-t border-dashed border-gray-200 dark:border-[#222]" />
         </div>
 
@@ -464,16 +464,16 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
           {fullyPrePaid ? (
             <>
               <div className="flex items-center justify-between py-0.5">
-                <span className="text-xs" style={{ color: "#10b981" }}>Session covered</span>
-                <span className="text-xs" style={{ color: "#10b981" }}>✓</span>
+                <span className="text-xs font-bold" style={{ color: "#10b981" }}>Session covered</span>
+                <span className="text-xs font-bold" style={{ color: "#10b981" }}>✓</span>
               </div>
               {bill.tableLines.filter((l) => l.overtimeMins > 0).map((line) => {
                 const ti  = activeItems.find((i) => i.id === line.id);
                 const tn  = (ti?.table as { name?: string } | null)?.name ?? "Table";
                 return (
                   <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                    <span className="truncate text-xs text-gray-500 dark:text-[#888]">{tn} OT {line.overtimeMins}m</span>
-                    <span className="shrink-0 font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.overtimeAmount)}</span>
+                    <span className="truncate text-xs font-semibold text-gray-700 dark:text-[#bbb]">{tn} OT {line.overtimeMins}m</span>
+                    <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.overtimeAmount)}</span>
                   </div>
                 );
               })}
@@ -484,42 +484,42 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
               const tn  = (ti?.table as { name?: string } | null)?.name ?? "Table";
               return (
                 <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                  <span className="truncate text-xs text-gray-500 dark:text-[#888]">{tn} · {line.durationMins}m</span>
-                  <span className="shrink-0 font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
+                  <span className="truncate text-xs font-semibold text-gray-700 dark:text-[#bbb]">{tn} · {line.durationMins}m</span>
+                  <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
                 </div>
               );
             })
           )}
 
           {bill.extraLines.length > 0 && (
-            <div className="pt-2 mt-1 border-t border-dashed border-gray-200 dark:border-[#222] space-y-1.5">
+            <div className="pt-2 mt-1 border-t border-dashed border-gray-300 dark:border-[#333] space-y-1.5">
               {bill.extraLines.map((line) => (
                 <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                  <span className="truncate text-xs text-gray-500 dark:text-[#888]">{line.name} ×{line.quantity}</span>
-                  <span className="shrink-0 font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
+                  <span className="truncate text-xs font-semibold text-gray-700 dark:text-[#bbb]">{line.name} ×{line.quantity}</span>
+                  <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
                 </div>
               ))}
             </div>
           )}
 
           {!fullyPrePaid && (bill.tableLines.length + bill.extraLines.length) > 1 && (
-            <div className="flex justify-between items-baseline gap-2 pt-2 mt-1 border-t border-dashed border-gray-200 dark:border-[#222]">
-              <span className="text-xs text-gray-400 dark:text-[#555]">Subtotal</span>
-              <span className="font-semibold text-gray-700 dark:text-[#aaa] tabular-nums text-xs">{formatCurrency(bill.subtotal)}</span>
+            <div className="flex justify-between items-baseline gap-2 pt-2 mt-1 border-t border-dashed border-gray-300 dark:border-[#333]">
+              <span className="text-xs font-bold text-gray-600 dark:text-[#888]">Subtotal</span>
+              <span className="font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(bill.subtotal)}</span>
             </div>
           )}
 
           {bill.discountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs" style={{ color: "#10b981" }}>Discount</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
+              <span className="text-xs font-bold" style={{ color: "#10b981" }}>Discount</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
             </div>
           )}
 
           {!fullyPrePaid && bill.advancePaid > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs" style={{ color: "#10b981" }}>Advance paid</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
+              <span className="text-xs font-bold" style={{ color: "#10b981" }}>Advance paid</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
             </div>
           )}
         </div>

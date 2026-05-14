@@ -106,7 +106,7 @@ export function OwnerNav({ userName }: OwnerNavProps) {
         </div>
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#555] hover:text-[#aaa] hover:bg-[#111] transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-[#999] hover:text-white hover:bg-[#111] transition-all"
         >
           <LogOut className="h-4 w-4 shrink-0" />
           Sign out

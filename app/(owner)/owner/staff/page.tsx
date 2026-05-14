@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { User, Location } from "@/lib/supabase/types";
-import { Plus, Eye, EyeOff, Pencil } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const supabase = createClient();
@@ -31,6 +31,9 @@ type StaffRow = User & { locations: { name: string } | null };
 
 export default function StaffPage() {
   const qc = useQueryClient();
+
+  // Delete confirm
+  const [deleteTarget, setDeleteTarget] = useState<StaffRow | null>(null);
 
   // Create dialog
   const [createOpen, setCreateOpen]   = useState(false);
@@ -150,6 +153,28 @@ export default function StaffPage() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["staff"] }),
   });
 
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/staff/${id}`, { method: "DELETE" });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error ?? "Failed to delete");
+    },
+    onMutate: async (id) => {
+      setDeleteTarget(null);
+      await qc.cancelQueries({ queryKey: ["staff"] });
+      const prev = qc.getQueryData<StaffRow[]>(["staff"]);
+      qc.setQueryData<StaffRow[]>(["staff"], (old) => (old ?? []).filter((s) => s.id !== id));
+      return { prev };
+    },
+    onSuccess: () => toast.success("Staff member deleted"),
+    onError: (err, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["staff"], ctx.prev);
+      toast.error((err as Error).message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["staff"] }),
+  });
+
   function openEdit(s: StaffRow) {
     setEditTarget(s);
     setEditForm({ name: s.name, location_id: s.location_id ?? "" });
@@ -221,6 +246,13 @@ export default function StaffPage() {
                         onClick={() => toggleActiveMutation.mutate({ id: s.id, active: !s.is_active })}
                       >
                         {s.is_active ? "Deactivate" : "Reactivate"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setDeleteTarget(s)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
                   </td>
@@ -302,6 +334,32 @@ export default function StaffPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Staff Member?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-gray-600">
+            <p>
+              <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email}) will be permanently deleted.
+              Their login access will be revoked immediately.
+            </p>
+            <p className="text-xs text-gray-400">This cannot be undone.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

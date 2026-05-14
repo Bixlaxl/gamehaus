@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,17 @@ const statusVariant: Record<string, "success" | "secondary" | "destructive" | "o
 export default function BookingsPage() {
   const qc = useQueryClient();
   const [date, setDate]               = useState(new Date().toISOString().split("T")[0]);
+
+  function shiftDate(days: number) {
+    const d = new Date(date + "T12:00:00");
+    d.setDate(d.getDate() + days);
+    setDate(d.toISOString().split("T")[0]);
+  }
+
+  const isToday = date === new Date().toISOString().split("T")[0];
+  const displayDate = new Date(date + "T12:00:00").toLocaleDateString("en-IN", {
+    weekday: "short", day: "numeric", month: "short",
+  });
   const [locationFilter, setLocation] = useState("all");
   const [statusFilter, setStatus]     = useState("all");
   const [refundBooking, setRefundBooking] = useState<BookingRow | null>(null);
@@ -98,12 +110,27 @@ export default function BookingsPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <Input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-40"
-        />
+        {/* Date navigation */}
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => shiftDate(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="relative">
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-10 opacity-0 absolute inset-0 cursor-pointer"
+            />
+            <div className="flex items-center gap-1.5 px-3 h-9 rounded-md border border-input bg-background text-sm font-medium min-w-[120px] justify-center pointer-events-none">
+              {displayDate}
+              {isToday && <span className="text-[10px] font-bold text-orange-500 uppercase">Today</span>}
+            </div>
+          </div>
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => shiftDate(1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
         <Select value={locationFilter} onValueChange={setLocation}>
           <SelectTrigger className="w-44">
             <SelectValue placeholder="All locations" />

@@ -109,7 +109,7 @@ export default function ReportsPage() {
   const methodMap = new Map<string, number>();
   for (const order of orders) {
     for (const p of (order.payments as PaymentRow[] ?? [])) {
-      if (p.status !== "paid") continue;
+      if (p.status !== "completed") continue;
       methodMap.set(p.method, (methodMap.get(p.method) ?? 0) + (p.amount ?? 0));
     }
   }

@@ -103,7 +103,7 @@ export function TableGrid() {
                   {badge.label}
                 </span>
               ) : (
-                <span className="text-[9px] font-semibold shrink-0 text-gray-300 dark:text-[#3A3A3A]">
+                <span className="text-[9px] font-bold shrink-0 text-gray-400 dark:text-[#555]">
                   Idle
                 </span>
               )}
@@ -116,7 +116,7 @@ export function TableGrid() {
                   <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{order.customer_name}</p>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono tabular-nums text-gray-400 dark:text-[#555]">
+                  <span className="text-[11px] font-mono font-bold tabular-nums text-gray-600 dark:text-[#888]">
                     {elapsed}
                   </span>
                   <span
@@ -142,7 +142,7 @@ export function TableGrid() {
 
             {/* Idle hint */}
             {isIdle && (
-              <p className="text-[10px] mt-0.5 text-gray-300 dark:text-[#333]">Tap to start</p>
+              <p className="text-[10px] mt-0.5 font-bold text-gray-500 dark:text-[#555]">Tap to start</p>
             )}
           </button>
         );
