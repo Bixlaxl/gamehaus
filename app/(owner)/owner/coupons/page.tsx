@@ -217,7 +217,7 @@ export default function CouponsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Coupons</h1>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Coupons</h1>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           New Coupon
@@ -230,9 +230,9 @@ export default function CouponsPage() {
 
       {isLoading && <p className="text-gray-500">Loading...</p>}
 
-      <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Code</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Discount</th>
@@ -243,7 +243,7 @@ export default function CouponsPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-gray-50">
             {coupons?.map((coupon) => {
               const expired   = new Date(coupon.valid_until) < now;
               const exhausted = coupon.max_uses !== null && coupon.used_count >= coupon.max_uses;

@@ -184,7 +184,7 @@ export default function StaffPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Staff</h1>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Staff</h1>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Add Staff
@@ -193,9 +193,9 @@ export default function StaffPage() {
 
       {isLoading && <p className="text-gray-500">Loading...</p>}
 
-      <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
@@ -205,7 +205,7 @@ export default function StaffPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-gray-50">
             {staff?.map((s) => {
               const revealed = revealedIds.has(s.id);
               return (

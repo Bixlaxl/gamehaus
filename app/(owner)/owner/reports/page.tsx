@@ -135,10 +135,10 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+      <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Reports</h1>
 
       {/* Preset + date range */}
-      <div className="bg-white rounded-lg border p-4 space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
             <Button
@@ -169,15 +169,15 @@ export default function ReportsPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg border p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Revenue</p>
           <p className="text-3xl font-bold mt-2 tabular-nums">{formatCurrency(totalRevenue)}</p>
         </div>
-        <div className="bg-white rounded-lg border p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Orders</p>
           <p className="text-3xl font-bold mt-2 tabular-nums">{orders.length}</p>
         </div>
-        <div className="bg-white rounded-lg border p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Sessions</p>
           <p className="text-3xl font-bold mt-2 tabular-nums">{totalSessions}</p>
         </div>
@@ -187,13 +187,13 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
         {/* By location */}
-        <div className="bg-white rounded-lg border overflow-hidden">
-          <div className="px-5 py-4 border-b flex items-center gap-2">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
             <BarChart2 className="h-4 w-4 text-gray-500" />
             <h2 className="font-semibold text-gray-900">Revenue by Location</h2>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-600">Revenue</th>
@@ -220,11 +220,11 @@ export default function ReportsPage() {
         </div>
 
         {/* Payment method breakdown */}
-        <div className="bg-white rounded-lg border overflow-hidden">
-          <div className="px-5 py-4 border-b">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Payment Methods</h2>
           </div>
-          <div className="divide-y">
+          <div className="divide-y divide-gray-100">
             {paymentBreakdown.length === 0 ? (
               <p className="px-5 py-6 text-xs text-gray-400 text-center">No payment data</p>
             ) : (
@@ -258,13 +258,13 @@ export default function ReportsPage() {
       </div>
 
       {/* Top customers */}
-      <div className="bg-white rounded-lg border overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <Users className="h-4 w-4 text-gray-500" />
           <h2 className="font-semibold text-gray-900">Top Customers</h2>
         </div>
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Phone</th>

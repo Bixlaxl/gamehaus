@@ -284,7 +284,7 @@ export default function TablesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Tables</h1>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Tables</h1>
         <div className="flex items-center gap-3">
           <Select value={selectedLocation} onValueChange={setSelectedLocation}>
             <SelectTrigger className="w-44">
@@ -314,7 +314,7 @@ export default function TablesPage() {
           return (
             <div
               key={table.id}
-              className="bg-white rounded-lg border overflow-hidden"
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
             >
               <div className="h-36 bg-gray-100 flex items-center justify-center">
                 {table.image_url ? (

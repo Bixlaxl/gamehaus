@@ -105,7 +105,7 @@ export default function BookingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Bookings</h1>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Bookings</h1>
       </div>
 
       {/* Filters */}
@@ -159,9 +159,9 @@ export default function BookingsPage() {
 
       {isLoading && <p className="text-gray-500">Loading...</p>}
 
-      <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Time</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
@@ -171,7 +171,7 @@ export default function BookingsPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-gray-50">
             {filtered.map((b) => (
               <tr key={b.id}>
                 <td className="px-4 py-3 font-mono text-xs text-gray-700">

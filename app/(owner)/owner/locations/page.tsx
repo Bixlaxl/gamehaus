@@ -190,7 +190,7 @@ export default function LocationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Locations</h1>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Locations</h1>
         <Button onClick={openAdd}>
           <Plus className="h-4 w-4" />
           Add Location
@@ -203,7 +203,7 @@ export default function LocationsPage() {
         {locations?.map((loc) => (
           <div
             key={loc.id}
-            className="bg-white rounded-lg border p-5 flex items-start justify-between"
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start justify-between"
           >
             <div className="space-y-1">
               <div className="flex items-center gap-2">

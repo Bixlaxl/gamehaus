@@ -21,11 +21,11 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-400 mt-1">System overview and configuration reference</p>
+        <p className="text-sm text-gray-400 mt-1 tracking-tight">System overview and configuration reference</p>
       </div>
 
       {/* Loyalty system info */}
-      <div className="bg-white rounded-xl border p-6 space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Star className="h-4 w-4 text-amber-500" />
           <h2 className="font-semibold text-gray-900">Loyalty Points</h2>
@@ -51,13 +51,13 @@ export default async function SettingsPage() {
       </div>
 
       {/* Locations */}
-      <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <MapPin className="h-4 w-4 text-gray-500" />
           <h2 className="font-semibold text-gray-900">Locations</h2>
           <span className="ml-auto text-xs text-gray-400">{locations?.length ?? 0} total</span>
         </div>
-        <div className="divide-y">
+        <div className="divide-y divide-gray-50">
           {locations?.map((loc) => (
             <div key={loc.id} className="px-5 py-3 flex items-center justify-between gap-4">
               <div>
@@ -75,13 +75,13 @@ export default async function SettingsPage() {
       </div>
 
       {/* Staff */}
-      <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <Users className="h-4 w-4 text-gray-500" />
           <h2 className="font-semibold text-gray-900">Staff Accounts</h2>
           <span className="ml-auto text-xs text-gray-400">{staff?.length ?? 0} total</span>
         </div>
-        <div className="divide-y">
+        <div className="divide-y divide-gray-50">
           {staff?.map((s) => (
             <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-4">
               <div>
@@ -102,15 +102,15 @@ export default async function SettingsPage() {
       </div>
 
       {/* Tables summary */}
-      <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <Grid3X3 className="h-4 w-4 text-gray-500" />
           <h2 className="font-semibold text-gray-900">Tables</h2>
           <span className="ml-auto text-xs text-gray-400">
             {tables?.filter((t) => t.is_active).length ?? 0} active · {tables?.length ?? 0} total
           </span>
         </div>
-        <div className="divide-y">
+        <div className="divide-y divide-gray-50">
           {tables?.map((t) => (
             <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-4">
               <div>
@@ -128,13 +128,13 @@ export default async function SettingsPage() {
       </div>
 
       {/* Recent coupons */}
-      <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="px-5 py-4 border-b flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <Tag className="h-4 w-4 text-gray-500" />
           <h2 className="font-semibold text-gray-900">Recent Coupons</h2>
           <span className="ml-auto text-xs text-gray-400">Last 10</span>
         </div>
-        <div className="divide-y">
+        <div className="divide-y divide-gray-50">
           {coupons?.map((c) => {
             const expired = new Date(c.valid_until) < new Date();
             return (
