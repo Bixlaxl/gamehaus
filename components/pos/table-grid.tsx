@@ -85,7 +85,7 @@ export function TableGrid() {
                   : "bg-white hover:bg-emerald-50 dark:bg-[#111] dark:hover:bg-[rgba(16,185,129,0.05)] border-2 border-emerald-300 dark:border-[rgba(16,185,129,0.35)]"
                 : isBooked
                 ? "bg-white hover:bg-amber-50 dark:bg-[#111] dark:hover:bg-[rgba(245,158,11,0.04)] border-2 border-amber-200 dark:border-[rgba(245,158,11,0.25)]"
-                : "bg-white hover:bg-gray-50 dark:bg-[#111] dark:hover:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]"
+                : "bg-white hover:bg-gray-50 dark:bg-[#0a0a0a] dark:hover:bg-[#161616] border border-gray-100 dark:border-[#1f1f1f]"
             )}
             style={{ padding: isIdle ? "8px 10px" : "10px 10px" }}
           >

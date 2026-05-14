@@ -158,10 +158,10 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
   const { setWalkInOpen, setCheckinOpen, setUpcomingOpen } = usePOSStore();
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-white dark:bg-black">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-[#0a0a0a]">
 
       {/* ── Header ── */}
-      <header className="shrink-0 flex items-center justify-between px-5 h-12 bg-white dark:bg-black border-b-2 border-gray-900 dark:border-white">
+      <header className="shrink-0 flex items-center justify-between px-5 h-12 bg-white dark:bg-[#111] border-b border-gray-200 dark:border-[#1f1f1f]">
         <div className="flex items-center gap-3">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="font-extrabold text-gray-900 dark:text-white text-sm tracking-tight">{locationName}</span>
@@ -193,10 +193,10 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left sidebar */}
-        <div className="w-64 shrink-0 flex flex-col border-r-2 border-gray-900 dark:border-white">
+        <div className="w-64 shrink-0 flex flex-col bg-white dark:bg-[#111] border-r border-gray-200 dark:border-[#1f1f1f]">
           {/* Table list */}
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-px">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest px-1 pb-2 pt-0.5 text-gray-700 dark:text-[#aaa]">
+          <div className="flex-1 overflow-y-auto p-3 space-y-px">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest px-1 pb-2 pt-0.5 text-gray-500 dark:text-[#555]">
               Tables
             </p>
             <TableGrid />
@@ -206,7 +206,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
           <POSAlerts />
 
           {/* Action buttons */}
-          <div className="shrink-0 p-2.5 border-t-2 border-gray-900 dark:border-white">
+          <div className="shrink-0 p-3 border-t border-gray-200 dark:border-[#1f1f1f]">
             <button
               onClick={() => setWalkInOpen(true)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-bold transition-colors hover:brightness-110 active:brightness-95"

@@ -28,7 +28,7 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
   // ── Empty state ──────────────────────────────────────────────────
   if (!selectedOrder) {
     return (
-      <div className="h-full flex items-center justify-center bg-white dark:bg-black">
+      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0a]">
         <div className="text-center px-8 space-y-3">
           <div className="text-4xl mb-1">🎱</div>
           <p className="text-base font-bold text-gray-800 dark:text-white">Ready to serve</p>
@@ -111,13 +111,13 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
   }
 
   return (
-    <div className="h-full flex bg-white dark:bg-black">
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-[#0a0a0a]">
 
-      {/* ── Sessions + Extras column ──────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 min-w-0">
+      {/* ── Scrollable content ──────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4 min-w-0">
 
         {/* Customer strip */}
-        <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#111] border border-gray-200 dark:border-[#1F1F1F]">
+        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white dark:bg-[#111] border border-gray-100 dark:border-[#1f1f1f] shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
@@ -186,7 +186,7 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
           return (
             <div
               key={item.id}
-              className={`rounded-xl p-4 space-y-3 bg-white dark:bg-[#111] ${
+              className={`rounded-2xl p-4 space-y-3 bg-white dark:bg-[#111] shadow-sm ${
                 isRunning
                   ? showHandover
                     ? "border-2 border-orange-300 dark:border-[rgba(249,115,22,0.35)]"
@@ -195,7 +195,7 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
                     : isGrace
                     ? "border-2 border-amber-300 dark:border-[rgba(245,158,11,0.35)]"
                     : "border-2 border-emerald-300 dark:border-[rgba(16,185,129,0.35)]"
-                  : "border border-gray-200 dark:border-[#1F1F1F]"
+                  : "border border-gray-100 dark:border-[#1f1f1f]"
               }`}
             >
               {/* Top row: table name + badge + live amount */}
@@ -245,7 +245,7 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
 
               {/* Elapsed + countdown row */}
               {isRunning && (
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-100 dark:bg-[#0A0A0A]">
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-[#1a1a1a]">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-gray-400 dark:text-[#444] uppercase tracking-wide">Elapsed</span>
                     <span className="text-xs font-mono font-semibold tabular-nums text-gray-700 dark:text-[#aaa]">{elapsed || "—"}</span>
@@ -339,8 +339,8 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
         })}
 
         {/* Extras */}
-        <div className="rounded-xl overflow-hidden bg-gray-50 dark:bg-[#111] border border-gray-200 dark:border-[#1F1F1F]">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-[#1F1F1F]">
+        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#111] border border-gray-100 dark:border-[#1f1f1f] shadow-sm">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-[#1f1f1f]">
             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
               Extras
             </p>
@@ -389,8 +389,8 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
                   value={extraForm.name}
                   onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                    bg-gray-100 dark:bg-[#1A1A1A]
-                    border border-gray-200 dark:border-[#2A2A2A]
+                    bg-gray-50 dark:bg-[#1a1a1a]
+                    border border-gray-200 dark:border-[#2a2a2a]
                     text-gray-900 dark:text-white
                     placeholder-gray-400 dark:placeholder-[#444]
                     focus:border-[#D4541A]"
@@ -447,20 +447,16 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
         </div>
 
         {/* bottom spacer */}
-        <div className="h-4" />
+        <div className="h-2" />
       </div>
 
-      {/* ── Bill sidebar ──────────────────────────────────── */}
-      <div className="w-64 shrink-0 flex flex-col bg-gray-50 dark:bg-[#080808] border-l-2 border-gray-900 dark:border-white">
-
-        {/* Receipt header */}
-        <div className="px-4 pt-5 pb-0">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-gray-700 dark:text-[#aaa]">Receipt</p>
-          <div className="mt-3 border-t border-dashed border-gray-200 dark:border-[#222]" />
-        </div>
-
+      {/* ── Pinned bill footer ────────────────────────────── */}
+      <div className="shrink-0 bg-white dark:bg-[#111] border-t border-gray-200 dark:border-[#1f1f1f]">
         {/* Bill lines */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5">
+        <div className="px-5 pt-3 pb-1 overflow-y-auto max-h-44 space-y-1">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-gray-400 dark:text-[#555] mb-2">
+            Receipt
+          </p>
           {fullyPrePaid ? (
             <>
               <div className="flex items-center justify-between py-0.5">
@@ -472,8 +468,8 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
                 const tn  = (ti?.table as { name?: string } | null)?.name ?? "Table";
                 return (
                   <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                    <span className="truncate text-xs font-semibold text-gray-700 dark:text-[#bbb]">{tn} OT {line.overtimeMins}m</span>
-                    <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.overtimeAmount)}</span>
+                    <span className="truncate text-xs text-gray-600 dark:text-[#aaa]">{tn} OT {line.overtimeMins}m</span>
+                    <span className="shrink-0 font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.overtimeAmount)}</span>
                   </div>
                 );
               })}
@@ -484,76 +480,62 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
               const tn  = (ti?.table as { name?: string } | null)?.name ?? "Table";
               return (
                 <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                  <span className="truncate text-xs font-semibold text-gray-700 dark:text-[#bbb]">{tn} · {line.durationMins}m</span>
-                  <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
+                  <span className="truncate text-xs text-gray-600 dark:text-[#aaa]">{tn} · {line.durationMins}m</span>
+                  <span className="shrink-0 font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
                 </div>
               );
             })
           )}
-
           {bill.extraLines.length > 0 && (
-            <div className="pt-2 mt-1 border-t border-dashed border-gray-300 dark:border-[#333] space-y-1.5">
+            <div className="pt-1.5 mt-1 border-t border-dashed border-gray-200 dark:border-[#2a2a2a] space-y-1">
               {bill.extraLines.map((line) => (
                 <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                  <span className="truncate text-xs font-semibold text-gray-700 dark:text-[#bbb]">{line.name} ×{line.quantity}</span>
-                  <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
+                  <span className="truncate text-xs text-gray-600 dark:text-[#aaa]">{line.name} ×{line.quantity}</span>
+                  <span className="shrink-0 font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(line.amount)}</span>
                 </div>
               ))}
             </div>
           )}
-
           {!fullyPrePaid && (bill.tableLines.length + bill.extraLines.length) > 1 && (
-            <div className="flex justify-between items-baseline gap-2 pt-2 mt-1 border-t border-dashed border-gray-300 dark:border-[#333]">
-              <span className="text-xs font-bold text-gray-600 dark:text-[#888]">Subtotal</span>
-              <span className="font-bold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(bill.subtotal)}</span>
+            <div className="flex justify-between items-baseline gap-2 pt-1.5 mt-1 border-t border-dashed border-gray-200 dark:border-[#2a2a2a]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-[#888]">Subtotal</span>
+              <span className="font-semibold text-gray-900 dark:text-white tabular-nums text-xs">{formatCurrency(bill.subtotal)}</span>
             </div>
           )}
-
           {bill.discountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-bold" style={{ color: "#10b981" }}>Discount</span>
-              <span className="text-xs font-bold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
+              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Discount</span>
+              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
             </div>
           )}
-
           {!fullyPrePaid && bill.advancePaid > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-bold" style={{ color: "#10b981" }}>Advance paid</span>
-              <span className="text-xs font-bold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
+              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Advance paid</span>
+              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
             </div>
           )}
         </div>
 
-        {/* Total card */}
-        <div className="shrink-0 px-3 pb-4 pt-1">
-          <div
-            className="rounded-2xl px-4 py-4"
-            style={{ background: "rgba(212,84,26,0.06)", border: "1px solid rgba(212,84,26,0.12)" }}
-          >
-            <div className="flex items-end justify-between mb-3">
-              <span
-                className="text-[10px] font-bold uppercase tracking-[0.1em]"
-                style={{ color: "rgba(212,84,26,0.6)" }}
-              >
-                Total due
-              </span>
-              <span className="text-3xl font-bold tabular-nums leading-none" style={{ color: "#D4541A" }}>
-                {formatCurrency(bill.totalDue)}
-              </span>
-            </div>
-            <button
-              onClick={() => store.setFinalizeOrderId(selectedOrder.id)}
-              disabled={hasRunning}
-              className={`w-full py-3 rounded-xl text-sm font-bold transition-opacity ${
-                hasRunning
-                  ? "bg-white dark:bg-[#111] text-gray-300 dark:text-[#333] border border-gray-200 dark:border-[#222] cursor-not-allowed"
-                  : "text-white hover:brightness-110 active:brightness-95 cursor-pointer"
-              }`}
-              style={hasRunning ? {} : { background: "#D4541A" }}
-            >
-              {hasRunning ? "Stop sessions first" : "Finalize & Collect"}
-            </button>
+        {/* Total + finalize */}
+        <div className="px-5 pb-5 pt-3 border-t border-gray-100 dark:border-[#1a1a1a]">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-[#555]">Total due</span>
+            <span className="text-2xl font-bold tabular-nums leading-none" style={{ color: "#D4541A" }}>
+              {formatCurrency(bill.totalDue)}
+            </span>
           </div>
+          <button
+            onClick={() => store.setFinalizeOrderId(selectedOrder.id)}
+            disabled={hasRunning}
+            className={`w-full py-3 rounded-xl text-sm font-bold transition-opacity ${
+              hasRunning
+                ? "bg-gray-100 dark:bg-[#1a1a1a] text-gray-300 dark:text-[#333] cursor-not-allowed"
+                : "text-white hover:brightness-110 active:brightness-95 cursor-pointer"
+            }`}
+            style={hasRunning ? {} : { background: "#D4541A" }}
+          >
+            {hasRunning ? "Stop sessions first" : "Finalize & Collect"}
+          </button>
         </div>
       </div>
     </div>
