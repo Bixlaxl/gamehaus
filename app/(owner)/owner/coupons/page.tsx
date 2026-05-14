@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import type { Coupon, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 const supabase = createClient();
@@ -64,6 +64,7 @@ export default function CouponsPage() {
   const [createForm, setCreateForm]   = useState<CouponForm>(defaultForm);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const [copiedCode, setCopiedCode]   = useState<string | null>(null);
   const [editTarget, setEditTarget]   = useState<CouponRow | null>(null);
   const [editForm, setEditForm]       = useState<Partial<CouponForm>>({});
   const [editError, setEditError]     = useState<string | null>(null);
@@ -117,6 +118,7 @@ export default function CouponsPage() {
       const { error } = await supabase.from("coupons").update({
         ...(values.valid_until    !== undefined && { valid_until:    toEndOfDayIST(values.valid_until) }),
         ...(values.valid_from     !== undefined && { valid_from:     toStartOfDayIST(values.valid_from) }),
+        ...(values.discount_type  !== undefined && { discount_type:  values.discount_type }),
         ...(values.discount_value !== undefined && { discount_value: parseFloat(values.discount_value) }),
         ...(values.max_uses       !== undefined && { max_uses:       values.max_uses ? parseInt(values.max_uses) : null }),
         ...(values.location_id    !== undefined && { location_id:    values.location_id === "all" ? null : values.location_id }),
@@ -136,6 +138,7 @@ export default function CouponsPage() {
                 ...c,
                 valid_until:    values.valid_until ? toEndOfDayIST(values.valid_until) : c.valid_until,
                 valid_from:     values.valid_from  ? toStartOfDayIST(values.valid_from) : c.valid_from,
+                discount_type:  values.discount_type ?? c.discount_type,
                 discount_value: values.discount_value ? parseFloat(values.discount_value) : c.discount_value,
                 max_uses:       values.max_uses !== undefined ? (values.max_uses ? parseInt(values.max_uses) : null) : c.max_uses,
                 location_id:    values.location_id === "all" ? null : (values.location_id ?? c.location_id),
@@ -204,6 +207,7 @@ export default function CouponsPage() {
     setEditTarget(c);
     setEditForm({
       location_id:    c.location_id ?? "all",
+      discount_type:  c.discount_type,
       discount_value: String(c.discount_value),
       valid_from:     c.valid_from.split("T")[0],
       valid_until:    c.valid_until.split("T")[0],
@@ -249,7 +253,24 @@ export default function CouponsPage() {
               const exhausted = coupon.max_uses !== null && coupon.used_count >= coupon.max_uses;
               return (
                 <tr key={coupon.id}>
-                  <td className="px-4 py-3 font-mono font-semibold text-gray-900">{coupon.code}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-gray-900">{coupon.code}</span>
+                      <button
+                        onClick={() => {
+                          void navigator.clipboard.writeText(coupon.code);
+                          setCopiedCode(coupon.code);
+                          setTimeout(() => setCopiedCode(null), 1500);
+                        }}
+                        className="text-gray-300 hover:text-gray-600 transition-colors"
+                        title="Copy code"
+                      >
+                        {copiedCode === coupon.code
+                          ? <Check className="h-3.5 w-3.5 text-emerald-500" />
+                          : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-700">
                     {coupon.discount_type === "percent"
                       ? `${coupon.discount_value}%`
@@ -413,15 +434,30 @@ export default function CouponsPage() {
             }}
             className="space-y-4"
           >
-            <div className="space-y-2">
-              <Label>Discount value ({editTarget?.discount_type === "percent" ? "%" : "₹"})</Label>
-              <Input
-                type="number"
-                value={editForm.discount_value ?? ""}
-                onChange={(e) => setEditForm({ ...editForm, discount_value: e.target.value })}
-                min="0"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={editForm.discount_type ?? editTarget?.discount_type ?? "percent"}
+                  onValueChange={(v) => setEditForm({ ...editForm, discount_type: v as "percent" | "flat" })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percent">Percent (%)</SelectItem>
+                    <SelectItem value="flat">Flat (₹)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Value</Label>
+                <Input
+                  type="number"
+                  value={editForm.discount_value ?? ""}
+                  onChange={(e) => setEditForm({ ...editForm, discount_value: e.target.value })}
+                  min="0"
+                  required
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Location scope</Label>

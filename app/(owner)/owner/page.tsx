@@ -122,15 +122,64 @@ function elapsed(start: string): string {
   return h > 0 ? `${h}h ${m.toString().padStart(2, "0")}m` : `${m}m`;
 }
 
+// ── Business-day helpers ───────────────────────────────────────────────────────
+function shiftDayStr(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+function businessDayBounds(dateStr: string, opening: string, closing: string) {
+  const [openH, openM] = opening.split(":").map(Number);
+  const [closeH, closeM] = closing.split(":").map(Number);
+  const crossesMidnight = closeH < openH || (closeH === openH && closeM < openM);
+  const start = new Date(`${dateStr}T${opening}+05:30`);
+  const endDateStr = crossesMidnight ? shiftDayStr(dateStr, 1) : dateStr;
+  const end = new Date(`${endDateStr}T${closing}+05:30`);
+  return { start, end };
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default async function OwnerDashboard() {
   const admin = createAdminClient();
 
-  const now            = new Date();
-  const todayStart     = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-  const monthStart     = new Date(now); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  const sevenDaysAgo   = new Date(todayStart); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  // Fetch location hours first so all date math uses business-day boundaries
+  const { data: locationHours } = await admin
+    .from("locations")
+    .select("opening_time, closing_time")
+    .eq("is_active", true)
+    .limit(1)
+    .single();
+
+  const opening = locationHours?.opening_time ?? "10:00";
+  const closing = locationHours?.closing_time ?? "23:00";
+
+  // Current time in IST (UTC+5:30)
+  const now        = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const nowIST      = new Date(now.getTime() + istOffsetMs);
+  const [closeH, closeM] = closing.split(":").map(Number);
+  const [openH]          = opening.split(":").map(Number);
+  const crossesMidnight  = closeH < openH;
+
+  // If we're in early hours before closing, we're still in "yesterday's" business day
+  const todayISTStr = nowIST.toISOString().split("T")[0];
+  const inEarlyHours = crossesMidnight &&
+    (nowIST.getUTCHours() < closeH || (nowIST.getUTCHours() === closeH && nowIST.getUTCMinutes() < closeM));
+  const bizDateStr       = inEarlyHours ? shiftDayStr(todayISTStr, -1) : todayISTStr;
+  const yesterdayBizStr  = shiftDayStr(bizDateStr, -1);
+
+  const { start: todayStart, end: todayEnd }         = businessDayBounds(bizDateStr, opening, closing);
+  const { start: yesterdayStart, end: yesterdayEnd } = businessDayBounds(yesterdayBizStr, opening, closing);
+
+  // Month: from the 1st of the current business-day month at opening time
+  const bizYear  = parseInt(bizDateStr.slice(0, 4));
+  const bizMonth = parseInt(bizDateStr.slice(5, 7));
+  const monthFirstStr = `${bizYear}-${String(bizMonth).padStart(2, "0")}-01`;
+  const monthStart    = new Date(`${monthFirstStr}T${opening}+05:30`);
+
+  const sevenDaysAgo = new Date(todayStart);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
 
   const [
     { data: todayOrders },
@@ -143,12 +192,14 @@ export default async function OwnerDashboard() {
     { data: liveDetail },
   ] = await Promise.all([
     admin.from("orders").select("amount_due")
-      .eq("status", "finalized").gte("finalized_at", todayStart.toISOString()),
+      .eq("status", "finalized")
+      .gte("finalized_at", todayStart.toISOString())
+      .lte("finalized_at", todayEnd.toISOString()),
 
     admin.from("orders").select("amount_due")
       .eq("status", "finalized")
       .gte("finalized_at", yesterdayStart.toISOString())
-      .lt("finalized_at", todayStart.toISOString()),
+      .lte("finalized_at", yesterdayEnd.toISOString()),
 
     admin.from("orders").select("amount_due")
       .eq("status", "finalized").gte("finalized_at", monthStart.toISOString()),
@@ -156,7 +207,9 @@ export default async function OwnerDashboard() {
     admin.from("order_items").select("id").eq("status", "running"),
 
     admin.from("bookings").select("id")
-      .eq("status", "confirmed").gte("scheduled_start", todayStart.toISOString()),
+      .eq("status", "confirmed")
+      .gte("scheduled_start", todayStart.toISOString())
+      .lte("scheduled_start", todayEnd.toISOString()),
 
     admin.from("orders")
       .select("id, customer_name, customer_phone, amount_due, type, finalized_at, location:locations(name)")
@@ -186,15 +239,15 @@ export default async function OwnerDashboard() {
       ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
       : todayRevenue > 0 ? 100 : 0;
 
-  // ── Build 7-day chart data ───────────────────────────────────────────────────
+  // ── Build 7-day chart data (each day = business-day window) ─────────────────
   const weekData: { date: Date; revenue: number }[] = [];
   for (let i = 6; i >= 0; i--) {
-    const dayStart = new Date(todayStart); dayStart.setDate(dayStart.getDate() - i);
-    const dayEnd   = new Date(dayStart);   dayEnd.setDate(dayEnd.getDate() + 1);
-    const revenue  = (weekOrders ?? [])
+    const dayStr = shiftDayStr(bizDateStr, -i);
+    const { start: dayStart, end: dayEnd } = businessDayBounds(dayStr, opening, closing);
+    const revenue = (weekOrders ?? [])
       .filter((o) => {
         const t = new Date(o.finalized_at!);
-        return t >= dayStart && t < dayEnd;
+        return t >= dayStart && t <= dayEnd;
       })
       .reduce((s, o) => s + (o.amount_due ?? 0), 0);
     weekData.push({ date: dayStart, revenue });

@@ -66,17 +66,26 @@ export default function BookingsPage() {
   const { data: locations } = useQuery({
     queryKey: ["locations"],
     queryFn: async () => {
-      const { data } = await supabase.from("locations").select("id, name").eq("is_active", true);
-      return (data ?? []) as Pick<Location, "id" | "name">[];
+      const { data } = await supabase.from("locations").select("id, name, opening_time, closing_time").eq("is_active", true);
+      return (data ?? []) as Pick<Location, "id" | "name" | "opening_time" | "closing_time">[];
     },
   });
 
+  const opening = locations?.[0]?.opening_time ?? "10:00";
+  const closing = locations?.[0]?.closing_time ?? "23:00";
+
   const { data: bookings, isLoading } = useQuery({
-    queryKey: ["bookings", date],
+    queryKey: ["bookings", date, opening, closing],
     queryFn: async () => {
-      // Use IST-aware boundaries: midnight IST = UTC-5:30 offset
-      const from = new Date(date + "T00:00:00+05:30").toISOString();
-      const to   = new Date(date + "T23:59:59+05:30").toISOString();
+      const [openH, openM]   = opening.split(":").map(Number);
+      const [closeH, closeM] = closing.split(":").map(Number);
+      const crossesMidnight  = closeH < openH || (closeH === openH && closeM < openM);
+      const from = new Date(`${date}T${opening}+05:30`).toISOString();
+      // If closing crosses midnight, the end falls on the next calendar day
+      const closeDate = crossesMidnight
+        ? (() => { const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
+        : date;
+      const to = new Date(`${closeDate}T${closing}+05:30`).toISOString();
       const { data } = await supabase
         .from("bookings")
         .select(`

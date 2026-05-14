@@ -6,6 +6,7 @@ import { usePOSStore, getSelectedOrder } from "@/store/pos";
 import { calculateBill, GRACE_MINS } from "@/lib/billing/engine";
 import { formatCurrency, formatCountdown, formatElapsed } from "@/lib/utils";
 import { Plus, Trash2, Square, Timer } from "lucide-react";
+import { toast } from "sonner";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
 
 interface OrderPanelProps {
@@ -58,9 +59,8 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
     });
     if (!res.ok) {
       const body = await res.json() as { error?: string };
-      // Revert on failure
       store.patchOrderItem(item.id, { status: "running", actual_end: null });
-      alert(body.error ?? "Failed to stop session");
+      toast.error(body.error ?? "Failed to stop session");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     }
@@ -95,7 +95,7 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
     });
     if (!res.ok) {
       store.removeOrderExtra(selectedOrder.id, tempId);
-      alert("Failed to add extra");
+      toast.error("Failed to add extra");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     }
@@ -325,7 +325,7 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
                     if (!res.ok) {
                       const body = await res.json() as { error?: string };
                       store.patchOrderItem(item.id, { status: "scheduled", actual_start: null });
-                      alert(body.error ?? "Failed to start session");
+                      toast.error(body.error ?? "Failed to start session");
                     } else {
                       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
                     }

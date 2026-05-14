@@ -25,7 +25,7 @@ const DURATION_PRESETS = [
 ];
 
 export function WalkInSlider({ locationId }: WalkInSliderProps) {
-  const { walkInOpen, walkInPrefilledTableId, setWalkInOpen, tables, selectOrder } = usePOSStore();
+  const { walkInOpen, walkInPrefilledTableId, setWalkInOpen, tables, selectOrder, now } = usePOSStore();
   const qc = useQueryClient();
 
   const [customerName,     setCustomerName]     = useState("");
@@ -44,7 +44,7 @@ export function WalkInSlider({ locationId }: WalkInSliderProps) {
     const table = idleTables.find((t) => t.id === tableId);
     if (!table?.upcomingBooking) return null;
     const dur          = durations[tableId] ?? 60;
-    const sessionEnd   = Date.now() + dur * 60 * 1000;
+    const sessionEnd   = now.getTime() + dur * 60 * 1000;
     const bookingStart = new Date(table.upcomingBooking.scheduled_start).getTime();
     if (sessionEnd > bookingStart) {
       const t = new Date(table.upcomingBooking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
@@ -275,6 +275,7 @@ export function WalkInSlider({ locationId }: WalkInSliderProps) {
                         <input
                           type="number"
                           min="15"
+                          max="480"
                           step="15"
                           value={dur}
                           onChange={(e) => setDurations((prev) => ({ ...prev, [table.id]: parseInt(e.target.value) || 60 }))}

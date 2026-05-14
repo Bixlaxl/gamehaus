@@ -6,6 +6,7 @@ import { usePOSStore } from "@/store/pos";
 import type { OrderItem } from "@/lib/supabase/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { X } from "lucide-react";
+import { toast } from "sonner";
 
 export function ExtendModal() {
   const store = usePOSStore();
@@ -43,9 +44,8 @@ export function ExtendModal() {
       | { success: false; error: string };
 
     if (!body.success) {
-      // Revert and surface error via alert (modal is already closed)
       store.patchOrderItem(extendModalItem.id, { expected_end: prevExpectedEnd } as Partial<OrderItem>);
-      alert(body.error);
+      toast.error(body.error ?? "Failed to extend session");
     } else {
       // Sync with server's authoritative value
       store.patchOrderItem(extendModalItem.id, { expected_end: body.data.new_expected_end });

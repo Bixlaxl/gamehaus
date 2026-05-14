@@ -326,6 +326,22 @@ export default function LocationsPage() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="timezone">Timezone</Label>
+              <select
+                id="timezone"
+                value={form.timezone}
+                onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="Asia/Kolkata">Asia/Kolkata (IST, UTC+5:30)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST, UTC+4)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT, UTC+8)</option>
+                <option value="Europe/London">Europe/London (GMT/BST)</option>
+                <option value="America/New_York">America/New_York (ET)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
+              </select>
+            </div>
             {formError && (
               <p className="text-sm text-destructive">{formError}</p>
             )}

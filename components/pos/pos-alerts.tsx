@@ -5,7 +5,25 @@ import { usePOSStore } from "@/store/pos";
 
 export function POSAlerts() {
   const { tables, now } = usePOSStore();
-  const beepedRef = useRef<Set<string>>(new Set());
+  const beepedRef  = useRef<Set<string>>(new Set());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  function beep() {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") void ctx.resume();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch { /* browser may block before user gesture */ }
+  }
 
   const alerts: { id: string; short: string; full: string; type: "warning" | "urgent" }[] = [];
 
@@ -51,18 +69,7 @@ export function POSAlerts() {
 
         if (!beepedRef.current.has(alertId)) {
           beepedRef.current.add(alertId);
-          try {
-            const ctx  = new AudioContext();
-            const osc  = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.frequency.value = 880;
-            gain.gain.setValueAtTime(0.3, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.5);
-          } catch { /* ignore */ }
+          beep();
         }
       } else {
         beepedRef.current.delete(alertId);
