@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { z } from "zod";
 
+export const runtime = 'edge';
+
+
 const schema = z.object({
   shift_mins: z.number().int().min(15).max(120), // how many minutes to shift forward
 });

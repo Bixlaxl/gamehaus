@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ok, err } from "@/lib/validators/schemas";
 
+export const runtime = 'edge';
+
+
 export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }

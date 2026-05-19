@@ -5,6 +5,9 @@ import { stopSessionSchema, ok, err } from "@/lib/validators/schemas";
 import { calculateBill } from "@/lib/billing/engine";
 import type { OrderItem } from "@/lib/supabase/types";
 
+export const runtime = 'edge';
+
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

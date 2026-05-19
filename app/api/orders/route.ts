@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
 
+export const runtime = 'edge';
+
+
 export async function POST(request: Request) {
   const body: unknown = await request.json();
   const parsed = createOrderSchema.safeParse(body);

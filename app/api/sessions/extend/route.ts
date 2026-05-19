@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extendSessionSchema, ok, err } from "@/lib/validators/schemas";
 
+export const runtime = 'edge';
+
+
 const BUFFER_MINS = 10;
 
 export async function POST(request: Request) {

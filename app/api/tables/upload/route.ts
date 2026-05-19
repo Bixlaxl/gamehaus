@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
+export const runtime = 'edge';
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
   const ext = file.name.split(".").pop();
   const path = `${locationId}/${tableId}/image.${ext}`;
   const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
+  const buffer = new Uint8Array(bytes);
 
   const admin = createAdminClient();
   const { error } = await admin.storage

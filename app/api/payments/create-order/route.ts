@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
+export const runtime = 'edge';
 
 const schema = z.object({
   amount: z.number().positive(), // in paise
@@ -23,17 +23,17 @@ export async function POST(request: Request) {
 
   let rpOrder: { id: string; amount: number };
   try {
-    const { default: Razorpay } = await import("razorpay");
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID!,
-      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    const credentials = btoa(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`);
+    const res = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${credentials}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ amount, currency, receipt, notes: { order_id } }),
     });
-    rpOrder = await razorpay.orders.create({
-      amount,
-      currency,
-      receipt,
-      notes: { order_id },
-    }) as { id: string; amount: number };
+    if (!res.ok) throw new Error(await res.text());
+    rpOrder = await res.json() as { id: string; amount: number };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Razorpay error";
     return NextResponse.json(err(msg, "RAZORPAY_ERROR"), { status: 502 });

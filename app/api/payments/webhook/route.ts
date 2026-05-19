@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export const runtime = 'edge';
+
+async function verifyHmac(secret: string, body: string, signature: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return hex === signature;
+}
 
 export async function POST(request: Request) {
   const body = await request.text();
   const signature = request.headers.get("x-razorpay-signature") ?? "";
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET!;
 
-  const expectedSignature = crypto
-    .createHmac("sha256", secret)
-    .update(body)
-    .digest("hex");
-
-  if (expectedSignature !== signature) {
+  if (!(await verifyHmac(secret, body, signature))) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 

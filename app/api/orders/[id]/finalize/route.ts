@@ -6,6 +6,9 @@ import { calculateBill } from "@/lib/billing/engine";
 import { z } from "zod";
 import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 
+export const runtime = 'edge';
+
+
 const schema = z.object({
   payment_method:  z.enum(["cash", "upi"]),
   coupon_code:     z.string().optional(),

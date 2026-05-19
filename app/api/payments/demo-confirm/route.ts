@@ -3,6 +3,9 @@ import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const runtime = 'edge';
+
+
 // Demo-only route — bypasses Razorpay for local testing
 // Remove or gate behind env flag before going live
 
