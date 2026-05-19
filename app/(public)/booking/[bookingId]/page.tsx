@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BookingConfirmation } from "@/components/public/booking-confirmation";
 
+export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 
 export default async function BookingConfirmationPage({
