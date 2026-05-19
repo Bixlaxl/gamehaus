@@ -11,7 +11,7 @@ Snooker & gaming café booking + POS system. Two physical locations (Bandra, And
 - **Framework**: Next.js 14 App Router (`app/` directory)
 - **Database + Auth**: Supabase (PostgreSQL + RLS + Realtime)
 - **State**: Zustand (cart: `persist` to localStorage; POS: in-memory with realtime)
-- **Server state**: TanStack Query (POS data fetching, 30s refetch interval)
+- **Server state**: TanStack Query (POS data fetching, 60s refetch interval — Realtime handles live updates)
 - **Payments**: Razorpay (create-order → checkout UI → webhook confirms)
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Theme**: next-themes (light/dark, `dark` class on `<html>`)
@@ -163,8 +163,8 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 
 ### Landing Page (`/`)
 - [x] Splash screen animation: loading → enter → hold → exit → gone phases
-- [x] Timing: hold 300ms, exit 1400ms, gone 2100ms (fast)
-- [x] Curtain lift uses expo-out easing (1100ms, smooth)
+- [x] Timing: hold starts at 200ms, exit at 1400ms (1200ms hold), gone at 2100ms
+- [x] Curtain lift uses expo-out easing (700ms, fast + smooth)
 - [x] Theme toggle (light/dark) — sun/moon icon
 - [x] Admin button → proper pill button, black/white hover, reacts to theme
 - [x] Theme toggle button — same black/white hover pattern
@@ -225,7 +225,7 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] **Walk-in without phone**: finalize modal shows phone input; staff can enter phone at billing time; phone saved to order + customer profile updated
 - [x] **Loyalty points in context panel footer**: balance + redeem input shown directly in "Finalize & Collect" footer when bill is ready — no need to open modal first
 - [x] Back-button protection (confirm before leaving POS) + tab/window close protection (`beforeunload`)
-- [x] Sign out shows "Signing out…" loading state with animated icon
+- [x] **Sign-out overlay**: full-screen `bg-black/70 backdrop-blur-sm` overlay with centered pulsing `LogOut` icon + "Signing out…" text; 700ms delay before auth fires so overlay is visible; button disabled during sign-out
 - [x] **Full dark mode POS**: `dark` class forced on outer wrapper div — all child `dark:` variants apply automatically. Canvas `#0a0a0a`, side rail `#161616`, header/panels `#111`, borders `#1f1f1f`–`#222`
 - [x] **POS side rail**: `#161616` bg, `#222` border, "Gamehaus" brand in orange `#D4541A`, sign-out white
 - [x] **Walk-in allowed on tables with bookings >30 mins away**: `BOOKED_THRESHOLD_MINS = 30` in both `table-grid.tsx` and `context-panel.tsx`. Tables show as idle (with amber "Next [time]" pill) when booking is >30 mins away
@@ -238,7 +238,7 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] Bookings view
 - [x] Coupon management
 - [x] Revenue reports
-- [x] **Dark left sidebar nav** — replaced top nav; 240px fixed sidebar, orange active state, initials avatar, sign out at bottom
+- [x] **Dark left sidebar nav** — replaced top nav; 240px fixed sidebar, orange active state, initials avatar, sign out at bottom with full-screen overlay (same as POS)
 - [x] **Dashboard overview** — 4 stat cards (Today Revenue with ↑/↓ % vs yesterday, Live Tables, Bookings Today, Month Revenue); 7-day revenue bar chart (pure CSS, no library); Live Now panel (running tables with customer, elapsed, rate); Recent 8 orders table
 - [x] **Per-location filtering on dashboard** — URL param `?loc={id}` filters all stats, live sessions, bookings, and recent orders to one location. Location tabs rendered as `<Link>` pills
 - [x] **Per-location filtering on reports** — client-side `selectedLocationId` state; location tabs above the data; `filteredOrders` drives all derived stats (revenue by location, payment breakdown, top customers, summary cards)
@@ -323,6 +323,9 @@ Online (webhook):
 - **Slot label flip (public booking)**: `displayTime = (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s)` — once a start slot is selected, all other slots show their end time so the UX reads "click where you want to finish".
 - **Slot loading skeleton**: `slotsLoading` state in `LocationBrowse`; set true by useEffect when `booking?.id` changes, cleared in `.finally()`. Shows animated skeleton grid so there's no flash of "all slots available" before blocked ranges load.
 - **Booking confirmation loading**: `app/(public)/booking/[bookingId]/loading.tsx` shows a skeleton immediately while the server component's Supabase query runs — eliminates blank screen between redirect and data.
+- **Parallel DB calls in API routes**: Independent Supabase writes use `Promise.all()`. In `orders/route.ts`: bookings insert + customer_profiles upsert run in parallel. In `finalize/route.ts`: coupon increment + customer profile fetch run in parallel (saves one round-trip before the profile update). In `checkin/route.ts`: booking status update + order_item start run in parallel.
+- **POS refetch interval**: Set to 60000ms (60s) — Supabase Realtime pushes all live changes instantly; polling is only a safety net for missed events, so 60s is sufficient and avoids unnecessary network traffic.
+- **Sign-out overlay**: `signingOut` state → renders `fixed inset-0 z-50` overlay immediately → `await new Promise(r => setTimeout(r, 700))` gives the overlay 700ms to be seen → then fires `supabase.auth.signOut()`. Pattern used in both `pos-screen.tsx` and `owner/nav.tsx`.
 
 ---
 
