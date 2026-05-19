@@ -25,15 +25,25 @@ export async function GET(
   const dayStartMs = new Date(dayStart).getTime();
   const dayEndMs   = new Date(dayEnd).getTime();
 
-  // Fetch all active sessions for this table (no OR needed — filter in code)
-  const { data: rawItems } = await admin
-    .from("order_items")
-    .select("actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
-    .eq("table_id", tableId)
-    .eq("is_deleted", false)
-    .in("status", ["running", "scheduled"]);
+  const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
+    admin
+      .from("order_items")
+      .select("actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
+      .eq("table_id", tableId)
+      .eq("is_deleted", false)
+      .in("status", ["running", "scheduled"])
+      .gte("scheduled_start", new Date(dayStartMs).toISOString())
+      .lte("scheduled_start", new Date(dayEndMs).toISOString()),
 
-  // Keep only sessions whose effective start falls on the requested date (IST)
+    admin
+      .from("bookings")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+      .eq("order_items.table_id", tableId)
+      .eq("status", "confirmed")
+      .gte("scheduled_start", new Date(dayStartMs).toISOString())
+      .lte("scheduled_start", new Date(dayEndMs).toISOString()),
+  ]);
+
   const items = (rawItems ?? []).filter(item => {
     const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
     if (!startStr) return false;
@@ -41,18 +51,7 @@ export async function GET(
     return startMs >= dayStartMs && startMs <= dayEndMs;
   });
 
-  // Fetch confirmed bookings for this table on the given date
-  const { data: rawBookings } = await admin
-    .from("bookings")
-    .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
-    .eq("status", "confirmed")
-    .gte("scheduled_start", new Date(dayStartMs).toISOString())
-    .lte("scheduled_start", new Date(dayEndMs).toISOString());
-
-  // Filter bookings to only those for this table
-  const bookings = (rawBookings ?? []).filter(
-    b => (b.order_item as { table_id: string } | null)?.table_id === tableId
-  );
+  const bookings = rawBookings ?? [];
 
   const blocked: { start: string; end: string }[] = [];
 
