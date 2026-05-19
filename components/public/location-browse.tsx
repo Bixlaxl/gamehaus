@@ -406,6 +406,8 @@ export function LocationBrowse({ location, tables }: Props) {
                       <img
                         src={table.image_url} alt={table.name}
                         className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                         onError={() => setErrorImgs(p => new Set([...p, table.id]))}
                       />
                     ) : (
@@ -532,7 +534,7 @@ export function LocationBrowse({ location, tables }: Props) {
                 </label>
 
                 {slotsLoading ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
                     {Array.from({ length: 9 }).map((_, i) => (
                       <div
                         key={i}
@@ -544,7 +546,7 @@ export function LocationBrowse({ location, tables }: Props) {
                 ) : allSlots.length === 0 ? (
                   <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2 max-h-64 sm:max-h-72 overflow-y-auto scrollbar-hide pr-1">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 max-h-64 sm:max-h-72 overflow-y-auto scrollbar-hide pr-1">
                     {allSlots.map(s => {
                       const serverBlocked = isServerBlocked(date, s);
                       const cartOccupied  = isCartOccupied(booking.id, date, s);
