@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Users, Grid3X3, Tag, Star } from "lucide-react";

@@ -30,20 +30,20 @@ export async function GET(request: Request) {
       order:orders!inner(customer_name, customer_phone, location_id, advance_paid),
       order_item:order_items!order_item_id(table_id, status)
     `)
+    .eq("orders.location_id", locationId)
     .gte("scheduled_start", today.toISOString())
     .lt("scheduled_start", tomorrow.toISOString())
     .in("status", ["confirmed"]);
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  // Filter by location (via joined order) and strip internal field
   type BookingRow = typeof data extends (infer T)[] | null ? T : never;
   const seenIds = new Set<string>();
   const filtered = (data ?? [])
     .filter((b: BookingRow) => {
-      if (seenIds.has(b.id)) return false; // dedup: Supabase join can produce duplicates
+      if (seenIds.has(b.id)) return false;
       seenIds.add(b.id);
-      return (b.order as { location_id: string } | null)?.location_id === locationId;
+      return true;
     })
     .map((b: BookingRow) => {
       const order = b.order as { customer_name: string; customer_phone: string | null; location_id: string; advance_paid: number } | null;
