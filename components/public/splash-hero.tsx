@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Clock, ChevronRight, Lock, Sun, Moon, Loader2 } from "lucide-react";
-import { useTheme } from "next-themes";
+import { MapPin, Clock, ChevronRight, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Location {
@@ -39,12 +38,8 @@ function formatTime(t: string): string {
 
 export function SplashHero({ locations }: { locations: Location[] }) {
   const [phase, setPhase] = useState<Phase>("loading");
-  const { setTheme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
   const [adminLoading, setAdminLoading] = useState(false);
   const router = useRouter();
-
-  useEffect(() => setMounted(true), []);
 
   function onImageReady() {
     setPhase("enter");
@@ -53,12 +48,10 @@ export function SplashHero({ locations }: { locations: Location[] }) {
     setTimeout(() => setPhase("gone"),  2100);
   }
 
-  const isDark = !mounted ? false : resolvedTheme === "dark";
-
-  const bg        = isDark ? "#0A0A0A" : "#F5F3EE";
-const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
-  const textSec   = isDark ? "#666666" : "#888888";
-  const textMuted = isDark ? "#444444" : "#AAAAAA";
+  const bg        = "#F5F3EE";
+  const textPri   = "#1A1A1A";
+  const textSec   = "#888888";
+  const textMuted = "#AAAAAA";
 
   return (
     <div className="relative min-h-screen transition-colors duration-300" style={{ background: bg }}>
@@ -152,17 +145,6 @@ const textPri   = isDark ? "#FFFFFF" : "#1A1A1A";
           </div>
 
           <div className="flex items-center gap-3">
-            {mounted && (
-              <button
-                onClick={() => setTheme(isDark ? "light" : "dark")}
-                className="flex items-center justify-center w-8 h-8 rounded-full border transition-colors
-                  bg-[#111111] text-white border-[#111111] hover:bg-white hover:text-[#111111]
-                  dark:bg-white dark:text-[#111111] dark:border-white dark:hover:bg-[#111111] dark:hover:text-white"
-                aria-label="Toggle theme"
-              >
-                {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-              </button>
-            )}
             <button
               onClick={() => { setAdminLoading(true); router.push("/login"); }}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors

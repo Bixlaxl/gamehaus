@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
 export async function POST(
@@ -11,7 +12,9 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
-  const { data: booking, error: bookingError } = await supabase
+  const admin = createAdminClient();
+
+  const { data: booking, error: bookingError } = await admin
     .from("bookings")
     .select("*")
     .eq("id", bookingId)
@@ -25,34 +28,46 @@ export async function POST(
     return NextResponse.json(err("Booking is not confirmed", "INVALID_STATE"), { status: 400 });
   }
 
-  // Enforce: can only mark no-show AFTER held_until
-  const heldUntil = new Date(booking.held_until);
-  if (new Date() < heldUntil) {
-    return NextResponse.json(
-      err(
-        `Cannot mark no-show before held_until (${heldUntil.toLocaleTimeString()})`,
-        "TOO_EARLY"
-      ),
-      { status: 400 }
-    );
-  }
-
   const now = new Date().toISOString();
 
-  await supabase
+  // Mark booking as no-show
+  await admin
     .from("bookings")
     .update({
-      status: "no_show",
+      status:            "no_show",
       no_show_marked_by: user.id,
       no_show_marked_at: now,
     })
     .eq("id", bookingId);
 
-  // Cancel the order item to release the slot
-  await supabase
+  // Cancel the order item — releases the table slot
+  await admin
     .from("order_items")
     .update({ status: "cancelled" })
     .eq("id", booking.order_item_id);
+
+  // Finalize the order — advance already collected online, nothing more owed
+  const { data: order } = await admin
+    .from("orders")
+    .select("*")
+    .eq("id", booking.order_id)
+    .single();
+
+  if (order && order.status === "open") {
+    const advancePaid = order.advance_paid ?? 0;
+
+    await admin
+      .from("orders")
+      .update({
+        status:          "finalized",
+        subtotal:        advancePaid,
+        discount_amount: 0,
+        total_amount:    advancePaid,
+        amount_due:      0,
+        finalized_at:    now,
+      })
+      .eq("id", order.id);
+  }
 
   return NextResponse.json(ok({ released: true }));
 }

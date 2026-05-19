@@ -1,9 +1,17 @@
 "use client";
 
+import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
-import { calculateBill, GRACE_MINS } from "@/lib/billing/engine";
+import { calculateBill } from "@/lib/billing/engine";
 import { formatElapsed, formatCountdown, formatCurrency } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { CalendarClock } from "lucide-react";
+import { toast } from "sonner";
+import type { POSOrder, TableWithStatus } from "@/store/pos";
+import type { Order, OrderItem, Booking } from "@/lib/supabase/types";
+
+const AUTO_STOP_GRACE_MINS  = 2;
+const BOOKED_THRESHOLD_MINS = 30;
 
 const typeIcon: Record<string, string> = {
   snooker:  "🎱",
@@ -12,145 +20,699 @@ const typeIcon: Record<string, string> = {
   foosball: "⚽",
 };
 
-export function TableGrid() {
-  const { tables, now, openOrders, selectedOrderId, setWalkInWithTable, setTableSessionsTableId } =
-    usePOSStore();
+function fmtName(name: string) {
+  return name.replace(/\bps(\d)\b/gi, (_, n: string) => `PS${n}`);
+}
+
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+// ── Idle card ─────────────────────────────────────────────────────────────────
+
+function IdleCard({ table, isSelected, onClick, upcomingBooking }: {
+  table: TableWithStatus;
+  isSelected: boolean;
+  onClick: () => void;
+  upcomingBooking?: TableWithStatus["upcomingBooking"];
+}) {
+  const accentTop = upcomingBooking ? "#f59e0b" : "#2a2a2a";
+  return (
+    <div
+      onClick={onClick}
+      className={`rounded-xl flex flex-col min-h-[180px] bg-white dark:bg-[#111] overflow-hidden cursor-pointer transition-all select-none
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      style={{ border: isSelected ? undefined : "1px solid rgba(255,255,255,0.07)" }}
+    >
+      <div style={{ height: 4, background: accentTop, flexShrink: 0 }} />
+      <div className="flex flex-col flex-1 p-4">
+        <div className="flex items-start justify-between mb-3">
+          <span className="text-3xl leading-none">{typeIcon[table.type] ?? "🎱"}</span>
+          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-gray-800 dark:bg-[#2a2a2a] text-white uppercase tracking-wide">
+            Idle
+          </span>
+        </div>
+        <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight mb-1">
+          {fmtName(table.name)}
+        </p>
+        <p className="text-xs text-gray-400 dark:text-[#555] flex-1">
+          {formatCurrency(table.hourly_rate)}/hr
+        </p>
+        {upcomingBooking ? (
+          <div className="mt-3 flex items-center justify-between gap-1">
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full truncate"
+              style={{ background: "rgba(245,158,11,0.12)", color: "#d97706" }}
+            >
+              Next {fmtTime(upcomingBooking.scheduled_start)}
+            </span>
+            <span className="text-[10px] text-gray-300 dark:text-[#333] shrink-0">Tap →</span>
+          </div>
+        ) : (
+          <p className="text-[10px] text-gray-300 dark:text-[#333] mt-3 text-right">
+            Tap to start →
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Running card ──────────────────────────────────────────────────────────────
+
+function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
+  table: TableWithStatus;
+  item: OrderItem;
+  order: POSOrder | undefined;
+  locationId: string;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const store    = usePOSStore();
+  const { now }  = store;
+  const qc       = useQueryClient();
+  const [stopping,  setStopping]  = useState(false);
+  const [extending, setExtending] = useState<number | null>(null);
+
+  const liveBill = calculateBill([item], [], now).subtotal;
+  const elapsed  = item.actual_start ? formatElapsed(new Date(item.actual_start), now) : "";
+
+  let countdown        = "";
+  let isFiveMinWarning = false;
+  let isGrace          = false;
+  let progressPct      = 0;
+
+  if (item.expected_end) {
+    const exp    = new Date(item.expected_end);
+    const diffMs = exp.getTime() - now.getTime();
+    const otMins = -diffMs / 60000;
+    isFiveMinWarning = diffMs > 0 && diffMs < 5 * 60 * 1000;
+    isGrace          = otMins > 0 && otMins <= AUTO_STOP_GRACE_MINS;
+    countdown        = isGrace
+      ? formatCountdown(new Date(exp.getTime() + AUTO_STOP_GRACE_MINS * 60 * 1000), now)
+      : formatCountdown(exp, now);
+    if (item.actual_start && diffMs > 0) {
+      progressPct = Math.min(100, Math.max(0,
+        (now.getTime() - new Date(item.actual_start).getTime()) /
+        (exp.getTime()  - new Date(item.actual_start).getTime()) * 100
+      ));
+    }
+  }
+
+  const hasNextBooking = !!table.upcomingBooking;
+  const accentColor    = isGrace ? "#f97316" : isFiveMinWarning ? "#f59e0b" : "#10b981";
+  const bgClass        = isGrace
+    ? "bg-orange-50 dark:bg-[rgba(249,115,22,0.06)]"
+    : isFiveMinWarning
+    ? "bg-amber-50 dark:bg-[rgba(245,158,11,0.06)]"
+    : "bg-emerald-50 dark:bg-[rgba(16,185,129,0.05)]";
+
+  async function stopSession(e: React.MouseEvent) {
+    e.stopPropagation();
+    setStopping(true);
+    const nowISO = new Date().toISOString();
+    store.patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
+    const res = await fetch("/api/sessions/stop", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ order_item_id: item.id }),
+    });
+    if (!res.ok) {
+      store.patchOrderItem(item.id, { status: "running", actual_end: null });
+      toast.error("Failed to stop session");
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    }
+    setStopping(false);
+  }
+
+  async function quickExtend(e: React.MouseEvent, mins: number) {
+    e.stopPropagation();
+    setExtending(mins);
+    const prevEnd = item.expected_end;
+    const newEnd  = new Date(new Date(prevEnd ?? now).getTime() + mins * 60 * 1000).toISOString();
+    store.patchOrderItem(item.id, { expected_end: newEnd });
+    const res = await fetch("/api/sessions/extend", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ order_item_id: item.id, extend_mins: mins }),
+    });
+    if (!res.ok) {
+      store.patchOrderItem(item.id, { expected_end: prevEnd });
+      toast.error("Failed to extend");
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    }
+    setExtending(null);
+  }
 
   return (
-    <div className="space-y-1">
-      {tables.map((table) => {
-        const item    = table.activeOrderItem;
-        const booking = table.upcomingBooking;
+    <div
+      onClick={onClick}
+      className={`rounded-xl flex flex-col min-h-[220px] ${bgClass} overflow-hidden cursor-pointer transition-all select-none
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      style={{ border: isSelected ? undefined : `1px solid ${accentColor}22` }}
+    >
+      <div style={{ height: 4, background: accentColor, flexShrink: 0 }} />
+      <div className="flex flex-col flex-1 p-4 gap-2">
 
-        const isRunning = !!item && item.status === "running";
-        const isBooked  = !isRunning && !!booking;
-        const isIdle    = !isRunning && !isBooked;
-
-        const order = openOrders.find((o) =>
-          o.items.some((i) => i.table_id === table.id && i.status === "running")
-        );
-
-        let liveBill         = 0;
-        let isOvertime       = false;
-        let isGrace          = false;
-        let isFiveMinWarning = false;
-        let countdown        = "";
-        let elapsed          = "";
-
-        if (isRunning && item) {
-          liveBill = calculateBill([item], [], now).subtotal;
-          if (item.actual_start) elapsed = formatElapsed(new Date(item.actual_start), now);
-          if (item.expected_end) {
-            const exp    = new Date(item.expected_end);
-            const diffMs = exp.getTime() - now.getTime();
-            const otMs   = -diffMs; // positive when past expected_end
-
-            isFiveMinWarning = diffMs > 0 && diffMs < 5 * 60 * 1000;
-            isGrace          = otMs > 0 && otMs <= GRACE_MINS * 60 * 1000 && !booking;
-            isOvertime       = diffMs < 0 && !isGrace;
-            countdown        = isGrace
-              ? formatCountdown(new Date(exp.getTime() + GRACE_MINS * 60 * 1000), now)
-              : formatCountdown(exp, now);
-          }
-        }
-
-        const isSelected    = order?.id === selectedOrderId;
-        const hasNextBooking = !!booking;
-        const showHandover  = isRunning && isOvertime && hasNextBooking;
-
-        // Status badge
-        const badge = isRunning
-          ? { label: showHandover ? "Handover" : isOvertime ? "OT" : isGrace ? "Grace" : "Live",
-              color: showHandover ? "#f97316" : isOvertime ? "#ef4444" : (isGrace || isFiveMinWarning) ? "#f59e0b" : "#10b981",
-              bg:    showHandover ? "rgba(249,115,22,0.1)" : isOvertime ? "rgba(239,68,68,0.1)" : (isGrace || isFiveMinWarning) ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)" }
-          : isBooked
-          ? { label: "Booked", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" }
-          : null;
-
-        return (
-          <button
-            key={table.id}
-            onClick={() => isIdle ? setWalkInWithTable(table.id) : setTableSessionsTableId(table.id)}
-            className={cn(
-              "w-full text-left rounded-lg transition-all duration-100 active:scale-[0.98]",
-              isSelected
-                ? "bg-orange-50 hover:bg-orange-100 dark:bg-[rgba(212,84,26,0.06)] dark:hover:bg-[rgba(212,84,26,0.1)] border border-orange-200 dark:border-[rgba(212,84,26,0.25)]"
-                : isRunning
-                ? showHandover
-                  ? "bg-white hover:bg-orange-50 dark:bg-[#111] dark:hover:bg-[rgba(249,115,22,0.05)] border-2 border-orange-300 dark:border-[rgba(249,115,22,0.35)]"
-                  : isOvertime
-                  ? "bg-white hover:bg-red-50 dark:bg-[#111] dark:hover:bg-[rgba(239,68,68,0.05)] border-2 border-red-300 dark:border-[rgba(239,68,68,0.35)]"
-                  : (isGrace || isFiveMinWarning)
-                  ? "bg-white hover:bg-amber-50 dark:bg-[#111] dark:hover:bg-[rgba(245,158,11,0.05)] border-2 border-amber-300 dark:border-[rgba(245,158,11,0.35)]"
-                  : "bg-white hover:bg-emerald-50 dark:bg-[#111] dark:hover:bg-[rgba(16,185,129,0.05)] border-2 border-emerald-300 dark:border-[rgba(16,185,129,0.35)]"
-                : isBooked
-                ? "bg-white hover:bg-amber-50 dark:bg-[#111] dark:hover:bg-[rgba(245,158,11,0.04)] border-2 border-amber-200 dark:border-[rgba(245,158,11,0.25)]"
-                : "bg-white hover:bg-gray-50 dark:bg-[#0a0a0a] dark:hover:bg-[#161616] border border-gray-100 dark:border-[#1f1f1f]"
-            )}
-            style={{ padding: isIdle ? "8px 10px" : "10px 10px" }}
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
+            <span className="text-xs font-semibold text-gray-600 dark:text-[#888] truncate">
+              {fmtName(table.name)}
+            </span>
+          </div>
+          <span
+            className={`text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide ${
+              isGrace || isFiveMinWarning ? "animate-pulse" : ""
+            }`}
+            style={{ background: accentColor }}
           >
-            {/* Row 1: icon + name + badge */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-sm shrink-0">{typeIcon[table.type] ?? "🎱"}</span>
-                <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{table.name}</span>
-              </div>
-              {badge ? (
+            {isGrace ? "Grace" : isFiveMinWarning ? "Ending" : "Live"}
+          </span>
+        </div>
+
+        {/* Customer + live bill */}
+        <div className="flex items-baseline justify-between">
+          <p className="font-bold text-gray-900 dark:text-white text-base leading-tight truncate flex-1 mr-2">
+            {order?.customer_name ?? "—"}
+          </p>
+          <span className="font-bold text-lg tabular-nums shrink-0" style={{ color: "#D4541A" }}>
+            {formatCurrency(liveBill)}
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div
+          className="h-1.5 rounded-full overflow-hidden"
+          style={{ background: isGrace ? "rgba(249,115,22,0.15)" : "rgba(0,0,0,0.07)" }}
+        >
+          <div
+            className="h-full rounded-full"
+            style={{
+              width:      isGrace ? "100%" : `${progressPct}%`,
+              background: isGrace ? "#f97316" : progressPct > 90 ? "#f59e0b" : "#D4541A",
+              transition: "width 1s linear",
+            }}
+          />
+        </div>
+
+        {/* Elapsed + countdown */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-mono tabular-nums text-gray-500 dark:text-[#666]">
+            {elapsed}
+          </span>
+          <span
+            className="text-xs font-mono font-bold tabular-nums"
+            style={{ color: isGrace ? "#f97316" : isFiveMinWarning ? "#f59e0b" : "#10b981" }}
+          >
+            {isGrace ? `${countdown} stop` : `${countdown} left`}
+          </span>
+        </div>
+
+        {/* Upcoming booking pill */}
+        {table.upcomingBooking && (
+          <div>
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(245,158,11,0.15)", color: "#d97706" }}
+            >
+              → {table.upcomingBooking.order?.customer_name ?? "Booking"} next
+            </span>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex gap-1.5 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+          {!hasNextBooking && (
+            <>
+              <button
+                onClick={(e) => quickExtend(e, 15)}
+                disabled={!!extending || stopping}
+                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
+                style={{
+                  background: "rgba(16,185,129,0.1)",
+                  color:      "#10b981",
+                  border:     "1px solid rgba(16,185,129,0.2)",
+                }}
+              >
+                {extending === 15 ? "…" : "+15m"}
+              </button>
+              <button
+                onClick={(e) => quickExtend(e, 30)}
+                disabled={!!extending || stopping}
+                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
+                style={{
+                  background: "rgba(16,185,129,0.1)",
+                  color:      "#10b981",
+                  border:     "1px solid rgba(16,185,129,0.2)",
+                }}
+              >
+                {extending === 30 ? "…" : "+30m"}
+              </button>
+            </>
+          )}
+          <button
+            onClick={stopSession}
+            disabled={stopping || !!extending}
+            className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40 hover:brightness-110"
+            style={{ background: "#ef4444" }}
+          >
+            {stopping ? "…" : "■ Stop"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Booked card ───────────────────────────────────────────────────────────────
+
+function BookedCard({ table, locationId, isSelected, onClick }: {
+  table: TableWithStatus;
+  locationId: string;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const { now }  = usePOSStore();
+  const qc       = useQueryClient();
+  const booking  = table.upcomingBooking!;
+  const [loadingCheckin, setLoadingCheckin] = useState(false);
+  const [loadingNoshow,  setLoadingNoshow]  = useState(false);
+  const [confirmNoshow,  setConfirmNoshow]  = useState(false);
+
+  const start      = new Date(booking.scheduled_start);
+  const diffMs     = start.getTime() - now.getTime();
+  const minsAway   = Math.max(0, Math.ceil(diffMs / 60000));
+  const isImminent = diffMs > 0 && diffMs < 10 * 60 * 1000;
+  const isOverdue  = diffMs <= 0;
+
+  async function checkIn(e: React.MouseEvent) {
+    e.stopPropagation();
+    setLoadingCheckin(true);
+    const res = await fetch(`/api/bookings/${booking.id}/checkin`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json() as { error?: string };
+      toast.error(body.error ?? "Check-in failed");
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+    }
+    setLoadingCheckin(false);
+  }
+
+  async function markNoShow(e: React.MouseEvent) {
+    e.stopPropagation();
+    setLoadingNoshow(true);
+    const res = await fetch(`/api/bookings/${booking.id}/noshow`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json() as { error?: string };
+      toast.error(body.error ?? "Failed to mark no-show");
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+    }
+    setLoadingNoshow(false);
+    setConfirmNoshow(false);
+  }
+
+  return (
+    <div
+      onClick={onClick}
+      className={`rounded-xl flex flex-col min-h-[200px] bg-amber-50 dark:bg-[rgba(245,158,11,0.05)] overflow-hidden cursor-pointer transition-all select-none
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      style={{ border: isSelected ? undefined : "1px solid rgba(245,158,11,0.22)" }}
+    >
+      <div style={{ height: 4, background: "#f59e0b", flexShrink: 0 }} />
+      <div className="flex flex-col flex-1 p-4 gap-2">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
+            <span className="text-xs font-semibold text-gray-600 dark:text-[#888] truncate">
+              {fmtName(table.name)}
+            </span>
+          </div>
+          <span
+            className="text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide"
+            style={{ background: "#f59e0b" }}
+          >
+            Booked
+          </span>
+        </div>
+
+        {/* Customer */}
+        <p className="font-bold text-gray-900 dark:text-white text-base leading-tight truncate">
+          {booking.order?.customer_name}
+        </p>
+
+        {/* Time + countdown */}
+        <div>
+          <p className="font-mono text-sm font-bold tabular-nums" style={{ color: "#f59e0b" }}>
+            {fmtTime(booking.scheduled_start)} → {fmtTime(booking.scheduled_end)}
+          </p>
+          <p
+            className="text-xs font-semibold mt-0.5"
+            style={{ color: isOverdue ? "#ef4444" : isImminent ? "#f59e0b" : "#9ca3af" }}
+          >
+            {isOverdue
+              ? `${Math.abs(Math.ceil(diffMs / 60000))}m overdue`
+              : isImminent
+              ? "Arriving now!"
+              : `in ${minsAway}m`}
+          </p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-1.5 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+          {!confirmNoshow ? (
+            <>
+              <button
+                onClick={checkIn}
+                disabled={loadingCheckin || loadingNoshow}
+                className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+                style={{ background: "#f59e0b" }}
+              >
+                {loadingCheckin ? "…" : "Check In"}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmNoshow(true); }}
+                disabled={loadingCheckin || loadingNoshow}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 disabled:opacity-40
+                  bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
+                  text-gray-400 dark:text-[#555] hover:text-red-400 hover:border-red-200 dark:hover:border-red-900"
+              >
+                No-show
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={markNoShow}
+                disabled={loadingNoshow}
+                className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+                style={{ background: "#ef4444" }}
+              >
+                {loadingNoshow ? "…" : "Confirm"}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmNoshow(false); }}
+                disabled={loadingNoshow}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all
+                  bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
+                  text-gray-400 dark:text-[#555] hover:text-gray-700 dark:hover:text-white"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bill-ready card ───────────────────────────────────────────────────────────
+
+function BillReadyCard({ table, order, isSelected, onClick }: {
+  table: TableWithStatus;
+  order: POSOrder;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const store   = usePOSStore();
+  const { now } = store;
+
+  const billDue = calculateBill(
+    order.items.filter((i) => !i.is_deleted),
+    order.extras.filter((e) => !e.is_deleted),
+    now, null, order.advance_paid ?? 0
+  ).totalDue;
+
+  return (
+    <div
+      onClick={onClick}
+      className={`rounded-xl flex flex-col min-h-[200px] bg-orange-50 dark:bg-[rgba(212,84,26,0.07)] overflow-hidden cursor-pointer transition-all select-none
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      style={{ border: isSelected ? undefined : "1px solid rgba(212,84,26,0.22)" }}
+    >
+      <div style={{ height: 4, background: "#D4541A", flexShrink: 0 }} />
+      <div className="flex flex-col flex-1 p-4 gap-2">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
+            <span className="text-xs font-semibold text-gray-600 dark:text-[#888] truncate">
+              {fmtName(table.name)}
+            </span>
+          </div>
+          <span
+            className="text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide"
+            style={{ background: "#D4541A" }}
+          >
+            Bill Ready
+          </span>
+        </div>
+
+        {/* Customer */}
+        <p className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+          {order.customer_name}
+        </p>
+        <p className="text-xs text-gray-400 dark:text-[#555]">Session ended</p>
+
+        {/* Amount */}
+        <p
+          className="font-bold tabular-nums flex-1"
+          style={{ fontSize: 28, color: "#D4541A", lineHeight: 1.1 }}
+        >
+          {formatCurrency(billDue)}
+        </p>
+
+        {/* Quick collect — goes straight to finalize modal */}
+        <button
+          onClick={(e) => { e.stopPropagation(); store.setFinalizeOrderId(order.id); }}
+          className="w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
+          style={{ background: "#D4541A" }}
+        >
+          Collect Bill
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Upcoming strip ────────────────────────────────────────────────────────────
+
+type BookingRow = Booking & {
+  order: Pick<Order, "customer_name" | "customer_phone" | "advance_paid">;
+  order_item: Pick<OrderItem, "table_id" | "status"> | null;
+};
+
+function UpcomingStrip({ locationId }: { locationId: string }) {
+  const { now, tables } = usePOSStore();
+
+  const { data: bookings = [] } = useQuery<BookingRow[]>({
+    queryKey: ["pos-bookings", locationId],
+    queryFn: async () => {
+      const res  = await fetch(`/api/pos/bookings?locationId=${locationId}`);
+      const body = await res.json() as { success: boolean; data: BookingRow[] };
+      return body.success ? body.data : [];
+    },
+    staleTime: 30000,
+  });
+
+  const seen     = new Set<string>();
+  const upcoming = bookings
+    .filter((b) => {
+      const oi = b.order_item as Pick<OrderItem, "table_id" | "status"> | null;
+      if (oi?.status !== "scheduled") return false;
+      const key = `${oi.table_id}:${b.scheduled_start}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
+    .slice(0, 8);
+
+  if (upcoming.length === 0) return null;
+
+  return (
+    <div className="shrink-0 border-t border-gray-200 dark:border-[#1f1f1f] bg-white dark:bg-[#111]">
+      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+        <CalendarClock className="h-3.5 w-3.5 text-gray-400 dark:text-[#555]" />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+          Upcoming Today
+        </span>
+        <span
+          className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+          style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
+        >
+          {upcoming.length}
+        </span>
+      </div>
+
+      <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
+        {upcoming.map((booking) => {
+          const oi         = booking.order_item as Pick<OrderItem, "table_id" | "status"> | null;
+          const table      = tables.find((t) => t.id === oi?.table_id);
+          const start      = new Date(booking.scheduled_start);
+          const diffMs     = start.getTime() - now.getTime();
+          const minsAway   = Math.max(0, Math.ceil(diffMs / 60000));
+          const isOverdue  = diffMs <= 0;
+          const isImminent = diffMs > 0 && diffMs < 10 * 60 * 1000;
+
+          return (
+            <div
+              key={booking.id}
+              className="shrink-0 rounded-xl border px-3 py-2.5 min-w-[150px] bg-gray-50 dark:bg-[#0d0d0d]"
+              style={{
+                borderColor: isOverdue
+                  ? "rgba(239,68,68,0.25)"
+                  : isImminent
+                  ? "rgba(245,158,11,0.25)"
+                  : "rgba(0,0,0,0.06)",
+              }}
+            >
+              {table && (
                 <span
-                  className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                  style={{ background: badge.bg, color: badge.color }}
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide mb-1 inline-block"
+                  style={{ background: "rgba(212,84,26,0.08)", color: "#D4541A" }}
                 >
-                  {badge.label}
-                </span>
-              ) : (
-                <span className="text-[9px] font-bold shrink-0 text-gray-400 dark:text-[#555]">
-                  Idle
+                  {table.name}
                 </span>
               )}
+              <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                {booking.order?.customer_name}
+              </p>
+              <p className="font-mono text-xs font-bold tabular-nums mt-0.5" style={{ color: "#f59e0b" }}>
+                {fmtTime(booking.scheduled_start)}
+              </p>
+              <p
+                className="text-[10px] font-semibold mt-0.5"
+                style={{ color: isOverdue ? "#ef4444" : isImminent ? "#f59e0b" : "#9ca3af" }}
+              >
+                {isOverdue
+                  ? `${Math.abs(Math.ceil(diffMs / 60000))}m late`
+                  : isImminent
+                  ? "Arriving!"
+                  : `in ${minsAway}m`}
+              </p>
             </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-            {/* Running details */}
-            {isRunning && item && (
-              <div className="mt-2 space-y-1">
-                {order?.customer_name && (
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{order.customer_name}</p>
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono font-bold tabular-nums text-gray-600 dark:text-[#888]">
-                    {elapsed}
-                  </span>
-                  <span
-                    className="text-[11px] font-mono font-semibold tabular-nums"
-                    style={{ color: showHandover ? "#f97316" : isOvertime ? "#ef4444" : (isGrace || isFiveMinWarning) ? "#f59e0b" : "#10b981" }}
-                  >
-                    {showHandover ? "handover" : isOvertime ? `+${countdown} OT` : isGrace ? `${countdown} grace` : countdown + " left"}
-                  </span>
-                </div>
-                <p className="text-sm font-bold tabular-nums" style={{ color: "#D4541A" }}>{formatCurrency(liveBill)}</p>
-              </div>
-            )}
+// ── Main export ───────────────────────────────────────────────────────────────
 
-            {/* Booked details */}
-            {isBooked && booking && (
-              <div className="mt-1.5 space-y-0.5">
-                <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{booking.order?.customer_name}</p>
-                <p className="text-[11px] font-mono" style={{ color: "#f59e0b" }}>
-                  {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-              </div>
-            )}
+interface TableGridProps {
+  locationId: string;
+}
 
-            {/* Idle hint */}
-            {isIdle && (
-              <p className="text-[10px] mt-0.5 font-bold text-gray-500 dark:text-[#555]">Tap to start</p>
-            )}
-          </button>
-        );
-      })}
+export function TableGrid({ locationId }: TableGridProps) {
+  const store                                    = usePOSStore();
+  const { tables, openOrders, selectedTableId, now } = store;
 
-      {tables.length === 0 && (
-        <p className="py-8 text-center text-xs text-gray-400 dark:text-[#444]">No tables configured</p>
-      )}
+  const billReadyMap = useMemo(() => {
+    const map: Record<string, POSOrder> = {};
+    for (const order of openOrders) {
+      const hasRunning  = order.items.some((i) => !i.is_deleted && i.status === "running");
+      const hasFinished = order.items.some((i) => !i.is_deleted && i.status === "finished");
+      if (!hasRunning && hasFinished) {
+        for (const item of order.items) {
+          if (!item.is_deleted && item.status === "finished") {
+            map[item.table_id] = order;
+          }
+        }
+      }
+    }
+    return map;
+  }, [openOrders]);
+
+  if (tables.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-[#444]">
+        No tables configured
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {tables.map((table) => {
+            const item              = table.activeOrderItem;
+            const isRunning         = !!item && item.status === "running";
+            const billReadyOrder    = billReadyMap[table.id];
+            const isBillReady       = !!billReadyOrder && !isRunning;
+            const minsUntilBooking  = table.upcomingBooking
+              ? (new Date(table.upcomingBooking.scheduled_start).getTime() - now.getTime()) / 60000
+              : Infinity;
+            const isBooked          = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking <= BOOKED_THRESHOLD_MINS;
+            const isIdleWithUpcoming = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking > BOOKED_THRESHOLD_MINS;
+            const isSelected        = selectedTableId === table.id;
+            const toggle            = () => store.setSelectedTableId(isSelected ? null : table.id);
+
+            if (isRunning && item) {
+              const order = openOrders.find((o) => o.items.some((i) => i.id === item.id));
+              return (
+                <RunningCard
+                  key={table.id}
+                  table={table}
+                  item={item}
+                  order={order}
+                  locationId={locationId}
+                  isSelected={isSelected}
+                  onClick={toggle}
+                />
+              );
+            }
+
+            if (isBillReady && billReadyOrder) {
+              return (
+                <BillReadyCard
+                  key={table.id}
+                  table={table}
+                  order={billReadyOrder}
+                  isSelected={isSelected}
+                  onClick={toggle}
+                />
+              );
+            }
+
+            if (isBooked) {
+              return (
+                <BookedCard
+                  key={table.id}
+                  table={table}
+                  locationId={locationId}
+                  isSelected={isSelected}
+                  onClick={toggle}
+                />
+              );
+            }
+
+            return (
+              <IdleCard
+                key={table.id}
+                table={table}
+                isSelected={isSelected}
+                onClick={toggle}
+                upcomingBooking={isIdleWithUpcoming ? table.upcomingBooking : undefined}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <UpcomingStrip locationId={locationId} />
     </div>
   );
 }

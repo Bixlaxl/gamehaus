@@ -79,17 +79,21 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - Pure function `calculateBill(items, extras, now, coupon?, advancePaid?)`
 - Called every second on POS for live preview; once at finalize
 - Points discount applied OUTSIDE `calculateBill` — in finalize route after `totalDue` is computed
-- Exports `GRACE_MINS = 5` and `OT_BLOCK_MINS = 15` (used by table-grid and order-panel)
-- `BillingLineItem` has `billedOTMins` field: 0 during grace, rounds up to 15-min blocks after
+- **Slot-based billing**: charge is always locked to the booked slot (`expected_end - actual_start`). Stopping early does not reduce the bill. No per-minute ticking, no OT blocks.
+- For online check-ins, `actual_start = scheduled_start` and `expected_end = scheduled_end`, so the full booked slot is always billed regardless of when the customer arrives.
+- For walk-ins, `actual_start = now` and `expected_end = actual_start + chosen_duration`.
+- `GRACE_MINS` and `OT_BLOCK_MINS` are exported from the engine but no longer used in billing logic. The 2-minute auto-stop grace window is a local constant (`AUTO_STOP_GRACE_MINS = 2`) in `table-grid.tsx` and `context-panel.tsx`.
 
-### OT / Grace / Auto-extend
-- 5-min grace period after `expected_end`: free, no charge, "Grace" badge shown
-- After grace: charged in 15-min blocks (1 block = 15 mins at table rate)
-- **Auto-extend** (`hooks/use-auto-extend.ts`): fires automatically when a block threshold is crossed, no user action needed
+### Grace / Auto-stop
+- **2-minute grace** after `expected_end`: session auto-stops, "Grace" badge shown in POS
+- No overtime charges — billing is purely slot-based (booked duration, not actual duration)
+- **Auto-stop** (`hooks/use-auto-stop.ts`): fires when grace window expires, stops the session automatically
   - Skips tables that have an upcoming booking (`upcomingBooking` on `TableWithStatus`)
-  - Three refs prevent duplicates: `blocksHandled`, `lastSeenExpectedEnd` (resets counter when DB updates `expected_end`), `inFlight`
-  - Grace resets after each auto-extend (new `expected_end` moves 15 min forward)
-- Tables **with** next booking are blocked from auto-extend; staff must manually stop
+
+### Procedural Billing Rules
+- **Online bookings**: once advance is paid and slot is confirmed, the full slot amount is owed. Late arrival does not reduce the bill.
+- **No-show**: staff marks no-show from `PanelBooked`. Order is finalized immediately with `amount_due = 0` (advance already collected by Razorpay is the settlement). Slot is freed (order_item cancelled).
+- **Walk-ins**: once an order is created and session started, the full chosen duration is owed. No cancel option in POS.
 
 ### Customer Lookup
 - **POS walk-in**: debounced lookup after ≥6 digits typed — phone only, no name required, auto-fills name if field empty
@@ -107,19 +111,16 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 | `/[locationSlug]/book` | `app/(public)/[locationSlug]/book/page.tsx` | Checkout — Razorpay payment |
 | `/booking/[bookingId]` | `components/public/booking-confirmation.tsx` | Post-payment confirmation |
 
-### POS (Staff)
+### POS (Staff) — 2-panel layout
 | Component | Description |
 |-----------|-------------|
-| `components/pos/pos-screen.tsx` | Root POS layout — loads data, sets up realtime |
-| `components/pos/table-grid.tsx` | Left sidebar — table list with live status |
-| `components/pos/order-panel.tsx` | Right panel — selected order details, extras, bill |
-| `components/pos/bottom-bar.tsx` | Bottom bar — New Walk-in, Check-in, Upcoming |
-| `components/pos/walk-in-slider.tsx` | Slide-in panel for new walk-in entry |
-| `components/pos/checkin-slider.tsx` | Slide-in panel for online booking check-in |
+| `components/pos/pos-screen.tsx` | Root POS layout — loads data, sets up realtime, builds `TableWithStatus` |
+| `components/pos/table-grid.tsx` | Left panel — table cards with live status (idle/running/booked/bill-ready) |
+| `components/pos/context-panel.tsx` | Right panel — context-aware: PanelDefault (upcoming), PanelWalkIn, PanelSession, PanelBooked |
+| `components/pos/upcoming-view.tsx` | Upcoming bookings list used inside PanelDefault |
+| `components/pos/walk-in-slider.tsx` | Slide-in panel for new walk-in (legacy, may still be wired) |
 | `components/pos/finalize-bill-modal.tsx` | Payment + bill finalization modal |
 | `components/pos/extend-modal.tsx` | Extend running session dialog |
-| `components/pos/upcoming-drawer.tsx` | Upcoming bookings drawer |
-| `components/pos/pos-alerts.tsx` | Alert banner for overtime etc. |
 
 ### Owner
 | Path | Description |
@@ -146,8 +147,8 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 | POST | `/api/sessions/start` | staff | Start a table session |
 | POST | `/api/sessions/stop` | staff | Stop a running session |
 | POST | `/api/sessions/extend` | staff | Extend expected end time |
-| POST | `/api/bookings/[id]/checkin` | staff | Check in an online booking |
-| POST | `/api/bookings/[id]/noshow` | staff | Mark no-show |
+| POST | `/api/bookings/[id]/checkin` | staff | Check in — sets `actual_start = scheduled_start`, `expected_end = scheduled_end` (full slot billed) |
+| POST | `/api/bookings/[id]/noshow` | staff | Mark no-show — cancels order_item (frees slot), finalizes order with `amount_due = 0` (advance already collected) |
 | POST | `/api/payments/create-order` | public | Create Razorpay order |
 | POST | `/api/payments/webhook` | Razorpay | Confirm payment, update advance_paid |
 | GET/POST | `/api/locations` | owner | List/create locations |
@@ -186,10 +187,13 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] Multi-select slots (click to extend/shrink selection, stops before occupied slots)
 - [x] Slot filtering: shows from current time (not from opening time)
 - [x] Midnight-crossing locations handled (e.g. 11 PM–2 AM)
-- [x] Occupied slots (green checkmark, non-interactive) block booked ranges
+- [x] **Booked slots shown in grid** (not hidden) — muted red tint + strikethrough + "Booked" label, non-interactive
+- [x] **Slot label flip**: before start selected → shows start time; after start selected → all other slots show their END time so clicking "8:45" means "session ends at 8:45"
+- [x] **Slot loading skeleton**: `slotsLoading` state shows animated skeleton pills while API fetches blocked ranges — no flash of "all available"
 - [x] Cart with slot range, duration, amount — persisted to localStorage
 - [x] Cart isolated per location (switching locations clears cart)
 - [x] **Mobile optimized**: slot grid `grid-cols-2 sm:grid-cols-3` (2 cols on phones), booking sheet padding tighter on mobile
+- [x] **Booking confirmation skeleton** (`loading.tsx`) — Next.js App Router loading file shows immediately while server component fetches order data
 
 ### Checkout (`/[locationSlug]/book`)
 - [x] Cart summary with cart item delete
@@ -208,13 +212,23 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] Foosball icon fixed (⚽)
 - [x] Walk-in slider: customer name (auto-focus), phone, table multi-select, duration presets (30m/1h/1.5h/2h + custom); session starts fire in **parallel** (Promise.all, not sequential)
 - [x] Walk-in creates order + immediately starts all sessions
-- [x] Check-in slider: search by name/phone, check in confirmed bookings
-- [x] Order panel: active sessions with stop/extend, extras (add/delete), bill summary; Grace badge during 5-min grace window
-- [x] Extend modal: +30m, +60m, custom mins (respects 10-min buffer for upcoming bookings); closes **instantly** with optimistic countdown update
-- [x] Finalize bill modal: bill breakdown, payment method (cash/upi/card), collect; handover flow if a next booking exists on the freed table
-- [x] Upcoming bookings drawer
-- [x] Back-button protection (confirm before leaving POS)
-- [x] Sign out in header
+- [x] **2-panel layout**: table grid (left, flex-1) + context panel (right, fixed 380px) — always visible, no overlays for core flows
+- [x] Context panel adapts by table state: PanelDefault (upcoming bookings list), PanelWalkIn (idle table), PanelSession (running/bill-ready), PanelBooked (upcoming booking)
+- [x] PanelBooked: Check In button (direct API call, no search drawer) + No-show / Close Bill button (2-step confirm, finalizes order with advance as settlement, frees slot)
+- [x] PanelBooked: shows advance collected badge so staff can see what was paid online
+- [x] **Slot-based procedural billing**: check-in sets `actual_start = scheduled_start` — customer billed for full booked slot regardless of arrival time
+- [x] Walk-in: once session started, full chosen duration is owed — no cancel option
+- [x] Upcoming booking pill shown on running table cards (amber, shows next customer name)
+- [x] Extend modal: +30m, +60m, custom mins (respects 10-min buffer for upcoming bookings); closes instantly with optimistic countdown update
+- [x] Finalize bill modal: bill breakdown, payment method (cash/upi only — card removed), collect
+- [x] **Finalize bill uses `finalizeOrderId`** to look up order — NOT `selectedOrderId` (those are different store fields; using wrong one caused ₹0 bill bug)
+- [x] **Walk-in without phone**: finalize modal shows phone input; staff can enter phone at billing time; phone saved to order + customer profile updated
+- [x] **Loyalty points in context panel footer**: balance + redeem input shown directly in "Finalize & Collect" footer when bill is ready — no need to open modal first
+- [x] Back-button protection (confirm before leaving POS) + tab/window close protection (`beforeunload`)
+- [x] Sign out shows "Signing out…" loading state with animated icon
+- [x] **Full dark mode POS**: `dark` class forced on outer wrapper div — all child `dark:` variants apply automatically. Canvas `#0a0a0a`, side rail `#161616`, header/panels `#111`, borders `#1f1f1f`–`#222`
+- [x] **POS side rail**: `#161616` bg, `#222` border, "Gamehaus" brand in orange `#D4541A`, sign-out white
+- [x] **Walk-in allowed on tables with bookings >30 mins away**: `BOOKED_THRESHOLD_MINS = 30` in both `table-grid.tsx` and `context-panel.tsx`. Tables show as idle (with amber "Next [time]" pill) when booking is >30 mins away
 - [x] **Optimistic UI on all POS actions**: stop session, start session, extend session, add extra, delete extra — UI updates on tap, reverts on API error
 
 ### Owner Panel (`/owner/*`)
@@ -226,6 +240,11 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] Revenue reports
 - [x] **Dark left sidebar nav** — replaced top nav; 240px fixed sidebar, orange active state, initials avatar, sign out at bottom
 - [x] **Dashboard overview** — 4 stat cards (Today Revenue with ↑/↓ % vs yesterday, Live Tables, Bookings Today, Month Revenue); 7-day revenue bar chart (pure CSS, no library); Live Now panel (running tables with customer, elapsed, rate); Recent 8 orders table
+- [x] **Per-location filtering on dashboard** — URL param `?loc={id}` filters all stats, live sessions, bookings, and recent orders to one location. Location tabs rendered as `<Link>` pills
+- [x] **Per-location filtering on reports** — client-side `selectedLocationId` state; location tabs above the data; `filteredOrders` drives all derived stats (revenue by location, payment breakdown, top customers, summary cards)
+- [x] **Revenue includes `advance_paid + amount_due`** — online Razorpay payments live in `advance_paid`; walk-in revenue in `amount_due`; both summed everywhere in dashboard and reports
+- [x] **Business-day date bounds in reports** — fetches location opening/closing times; date range is `from+openingTime` → `to+closingTime` (may cross midnight), not calendar midnight
+- [x] **Card removed** from payment methods — only cash/upi. Finalize schema and modal both updated
 - [x] **Optimistic UI across all owner pages** — toggle/deactivate/reactivate/delete update instantly, dialogs close immediately; edit forms close on submit with optimistic cache patch; all roll back cleanly on API error
 
 ---
@@ -256,6 +275,8 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - [x] Walk-in slider: debounced phone lookup (600ms after ≥6 chars), shows "X pts · N visits" amber badge, auto-fills name if field empty
 - [x] POS store: `pointsToRedeem: Record<string, number>` + `setPointsToRedeem(orderId, points)`
 - [x] Finalize bill modal: fetches customer points on open, shows balance, redemption input (clamped to min(balance, totalDue)), live total update, points-to-earn preview, passes `points_redeemed` to API
+- [x] **Phone entry at finalize time**: if walk-in had no phone, modal shows phone input; lookup fires at ≥10 digits; `customer_phone` sent to finalize route which saves it to the order and updates `customer_profiles`
+- [x] **Points shown in context panel footer**: `PanelSession` fetches customer points on mount, shows balance + redeem input directly in the bill footer; `clampedRedeem` updates `store.pointsToRedeem` and live total
 
 ### Online Checkout
 - [x] Phone field: debounced lookup → amber badge "X points available (₹X off)"
@@ -287,12 +308,21 @@ Online (webhook):
 - **`active:` on divs**: CSS `:active` pseudo-class works on div children of `<a>` tags in browsers.
 - **Tailwind dark: prefix**: Works because next-themes adds `dark` class to `<html>`. Use this for theme-reactive styles instead of JS `isDark` variable where possible.
 - **Walk-in start flow**: Creates order → fetches `order_item` IDs by `order_id` + `table_id` → calls `/api/sessions/start` per table in **parallel** (`Promise.all`).
-- **Billing**: `calculateBill()` is pure, called every second. Points discount applied after it returns, in the finalize route.
+- **Billing**: `calculateBill()` is pure, slot-based (charges `expected_end - actual_start`, not actual duration). Points discount applied after it returns, in the finalize route. Stopping early does not reduce the bill.
+- **Check-in anchor**: `actual_start` is set to `booking.scheduled_start` (not arrival time) so late arrivals still pay the full booked slot.
+- **No-show close**: noshow route finalizes the order with `amount_due = 0`; the Razorpay payment row already exists from the webhook. No new payment row needed — just close the order.
+- **`pos-bookings` API**: returns `advance_paid` from the joined order so `PanelBooked` can display how much was collected online.
 - **Optimistic updates pattern**: All fast mutations (toggle, stop, start, extend, add/delete extra) update Zustand store or TanStack Query cache immediately, then fire the API. On error, revert to previous state. On success, `invalidateQueries` for a fresh sync.
 - **Owner panel optimistic pattern**: Uses TanStack Query `onMutate` → cancel in-flight queries → snapshot previous data → patch cache → return `{ prev }` for rollback in `onError`. `onSettled` always invalidates for a fresh sync.
 - **formatElapsed** in `lib/utils.ts` — computes elapsed from `actual_start`.
 - **Razorpay script**: Use `<Script strategy="lazyOnload">` from `next/script`, NOT a plain `<script>` tag — plain tags cause a preload warning because Next.js preloads the script but it isn't used within a few seconds on page load.
 - **Mobile breakpoint**: Tailwind `sm:` = 640px. Phones are typically < 640px, tablets/desktops are ≥ 640px. Use `sm:` prefix to widen layouts at tablet and above.
+- **POS dark mode**: the POS wrapper has `className="dark ..."` which forces dark mode for all children regardless of the site-wide theme. All `dark:` Tailwind classes inside the POS apply automatically.
+- **`finalizeOrderId` vs `selectedOrderId`**: two separate Zustand fields. `selectedOrderId` = order selected on table grid. `finalizeOrderId` = order being finalized. Always use `openOrders.find(o => o.id === store.finalizeOrderId)` in the finalize modal — never `getSelectedOrder()`.
+- **Finalize `customer_phone` override**: finalize route accepts optional `customer_phone` in body. If order has no phone and staff enters one at billing time, route updates the order and creates/updates `customer_profiles`.
+- **Slot label flip (public booking)**: `displayTime = (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s)` — once a start slot is selected, all other slots show their end time so the UX reads "click where you want to finish".
+- **Slot loading skeleton**: `slotsLoading` state in `LocationBrowse`; set true by useEffect when `booking?.id` changes, cleared in `.finally()`. Shows animated skeleton grid so there's no flash of "all slots available" before blocked ranges load.
+- **Booking confirmation loading**: `app/(public)/booking/[bookingId]/loading.tsx` shows a skeleton immediately while the server component's Supabase query runs — eliminates blank screen between redirect and data.
 
 ---
 

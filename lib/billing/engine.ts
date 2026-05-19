@@ -60,50 +60,30 @@ export function calculateBill(
     if (!item.actual_start) continue; // not started yet — 0 charge
 
     const start = new Date(item.actual_start);
-    let end: Date;
 
-    if (item.actual_end) {
-      end = new Date(item.actual_end);
-    } else if (item.status === "running") {
-      end = now;
-    } else {
-      continue; // scheduled but not started, or finished without actual_end (shouldn't happen)
-    }
+    // Billing is slot-based: charge is locked to the booked slot (expected_end - actual_start).
+    // Stopping early does not reduce the bill. Extensions move expected_end forward.
+    // No per-minute ticking, no overtime blocks — sessions auto-stop within the 2-min grace.
+    const billingEnd = item.expected_end
+      ? new Date(item.expected_end)
+      : item.actual_end
+      ? new Date(item.actual_end)
+      : now; // fallback: session started but expected_end not yet set
 
-    const diffMs = end.getTime() - start.getTime();
-    const durationMins = Math.ceil(diffMs / 60000);
-
-    let scheduledMins = durationMins;
-    let overtimeMins  = 0;
-    let billedOTMins  = 0;
-
-    if (item.expected_end) {
-      const expectedEnd = new Date(item.expected_end);
-      const scheduledMs = Math.max(0, expectedEnd.getTime() - start.getTime());
-      scheduledMins     = Math.min(durationMins, Math.ceil(scheduledMs / 60000));
-      overtimeMins      = Math.max(0, durationMins - scheduledMins);
-
-      // Grace window is free; after that charge in 15-min blocks
-      billedOTMins = overtimeMins <= GRACE_MINS
-        ? 0
-        : Math.ceil((overtimeMins - GRACE_MINS) / OT_BLOCK_MINS) * OT_BLOCK_MINS;
-    }
-
+    const scheduledMins   = Math.ceil((billingEnd.getTime() - start.getTime()) / 60000);
     const scheduledAmount = Math.round((scheduledMins / 60) * item.rate_per_hour * 100) / 100;
-    const overtimeAmount  = Math.round((billedOTMins  / 60) * item.rate_per_hour * 100) / 100;
-    const amount          = scheduledAmount + overtimeAmount;
 
     tableLines.push({
-      id: item.id,
-      label: `Table session`,
-      durationMins,
+      id:             item.id,
+      label:          "Table session",
+      durationMins:   scheduledMins,
       scheduledMins,
-      overtimeMins,
-      billedOTMins,
-      ratePerHour: item.rate_per_hour,
-      amount,
+      overtimeMins:   0,
+      billedOTMins:   0,
+      ratePerHour:    item.rate_per_hour,
+      amount:         scheduledAmount,
       scheduledAmount,
-      overtimeAmount,
+      overtimeAmount: 0,
     });
   }
 

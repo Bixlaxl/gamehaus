@@ -4,7 +4,7 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 export type TableWithStatus = Table & {
   activeOrderItem: OrderItem | null;
-  upcomingBooking: (Booking & { order: Pick<Order, "customer_name" | "customer_phone"> }) | null;
+  upcomingBooking: (Booking & { order: Pick<Order, "customer_name" | "customer_phone" | "advance_paid"> }) | null;
 };
 
 export interface POSOrder extends Order {
@@ -30,6 +30,7 @@ interface POSStore {
   finalizeOrderId: string | null;
   pointsToRedeem: Record<string, number>; // orderId → points to redeem
   tableSessionsTableId: string | null;
+  selectedTableId: string | null;
 
   // Actions
   setNow: (now: Date) => void;
@@ -44,6 +45,7 @@ interface POSStore {
   setFinalizeOrderId: (id: string | null) => void;
   setPointsToRedeem: (orderId: string, points: number) => void;
   setTableSessionsTableId: (id: string | null) => void;
+  setSelectedTableId: (id: string | null) => void;
 
   // Optimistic patches — update store immediately, no server wait
   patchOrderItem: (itemId: string, patch: Partial<OrderItem>) => void;
@@ -69,6 +71,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   finalizeOrderId: null,
   pointsToRedeem: {},
   tableSessionsTableId: null,
+  selectedTableId: null,
 
   setNow: (now) => set({ now }),
   setTables: (tables) => set({ tables }),
@@ -81,6 +84,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setExtendModalItem: (extendModalItem) => set({ extendModalItem }),
   setFinalizeOrderId: (finalizeOrderId) => set({ finalizeOrderId }),
   setTableSessionsTableId: (tableSessionsTableId) => set({ tableSessionsTableId }),
+  setSelectedTableId: (selectedTableId) => set({ selectedTableId }),
   setPointsToRedeem: (orderId, points) =>
     set((state) => ({ pointsToRedeem: { ...state.pointsToRedeem, [orderId]: points } })),
 

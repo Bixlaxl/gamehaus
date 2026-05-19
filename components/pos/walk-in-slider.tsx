@@ -25,7 +25,7 @@ const DURATION_PRESETS = [
 ];
 
 export function WalkInSlider({ locationId }: WalkInSliderProps) {
-  const { walkInOpen, walkInPrefilledTableId, setWalkInOpen, tables, selectOrder, now } = usePOSStore();
+  const { walkInOpen, walkInPrefilledTableId, setWalkInOpen, tables, now } = usePOSStore();
   const qc = useQueryClient();
 
   const [customerName,     setCustomerName]     = useState("");
@@ -136,7 +136,6 @@ export function WalkInSlider({ locationId }: WalkInSliderProps) {
 
     qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
-    selectOrder(body.data.order_id);
     close();
     setLoading(false);
   }

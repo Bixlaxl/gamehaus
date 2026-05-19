@@ -109,6 +109,7 @@ export function LocationBrowse({ location, tables }: Props) {
   const [selectedSlots, setSelected]  = useState<string[]>([]);
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
   const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
+  const [slotsLoading,  setSlotsLoading] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { cart.setLocation(location.id); }, [location.id]);
@@ -117,12 +118,14 @@ export function LocationBrowse({ location, tables }: Props) {
   useEffect(() => {
     if (!booking) return;
     setBlocked([]);
+    setSlotsLoading(true);
     fetch(`/api/tables/${booking.id}/slots?date=${date}`)
       .then((r) => r.json())
       .then((body: { success: boolean; data: { start: string; end: string }[] }) => {
         if (body.success) setBlocked(body.data);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setSlotsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, booking?.id]);
 
@@ -177,17 +180,14 @@ export function LocationBrowse({ location, tables }: Props) {
     setBooking(table);
     setSelected([]);
     setBlocked([]);
-    try {
-      const res = await fetch(`/api/tables/${table.id}/slots?date=${date}`);
-      const body = await res.json() as { success: boolean; data: { start: string; end: string }[] };
-      if (body.success) setBlocked(body.data);
-    } catch { /* ignore — degraded gracefully */ }
+    // slotsLoading is set true by the useEffect that fires on booking?.id change
   }
 
   function closeSheet() {
     setBooking(null);
     setSelected([]);
     setBlocked([]);
+    setSlotsLoading(false);
   }
 
   /*
@@ -531,17 +531,52 @@ export function LocationBrowse({ location, tables }: Props) {
                   Select Time Slots
                 </label>
 
-                {allSlots.length === 0 ? (
+                {slotsLoading ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                    {Array.from({ length: 9 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-11 rounded-xl animate-pulse"
+                        style={{ background: inputBg, opacity: 1 - i * 0.08 }}
+                      />
+                    ))}
+                  </div>
+                ) : allSlots.length === 0 ? (
                   <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2 max-h-64 sm:max-h-72 overflow-y-auto scrollbar-hide pr-1">
                     {allSlots.map(s => {
-                      // Server-blocked slots (walk-ins / confirmed bookings) — hide entirely
-                      if (isServerBlocked(date, s)) return null;
+                      const serverBlocked = isServerBlocked(date, s);
+                      const cartOccupied  = isCartOccupied(booking.id, date, s);
+                      const selected      = selectedSlots.includes(s);
+                      const hasStart      = selectedSlots.length > 0;
+                      const isStartSlot   = s === selectedSlots[0];
+                      // Once a start is chosen, all other slots show their END time
+                      const displayTime   = (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s);
 
-                      const cartOccupied = isCartOccupied(booking.id, date, s);
-                      const selected     = selectedSlots.includes(s);
+                      // Booked by someone else — show muted, non-interactive
+                      if (serverBlocked) {
+                        return (
+                          <div
+                            key={s}
+                            title="Already booked"
+                            className="flex flex-col items-center justify-center py-3 rounded-xl select-none pointer-events-none gap-0.5"
+                            style={{
+                              background: dark ? "rgba(239,68,68,0.06)" : "rgba(239,68,68,0.05)",
+                              border: `1.5px solid ${dark ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.15)"}`,
+                            }}
+                          >
+                            <span className="text-[11px] font-bold leading-tight line-through" style={{ color: textMut }}>
+                              {displayTime}
+                            </span>
+                            <span className="text-[9px] leading-tight font-medium" style={{ color: "rgba(239,68,68,0.5)" }}>
+                              Booked
+                            </span>
+                          </div>
+                        );
+                      }
 
+                      // In customer's own cart
                       if (cartOccupied) {
                         return (
                           <div
@@ -551,8 +586,7 @@ export function LocationBrowse({ location, tables }: Props) {
                             style={{ background: "#10B981", border: "1.5px solid #059669" }}
                           >
                             <Check className="h-3 w-3 text-white" />
-                            <span className="text-[10px] font-bold text-white leading-tight">{fmt(s)}</span>
-                            <span className="text-[9px] text-white/70 leading-tight">{fmt(slotEndTime(s))}</span>
+                            <span className="text-[10px] font-bold text-white leading-tight">{displayTime}</span>
                           </div>
                         );
                       }
@@ -572,14 +606,13 @@ export function LocationBrowse({ location, tables }: Props) {
                             className="text-[11px] font-bold leading-tight"
                             style={{ color: selected ? "#fff" : textPri }}
                           >
-                            {fmt(s)}
+                            {displayTime}
                           </span>
-                          <span
-                            className="text-[9px] leading-tight"
-                            style={{ color: selected ? "rgba(255,255,255,0.7)" : textMut }}
-                          >
-                            {fmt(slotEndTime(s))}
-                          </span>
+                          {isStartSlot && (
+                            <span className="text-[8px] font-semibold uppercase tracking-wide leading-tight" style={{ color: "rgba(255,255,255,0.65)" }}>
+                              Start
+                            </span>
+                          )}
                         </button>
                       );
                     })}

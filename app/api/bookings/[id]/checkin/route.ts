@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
 export async function POST(
@@ -11,7 +12,9 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
-  const { data: booking, error: bookingError } = await supabase
+  const admin = createAdminClient();
+
+  const { data: booking, error: bookingError } = await admin
     .from("bookings")
     .select("*")
     .eq("id", bookingId)
@@ -25,19 +28,18 @@ export async function POST(
     return NextResponse.json(err("Booking is not in confirmed state", "INVALID_STATE"), { status: 400 });
   }
 
-  // Update booking status
-  await supabase
+  await admin
     .from("bookings")
     .update({ status: "checked_in" })
     .eq("id", bookingId);
 
-  // Start the session (set order_item to running)
-  const now = new Date().toISOString();
-  await supabase
+  // Start the session anchored to the booked slot, not arrival time.
+  // This ensures the customer is billed for the full slot they reserved.
+  await admin
     .from("order_items")
     .update({
-      status: "running",
-      actual_start: now,
+      status:       "running",
+      actual_start: booking.scheduled_start,
       expected_end: booking.scheduled_end,
     })
     .eq("id", booking.order_item_id);

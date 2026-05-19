@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePOSStore, getSelectedOrder } from "@/store/pos";
+import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatCurrency } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Banknote, Smartphone, CreditCard, Star, X, CheckCircle2 } from "lucide-react";
+import { Banknote, Smartphone, Star, CheckCircle2 } from "lucide-react";
 import type { Order, Booking } from "@/lib/supabase/types";
 
 interface FinalizeBillModalProps {
   locationId: string;
 }
 
-type PaymentMethod = "cash" | "upi" | "card";
+type PaymentMethod = "cash" | "upi";
 
 interface CustomerInfo {
   points_balance: number;
@@ -26,8 +26,8 @@ type HandoverBooking = Pick<Booking, "id" | "scheduled_start" | "scheduled_end">
 
 export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   const store         = usePOSStore();
-  const selectedOrder = getSelectedOrder(store);
   const isOpen        = !!store.finalizeOrderId;
+  const selectedOrder = store.openOrders.find((o) => o.id === store.finalizeOrderId) ?? null;
   const qc            = useQueryClient();
   const now           = store.now;
 
@@ -42,6 +42,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   const [step,             setStep]             = useState<"bill" | "handover">("bill");
   const [handoverBookings, setHandoverBookings] = useState<HandoverBooking[]>([]);
   const [handoverLoading,  setHandoverLoading]  = useState<string | null>(null);
+  const [manualPhone,      setManualPhone]      = useState("");
 
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
@@ -55,14 +56,16 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   const finalDue      = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
   const pointsToEarn  = Math.floor(finalDue / 100);
 
+  const phoneForLookup = selectedOrder?.customer_phone ?? (manualPhone.length >= 10 ? manualPhone : null);
+
   useEffect(() => {
     setCustomerInfo(null);
-    if (!isOpen || !selectedOrder?.customer_phone) return;
-    fetch(`/api/customers/lookup?phone=${encodeURIComponent(selectedOrder.customer_phone)}`)
+    if (!isOpen || !phoneForLookup) return;
+    fetch(`/api/customers/lookup?phone=${encodeURIComponent(phoneForLookup)}`)
       .then((r) => r.json())
       .then((data: { found: boolean; customer: CustomerInfo | null }) => setCustomerInfo(data.customer))
       .catch(() => {});
-  }, [isOpen, selectedOrder?.customer_phone]);
+  }, [isOpen, phoneForLookup]);
 
   useEffect(() => {
     setRedeemInput(String(savedPoints));
@@ -81,6 +84,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     setStep("bill");
     setHandoverBookings([]);
     setHandoverLoading(null);
+    setManualPhone("");
   }
 
   async function confirmPayment() {
@@ -91,7 +95,11 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     const res = await fetch(`/api/orders/${store.finalizeOrderId}/finalize`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payment_method: method, points_redeemed: clampedRedeem }),
+      body: JSON.stringify({
+        payment_method:  method,
+        points_redeemed: clampedRedeem,
+        ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
+      }),
     });
 
     const body = await res.json() as
@@ -146,9 +154,8 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   }
 
   const paymentMethods: { value: PaymentMethod; label: string; icon: React.ReactNode }[] = [
-    { value: "cash", label: "Cash", icon: <Banknote  className="h-5 w-5" /> },
+    { value: "cash", label: "Cash", icon: <Banknote   className="h-5 w-5" /> },
     { value: "upi",  label: "UPI",  icon: <Smartphone className="h-5 w-5" /> },
-    { value: "card", label: "Card", icon: <CreditCard className="h-5 w-5" /> },
   ];
 
   if (step === "handover") {
@@ -227,15 +234,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
         <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 dark:border-[#1F1F1F]">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Finalize Bill</DialogTitle>
-            <button
-              onClick={close}
-              className="text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Finalize Bill</DialogTitle>
         </DialogHeader>
 
         <div className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -311,51 +310,68 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
           </div>
 
           {/* Loyalty points */}
-          {selectedOrder?.customer_phone && (
-            <div className="rounded-xl p-4 space-y-2.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
+          <div className="rounded-xl p-4 space-y-2.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
+            <div className="flex items-center gap-2">
+              <Star className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Loyalty Points</span>
+            </div>
+
+            {/* Phone entry when walk-in had no phone */}
+            {!selectedOrder?.customer_phone && (
+              <input
+                type="tel"
+                placeholder="Enter customer phone"
+                value={manualPhone}
+                onChange={(e) => { setManualPhone(e.target.value); setCustomerInfo(null); }}
+                className="w-full text-sm rounded-lg px-3 py-1.5 outline-none transition-colors
+                  bg-gray-100 dark:bg-[#1A1A1A]
+                  border border-gray-200 dark:border-[#2A2A2A]
+                  text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#444]
+                  focus:border-[#f59e0b]"
+              />
+            )}
+
+            {phoneForLookup && (
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Star className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Loyalty Points</span>
-                </div>
-                <span className="text-xs" style={{ color: "#f59e0b" }}>
-                  {customerInfo ? `${customerInfo.points_balance} pts` : "Loading..."}
+                <span className="text-xs text-gray-400 dark:text-[#555]">Balance</span>
+                <span className="text-xs font-semibold" style={{ color: "#f59e0b" }}>
+                  {customerInfo ? `${customerInfo.points_balance} pts` : "Looking up…"}
                 </span>
               </div>
+            )}
 
-              {customerInfo && customerInfo.points_balance > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max={maxRedeem}
-                    value={redeemInput}
-                    onChange={(e) => handleRedeemChange(e.target.value)}
-                    className="w-20 text-sm rounded-lg px-2 py-1 outline-none transition-colors
-                      bg-gray-100 dark:bg-[#1A1A1A]
-                      border border-gray-200 dark:border-[#2A2A2A]
-                      text-gray-900 dark:text-white
-                      focus:border-[#f59e0b]"
-                  />
-                  <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
-                </div>
-              )}
+            {customerInfo && customerInfo.points_balance > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
+                <input
+                  type="number"
+                  min="0"
+                  max={maxRedeem}
+                  value={redeemInput}
+                  onChange={(e) => handleRedeemChange(e.target.value)}
+                  className="w-20 text-sm rounded-lg px-2 py-1 outline-none transition-colors
+                    bg-gray-100 dark:bg-[#1A1A1A]
+                    border border-gray-200 dark:border-[#2A2A2A]
+                    text-gray-900 dark:text-white
+                    focus:border-[#f59e0b]"
+                />
+                <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
+              </div>
+            )}
 
-              <p className="text-xs text-gray-400 dark:text-[#555]">
-                Will earn{" "}
-                <span className="font-semibold" style={{ color: "#f59e0b" }}>{pointsToEarn} pts</span>{" "}
-                from this visit
-              </p>
-            </div>
-          )}
+            <p className="text-xs text-gray-400 dark:text-[#555]">
+              Will earn{" "}
+              <span className="font-semibold" style={{ color: "#f59e0b" }}>{pointsToEarn} pts</span>{" "}
+              from this visit
+            </p>
+          </div>
 
           {/* Payment method */}
           <div className="space-y-2">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
               Payment method
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {paymentMethods.map((opt) => (
                 <button
                   key={opt.value}

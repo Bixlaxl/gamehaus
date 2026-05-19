@@ -24,8 +24,8 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(`
       *,
-      order:orders!inner(customer_name, customer_phone, location_id),
-      order_item:order_items(table_id, status)
+      order:orders!inner(customer_name, customer_phone, location_id, advance_paid),
+      order_item:order_items!order_item_id(table_id, status)
     `)
     .gte("scheduled_start", today.toISOString())
     .lt("scheduled_start", tomorrow.toISOString())
@@ -35,15 +35,21 @@ export async function GET(request: Request) {
 
   // Filter by location (via joined order) and strip internal field
   type BookingRow = typeof data extends (infer T)[] | null ? T : never;
+  const seenIds = new Set<string>();
   const filtered = (data ?? [])
-    .filter((b: BookingRow) => (b.order as { location_id: string } | null)?.location_id === locationId)
+    .filter((b: BookingRow) => {
+      if (seenIds.has(b.id)) return false; // dedup: Supabase join can produce duplicates
+      seenIds.add(b.id);
+      return (b.order as { location_id: string } | null)?.location_id === locationId;
+    })
     .map((b: BookingRow) => {
-      const order = b.order as { customer_name: string; customer_phone: string | null; location_id: string } | null;
+      const order = b.order as { customer_name: string; customer_phone: string | null; location_id: string; advance_paid: number } | null;
       return {
         ...b,
         order: {
           customer_name:  order?.customer_name,
           customer_phone: order?.customer_phone,
+          advance_paid:   order?.advance_paid ?? 0,
         },
       };
     });

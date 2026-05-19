@@ -7,9 +7,10 @@ import { z } from "zod";
 import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 
 const schema = z.object({
-  payment_method:  z.enum(["cash", "upi", "card"]),
+  payment_method:  z.enum(["cash", "upi"]),
   coupon_code:     z.string().optional(),
   points_redeemed: z.number().int().min(0).optional().default(0),
+  customer_phone:  z.string().optional(),
 });
 
 export async function POST(
@@ -27,7 +28,7 @@ export async function POST(
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { payment_method, coupon_code, points_redeemed } = parsed.data;
+  const { payment_method, coupon_code, points_redeemed, customer_phone: phoneOverride } = parsed.data;
   const admin = createAdminClient();
 
   // Fetch full order via admin client (bypasses RLS — works for both walk-in and online orders)
@@ -66,6 +67,12 @@ export async function POST(
     .eq("order_id", orderId)
     .eq("is_deleted", false);
 
+  // If staff entered a phone at finalize time (walk-in without phone), save it to the order
+  const effectivePhone = order.customer_phone ?? phoneOverride ?? null;
+  if (phoneOverride && !order.customer_phone) {
+    await admin.from("orders").update({ customer_phone: phoneOverride }).eq("id", orderId);
+  }
+
   // Resolve coupon
   let coupon: Coupon | null = order.coupon as Coupon | null;
   if (coupon_code && !coupon) {
@@ -89,11 +96,11 @@ export async function POST(
 
   // Validate points — customer must have enough
   let validatedPoints = points_redeemed;
-  if (validatedPoints > 0 && order.customer_phone) {
+  if (validatedPoints > 0 && effectivePhone) {
     const { data: profile } = await admin
       .from("customer_profiles")
       .select("points_balance")
-      .eq("phone", order.customer_phone)
+      .eq("phone", effectivePhone)
       .single();
 
     const balance = profile?.points_balance ?? 0;
@@ -148,11 +155,11 @@ export async function POST(
   }
 
   // Update customer loyalty points + profile stats
-  if (order.customer_phone) {
+  if (effectivePhone) {
     const { data: profile } = await admin
       .from("customer_profiles")
       .select("points_balance, visit_count, total_spent")
-      .eq("phone", order.customer_phone)
+      .eq("phone", effectivePhone)
       .single();
 
     if (profile) {
@@ -164,10 +171,10 @@ export async function POST(
           total_spent:    profile.total_spent + finalDue,
           last_visit_at:  now.toISOString(),
         })
-        .eq("phone", order.customer_phone);
+        .eq("phone", effectivePhone);
     } else {
       await admin.from("customer_profiles").insert({
-        phone:          order.customer_phone,
+        phone:          effectivePhone,
         name:           order.customer_name,
         points_balance: pointsEarned,
         visit_count:    1,

@@ -43,16 +43,16 @@ const PRESETS: { label: string; value: Preset }[] = [
 ];
 
 const METHOD_LABELS: Record<string, string> = {
-  cash:      "Cash",
-  upi:       "UPI",
-  card:      "Card",
-  razorpay:  "Razorpay",
+  cash:     "Cash",
+  upi:      "UPI",
+  razorpay: "Online (Razorpay)",
 };
 
 export default function ReportsPage() {
-  const [preset, setPreset] = useState<Preset>("30d");
-  const [from, setFrom]     = useState(presetDates("30d").from);
-  const [to, setTo]         = useState(presetDates("30d").to);
+  const [preset, setPreset]                 = useState<Preset>("30d");
+  const [from, setFrom]                     = useState(presetDates("30d").from);
+  const [to, setTo]                         = useState(presetDates("30d").to);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
 
   function applyPreset(p: Preset) {
     setPreset(p);
@@ -66,23 +66,35 @@ export default function ReportsPage() {
   const { data: reportData, isLoading } = useQuery({
     queryKey: ["reports", from, to],
     queryFn: async () => {
-      const fromISO = new Date(from + "T00:00:00+05:30").toISOString();
-      const toISO   = new Date(to   + "T23:59:59+05:30").toISOString();
+      // Fetch location hours first — day boundary is opening→closing, not midnight
+      const { data: locations } = await supabase
+        .from("locations").select("*").eq("is_active", true);
 
-      const [{ data: orders }, { data: locations }] = await Promise.all([
-        supabase
-          .from("orders")
-          .select(`
-            id, customer_name, customer_phone, amount_due, type, finalized_at,
-            location:locations(name),
-            items:order_items(status),
-            payments(method, amount, status)
-          `)
-          .eq("status", "finalized")
-          .gte("finalized_at", fromISO)
-          .lte("finalized_at", toISO),
-        supabase.from("locations").select("*").eq("is_active", true),
-      ]);
+      const loc     = locations?.[0];
+      const opening = loc?.opening_time ?? "10:00";
+      const closing = loc?.closing_time ?? "23:00";
+
+      const [openH]  = opening.split(":").map(Number);
+      const [closeH] = closing.split(":").map(Number);
+      const crossesMidnight = closeH < openH;
+
+      const fromISO = new Date(from + "T" + opening + "+05:30").toISOString();
+      const toEndDate = crossesMidnight
+        ? (() => { const d = new Date(to + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
+        : to;
+      const toISO = new Date(toEndDate + "T" + closing + "+05:30").toISOString();
+
+      const { data: orders } = await supabase
+        .from("orders")
+        .select(`
+          id, customer_name, customer_phone, amount_due, advance_paid, type, finalized_at,
+          location:locations(id, name),
+          items:order_items(status),
+          payments(method, amount, status)
+        `)
+        .eq("status", "finalized")
+        .gte("finalized_at", fromISO)
+        .lte("finalized_at", toISO);
 
       return { orders: orders ?? [], locations: locations ?? [] };
     },
@@ -91,10 +103,14 @@ export default function ReportsPage() {
   const orders    = reportData?.orders    ?? [];
   const locations = reportData?.locations ?? [];
 
+  const filteredOrders = selectedLocationId
+    ? orders.filter((o) => (o.location as { id: string; name: string } | null)?.id === selectedLocationId)
+    : orders;
+
   // Revenue by location
   const revenueByLocation = locations.map((loc) => {
-    const locOrders    = orders.filter((o) => (o.location as { name: string } | null)?.name === loc.name);
-    const revenue      = locOrders.reduce((s, o) => s + (o.amount_due ?? 0), 0);
+    const locOrders    = filteredOrders.filter((o) => (o.location as { id: string; name: string } | null)?.id === loc.id);
+    const revenue      = locOrders.reduce((s, o) => s + (o.amount_due ?? 0) + (o.advance_paid ?? 0), 0);
     const sessionCount = locOrders.flatMap((o) =>
       (o.items as Array<{ status: string }>).filter((i) => i.status === "finished")
     ).length;
@@ -107,7 +123,7 @@ export default function ReportsPage() {
   // Payment method breakdown
   type PaymentRow = { method: string; amount: number; status: string };
   const methodMap = new Map<string, number>();
-  for (const order of orders) {
+  for (const order of filteredOrders) {
     for (const p of (order.payments as PaymentRow[] ?? [])) {
       if (p.status !== "completed") continue;
       methodMap.set(p.method, (methodMap.get(p.method) ?? 0) + (p.amount ?? 0));
@@ -119,7 +135,7 @@ export default function ReportsPage() {
 
   // Top customers
   const customerMap = new Map<string, { name: string; visits: number; spent: number }>();
-  for (const order of orders) {
+  for (const order of filteredOrders) {
     if (!order.customer_phone) continue;
     const existing = customerMap.get(order.customer_phone) ?? { name: order.customer_name, visits: 0, spent: 0 };
     customerMap.set(order.customer_phone, {
@@ -165,6 +181,37 @@ export default function ReportsPage() {
         )}
       </div>
 
+      {/* Location tabs */}
+      {locations.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setSelectedLocationId(null)}
+            className="px-4 py-1.5 rounded-full text-xs font-bold transition-colors"
+            style={
+              selectedLocationId === null
+                ? { background: "#D4541A", color: "#fff" }
+                : { background: "#f3f4f6", color: "#6b7280" }
+            }
+          >
+            All Locations
+          </button>
+          {locations.map((loc) => (
+            <button
+              key={loc.id}
+              onClick={() => setSelectedLocationId(loc.id)}
+              className="px-4 py-1.5 rounded-full text-xs font-bold transition-colors"
+              style={
+                selectedLocationId === loc.id
+                  ? { background: "#D4541A", color: "#fff" }
+                  : { background: "#f3f4f6", color: "#6b7280" }
+              }
+            >
+              {loc.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading && <p className="text-gray-500">Loading...</p>}
 
       {/* Summary cards */}
@@ -175,7 +222,7 @@ export default function ReportsPage() {
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Orders</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{orders.length}</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{filteredOrders.length}</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Sessions</p>
