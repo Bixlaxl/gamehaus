@@ -43,7 +43,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
 
   function onImageReady() {
     setPhase("enter");
-    setTimeout(() => setPhase("hold"),  300);
+    setTimeout(() => setPhase("hold"),  200);
     setTimeout(() => setPhase("exit"),  1400);
     setTimeout(() => setPhase("gone"),  2100);
   }
@@ -64,7 +64,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
             background: "#0A0A0A",
             transform: phase === "exit" ? "translateY(-100%)" : "translateY(0)",
             transition: phase === "exit"
-              ? "transform 1100ms cubic-bezier(0.22, 1, 0.36, 1)"
+              ? "transform 700ms cubic-bezier(0.22, 1, 0.36, 1)"
               : "none",
           }}
         >

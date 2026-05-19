@@ -48,6 +48,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
 
   async function handleSignOut() {
     setSigningOut(true);
+    await new Promise((r) => setTimeout(r, 700));
     await supabase.auth.signOut();
     router.replace("/login");
   }
@@ -90,7 +91,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
       const body = await res.json() as { success: boolean; data: Table[] };
       return body.success ? body.data : [];
     },
-    refetchInterval: 8000,
+    refetchInterval: 60000,
   });
 
   const { data: rawOrders } = useQuery({
@@ -100,7 +101,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
       const body = await res.json() as { success: boolean; data: POSOrder[] };
       return body.success ? body.data : [];
     },
-    refetchInterval: 8000,
+    refetchInterval: 60000,
   });
 
   const { data: rawBookings } = useQuery({
@@ -116,7 +117,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
       };
       return body.success ? body.data : [];
     },
-    refetchInterval: 8000,
+    refetchInterval: 60000,
   });
 
   // Realtime
@@ -191,6 +192,14 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
   return (
     <div className="dark h-screen flex overflow-hidden bg-[#0a0a0a]">
 
+      {/* Sign-out overlay */}
+      {signingOut && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
+          <LogOut className="h-8 w-8 text-[#D4541A] animate-pulse mb-4" />
+          <p className="text-white text-base font-semibold tracking-wide">Signing out…</p>
+        </div>
+      )}
+
       {/* ── Side rail ── */}
       <nav className="w-44 shrink-0 flex flex-col bg-[#161616] border-r border-[#222]">
         {/* Brand */}
@@ -205,11 +214,10 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
           <button
             onClick={() => void handleSignOut()}
             disabled={signingOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
-            style={{ color: signingOut ? "#D4541A" : "#ffffff" }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-40"
           >
-            <LogOut className={`h-4 w-4 shrink-0 ${signingOut ? "animate-pulse" : ""}`} />
-            {signingOut ? "Signing out…" : "Sign out"}
+            <LogOut className="h-4 w-4 shrink-0" />
+            Sign out
           </button>
         </div>
       </nav>

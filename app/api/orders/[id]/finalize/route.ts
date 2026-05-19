@@ -146,22 +146,18 @@ export async function POST(
     return NextResponse.json(err(paymentError.message, "DB_ERROR"), { status: 500 });
   }
 
-  // Increment coupon usage
-  if (coupon) {
-    await admin
-      .from("coupons")
-      .update({ used_count: coupon.used_count + 1 })
-      .eq("id", coupon.id);
-  }
+  // Run coupon increment and customer profile fetch in parallel
+  const [, profileResult] = await Promise.all([
+    coupon
+      ? admin.from("coupons").update({ used_count: coupon.used_count + 1 }).eq("id", coupon.id)
+      : Promise.resolve(null),
+    effectivePhone
+      ? admin.from("customer_profiles").select("points_balance, visit_count, total_spent").eq("phone", effectivePhone).single()
+      : Promise.resolve(null),
+  ]);
 
-  // Update customer loyalty points + profile stats
   if (effectivePhone) {
-    const { data: profile } = await admin
-      .from("customer_profiles")
-      .select("points_balance, visit_count, total_spent")
-      .eq("phone", effectivePhone)
-      .single();
-
+    const profile = (profileResult as { data: { points_balance: number; visit_count: number; total_spent: number } | null } | null)?.data ?? null;
     if (profile) {
       await admin
         .from("customer_profiles")

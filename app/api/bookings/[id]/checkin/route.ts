@@ -28,21 +28,16 @@ export async function POST(
     return NextResponse.json(err("Booking is not in confirmed state", "INVALID_STATE"), { status: 400 });
   }
 
-  await admin
-    .from("bookings")
-    .update({ status: "checked_in" })
-    .eq("id", bookingId);
-
-  // Start the session anchored to the booked slot, not arrival time.
-  // This ensures the customer is billed for the full slot they reserved.
-  await admin
-    .from("order_items")
-    .update({
+  // Update booking status and start the session in parallel.
+  // Session anchored to booked slot so customer is billed for full reserved slot.
+  await Promise.all([
+    admin.from("bookings").update({ status: "checked_in" }).eq("id", bookingId),
+    admin.from("order_items").update({
       status:       "running",
       actual_start: booking.scheduled_start,
       expected_end: booking.scheduled_end,
-    })
-    .eq("id", booking.order_item_id);
+    }).eq("id", booking.order_item_id),
+  ]);
 
   return NextResponse.json(ok({ order_id: booking.order_id }));
 }

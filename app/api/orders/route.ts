@@ -62,8 +62,8 @@ export async function POST(request: Request) {
     return NextResponse.json(err(itemsError?.message ?? "Failed to create order items", "DB_ERROR"), { status: 500 });
   }
 
-  // For online orders: create a bookings row per item so POS check-in can find them
-  if (type === "online") {
+  // Run bookings insert and customer profile upsert in parallel
+  const bookingsPromise = (type === "online") ? (() => {
     const bookings = createdItems
       .filter((item) => item.scheduled_start && item.scheduled_end)
       .map((item) => ({
@@ -74,19 +74,17 @@ export async function POST(request: Request) {
         held_until: new Date(new Date(item.scheduled_start!).getTime() + 15 * 60 * 1000).toISOString(),
         status: "confirmed" as const,
       }));
+    return bookings.length > 0 ? admin.from("bookings").insert(bookings) : Promise.resolve();
+  })() : Promise.resolve();
 
-    if (bookings.length > 0) {
-      await admin.from("bookings").insert(bookings);
-    }
-  }
+  const profilePromise = customer_phone
+    ? admin.from("customer_profiles").upsert(
+        { phone: customer_phone, name: customer_name },
+        { onConflict: "phone", ignoreDuplicates: false }
+      )
+    : Promise.resolve();
 
-  // Upsert customer profile
-  if (customer_phone) {
-    await admin.from("customer_profiles").upsert(
-      { phone: customer_phone, name: customer_name },
-      { onConflict: "phone", ignoreDuplicates: false }
-    );
-  }
+  await Promise.all([bookingsPromise, profilePromise]);
 
   return NextResponse.json(ok({
     order_id: order.id,

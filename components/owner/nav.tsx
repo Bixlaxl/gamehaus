@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -30,11 +30,14 @@ function initials(name: string) {
 }
 
 export function OwnerNav({ userName }: OwnerNavProps) {
-  const pathname = usePathname();
-  const router   = useRouter();
-  const supabase = createClient();
+  const pathname   = usePathname();
+  const router     = useRouter();
+  const supabase   = createClient();
+  const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
+    setSigningOut(true);
+    await new Promise((r) => setTimeout(r, 700));
     await supabase.auth.signOut();
     router.replace("/login");
   }
@@ -51,6 +54,13 @@ export function OwnerNav({ userName }: OwnerNavProps) {
   }, []);
 
   return (
+    <>
+    {signingOut && (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
+        <LogOut className="h-8 w-8 text-[#D4541A] animate-pulse mb-4" />
+        <p className="text-white text-base font-semibold tracking-wide">Signing out…</p>
+      </div>
+    )}
     <aside className="w-60 shrink-0 flex flex-col h-screen bg-[#0A0A0A] border-r border-[#1A1A1A]">
 
       {/* Logo */}
@@ -105,13 +115,15 @@ export function OwnerNav({ userName }: OwnerNavProps) {
           <span className="text-sm font-medium text-[#888] truncate">{userName}</span>
         </div>
         <button
-          onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-[#999] hover:text-white hover:bg-[#111] transition-all"
+          onClick={() => void handleSignOut()}
+          disabled={signingOut}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-[#999] hover:text-white hover:bg-[#111] transition-all disabled:opacity-40"
         >
           <LogOut className="h-4 w-4 shrink-0" />
           Sign out
         </button>
       </div>
     </aside>
+    </>
   );
 }
