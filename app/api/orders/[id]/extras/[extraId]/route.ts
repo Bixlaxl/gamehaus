@@ -12,8 +12,9 @@ export async function DELETE(
 ) {
   const { extraId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+  const user = session.user;
 
   const admin = createAdminClient();
   const { error } = await admin

@@ -97,9 +97,14 @@ function buildDays() {
 }
 
 /* ── Component ───────────────────────────── */
-interface Props { location: Location; tables: Table[] }
+interface Props {
+  location: Location;
+  tables: Table[];
+  initialSlots?: Record<string, { start: string; end: string }[]>;
+  initialDate?: string;
+}
 
-export function LocationBrowse({ location, tables }: Props) {
+export function LocationBrowse({ location, tables, initialSlots, initialDate }: Props) {
   const cart = useCartStore();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted]         = useState(false);
@@ -117,6 +122,13 @@ export function LocationBrowse({ location, tables }: Props) {
   // Re-fetch blocked ranges when date changes while booking sheet is open
   useEffect(() => {
     if (!booking) return;
+
+    // Use server-prefetched data for today — no loading state, instant slots
+    if (initialSlots && initialDate && date === initialDate && booking.id in initialSlots) {
+      setBlocked(initialSlots[booking.id]);
+      return;
+    }
+
     setBlocked([]);
     setSlotsLoading(true);
     fetch(`/api/tables/${booking.id}/slots?date=${date}`)

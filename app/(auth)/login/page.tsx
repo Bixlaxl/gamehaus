@@ -53,11 +53,7 @@ export default function LoginPage() {
       .single();
 
     if (!profile) {
-      setError(
-        profileError
-          ? `DB error: ${profileError.message} (code: ${profileError.code})`
-          : "Your account is not set up yet. Please ask the owner to add you to the system."
-      );
+      setError("Your account is not set up yet. Please ask the owner to add you to the system.");
       await supabase.auth.signOut();
       setLoading(false);
       return;

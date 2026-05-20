@@ -2,6 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // API routes handle their own auth — skip the middleware auth round-trip
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,24 +36,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
-  // Public API routes — accessible without login
-  const publicApiRoutes = [
-    "/api/payments/webhook",
-    "/api/payments/create-order",
-    "/api/payments/demo-confirm",
-    "/api/customers/lookup",
-    "/api/orders",
-    "/api/tables",
-  ];
-  const isPublicApi = publicApiRoutes.some(r => pathname === r || pathname.startsWith(r + "/"));
-
   // Paths that require authentication
   const requiresAuth =
     pathname.startsWith("/owner") ||
-    pathname === "/pos" ||
-    (pathname.startsWith("/api/") && !isPublicApi);
+    pathname === "/pos";
 
   // Unauthenticated user hitting a protected route → login
   if (!user && requiresAuth) {

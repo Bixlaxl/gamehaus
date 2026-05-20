@@ -22,9 +22,9 @@ export async function POST(request: Request) {
 
   if (type === "walk_in") {
     const serverClient = await createClient();
-    const { data: { user } } = await serverClient.auth.getUser();
-    if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-    createdBy = user.id;
+    const { data: { session } } = await serverClient.auth.getSession();
+    if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+    createdBy = session.user.id;
   }
 
   // Create order

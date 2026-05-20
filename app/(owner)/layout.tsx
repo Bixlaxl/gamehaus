@@ -11,10 +11,11 @@ export default async function OwnerLayout({
 }) {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) redirect("/login");
+  if (!session) redirect("/login");
+  const user = session.user;
 
   const { data: profile } = await supabase
     .from("users")

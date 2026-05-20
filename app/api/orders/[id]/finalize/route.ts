@@ -22,8 +22,9 @@ export async function POST(
 ) {
   const { id: orderId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+  const user = session.user;
 
   const body: unknown = await request.json();
   const parsed = schema.safeParse(body);

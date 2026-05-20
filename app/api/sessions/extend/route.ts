@@ -10,8 +10,9 @@ const BUFFER_MINS = 10;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+  const user = session.user;
 
   const body: unknown = await request.json();
   const parsed = extendSessionSchema.safeParse(body);
