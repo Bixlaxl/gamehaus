@@ -46,7 +46,7 @@ export default function LoginPage() {
     }
 
     // Look up role from public.users (works even without auth hook)
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("role")
       .eq("id", data.user.id)
@@ -54,7 +54,9 @@ export default function LoginPage() {
 
     if (!profile) {
       setError(
-        "Your account is not set up yet. Please ask the owner to add you to the system."
+        profileError
+          ? `DB error: ${profileError.message} (code: ${profileError.code})`
+          : "Your account is not set up yet. Please ask the owner to add you to the system."
       );
       await supabase.auth.signOut();
       setLoading(false);
