@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
@@ -88,9 +88,9 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const store    = usePOSStore();
-  const { now }  = store;
-  const qc       = useQueryClient();
+  const now            = usePOSStore((s) => s.now);
+  const patchOrderItem = usePOSStore((s) => s.patchOrderItem);
+  const qc             = useQueryClient();
   const [stopping,  setStopping]  = useState(false);
   const [extending, setExtending] = useState<number | null>(null);
 
@@ -131,14 +131,14 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
     e.stopPropagation();
     setStopping(true);
     const nowISO = new Date().toISOString();
-    store.patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
+    patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
     const res = await fetch("/api/sessions/stop", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ order_item_id: item.id }),
     });
     if (!res.ok) {
-      store.patchOrderItem(item.id, { status: "running", actual_end: null });
+      patchOrderItem(item.id, { status: "running", actual_end: null });
       toast.error("Failed to stop session");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
@@ -151,14 +151,14 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
     setExtending(mins);
     const prevEnd = item.expected_end;
     const newEnd  = new Date(new Date(prevEnd ?? now).getTime() + mins * 60 * 1000).toISOString();
-    store.patchOrderItem(item.id, { expected_end: newEnd });
+    patchOrderItem(item.id, { expected_end: newEnd });
     const res = await fetch("/api/sessions/extend", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ order_item_id: item.id, extend_mins: mins }),
     });
     if (!res.ok) {
-      store.patchOrderItem(item.id, { expected_end: prevEnd });
+      patchOrderItem(item.id, { expected_end: prevEnd });
       toast.error("Failed to extend");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
@@ -296,8 +296,8 @@ function BookedCard({ table, locationId, isSelected, onClick }: {
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const { now }  = usePOSStore();
-  const qc       = useQueryClient();
+  const now = usePOSStore((s) => s.now);
+  const qc  = useQueryClient();
   const booking  = table.upcomingBooking!;
   const [loadingCheckin, setLoadingCheckin] = useState(false);
   const [loadingNoshow,  setLoadingNoshow]  = useState(false);
@@ -443,13 +443,13 @@ function BillReadyCard({ table, order, isSelected, onClick }: {
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const store   = usePOSStore();
-  const { now } = store;
+  const setFinalizeOrderId = usePOSStore((s) => s.setFinalizeOrderId);
 
+  // Bill is slot-based and fixed once session ends — `now` has no effect on finished items
   const billDue = calculateBill(
     order.items.filter((i) => !i.is_deleted),
     order.extras.filter((e) => !e.is_deleted),
-    now, null, order.advance_paid ?? 0
+    new Date(), null, order.advance_paid ?? 0
   ).totalDue;
 
   return (
@@ -494,7 +494,7 @@ function BillReadyCard({ table, order, isSelected, onClick }: {
 
         {/* Quick collect — goes straight to finalize modal */}
         <button
-          onClick={(e) => { e.stopPropagation(); store.setFinalizeOrderId(order.id); }}
+          onClick={(e) => { e.stopPropagation(); setFinalizeOrderId(order.id); }}
           className="w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
           style={{ background: "#D4541A" }}
         >
@@ -513,7 +513,8 @@ type BookingRow = Booking & {
 };
 
 function UpcomingStrip({ locationId }: { locationId: string }) {
-  const { now, tables } = usePOSStore();
+  const now    = usePOSStore((s) => s.now);
+  const tables = usePOSStore((s) => s.tables);
 
   const { data: bookings = [] } = useQuery<BookingRow[]>({
     queryKey: ["pos-bookings", locationId],
@@ -615,9 +616,11 @@ interface TableGridProps {
   locationId: string;
 }
 
-export function TableGrid({ locationId }: TableGridProps) {
-  const store                                    = usePOSStore();
-  const { tables, openOrders, selectedTableId, now } = store;
+function TableGridInner({ locationId }: TableGridProps) {
+  const tables             = usePOSStore((s) => s.tables);
+  const openOrders         = usePOSStore((s) => s.openOrders);
+  const selectedTableId    = usePOSStore((s) => s.selectedTableId);
+  const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
 
   const billReadyMap = useMemo(() => {
     const map: Record<string, POSOrder> = {};
@@ -653,12 +656,12 @@ export function TableGrid({ locationId }: TableGridProps) {
             const billReadyOrder    = billReadyMap[table.id];
             const isBillReady       = !!billReadyOrder && !isRunning;
             const minsUntilBooking  = table.upcomingBooking
-              ? (new Date(table.upcomingBooking.scheduled_start).getTime() - now.getTime()) / 60000
+              ? (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
               : Infinity;
             const isBooked          = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking <= BOOKED_THRESHOLD_MINS;
             const isIdleWithUpcoming = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking > BOOKED_THRESHOLD_MINS;
             const isSelected        = selectedTableId === table.id;
-            const toggle            = () => store.setSelectedTableId(isSelected ? null : table.id);
+            const toggle            = () => setSelectedTableId(isSelected ? null : table.id);
 
             if (isRunning && item) {
               const order = openOrders.find((o) => o.items.some((i) => i.id === item.id));
@@ -716,3 +719,5 @@ export function TableGrid({ locationId }: TableGridProps) {
     </div>
   );
 }
+
+export const TableGrid = memo(TableGridInner);

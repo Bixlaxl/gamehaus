@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
@@ -75,8 +75,7 @@ function PanelWalkIn({
   locationId: string;
   table: TableWithStatus;
 }) {
-  const store = usePOSStore();
-  const { now } = store;
+  const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
   const qc    = useQueryClient();
 
   const [customerName,  setCustomerName]  = useState("");
@@ -90,7 +89,7 @@ function PanelWalkIn({
 
   const maxMins = table.upcomingBooking
     ? Math.max(15, Math.floor(
-        (new Date(table.upcomingBooking.scheduled_start).getTime() - now.getTime()) / 60000
+        (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
       ) - 5)
     : 240;
 
@@ -122,24 +121,24 @@ function PanelWalkIn({
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/orders", {
+    // Combined endpoint: creates order + starts session in one round trip
+    const res = await fetch("/api/walkin/start", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
         location_id:    locationId,
-        type:           "walk_in",
         customer_name:  customerName.trim(),
         customer_phone: customerPhone.trim() || undefined,
         items: [{
-          table_id:                 table.id,
-          scheduled_duration_mins:  duration,
-          rate_per_hour:            table.hourly_rate,
+          table_id:      table.id,
+          duration_mins: duration,
+          rate_per_hour: table.hourly_rate,
         }],
       }),
     });
 
     const body = await res.json() as
-      | { success: true;  data: { order_id: string; items: { id: string; table_id: string }[] } }
+      | { success: true;  data: { order_id: string } }
       | { success: false; error: string };
 
     if (!body.success) {
@@ -147,16 +146,6 @@ function PanelWalkIn({
       setLoading(false);
       return;
     }
-
-    await Promise.all(
-      body.data.items.map((item) =>
-        fetch("/api/sessions/start", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ order_item_id: item.id }),
-        })
-      )
-    );
 
     qc.invalidateQueries({ queryKey: ["pos-orders",  locationId] });
     qc.invalidateQueries({ queryKey: ["pos-tables",  locationId] });
@@ -173,7 +162,7 @@ function PanelWalkIn({
             ? `Available until ${fmtTime(table.upcomingBooking.scheduled_start)} · max ${maxMins}m`
             : "No upcoming bookings"
         }
-        onClose={() => store.setSelectedTableId(null)}
+        onClose={() => setSelectedTableId(null)}
       />
 
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
@@ -301,14 +290,22 @@ function PanelSession({
   locationId: string;
   order: POSOrder;
 }) {
-  const store = usePOSStore();
-  const { now } = store;
-  const qc    = useQueryClient();
+  const now               = usePOSStore((s) => s.now);
+  const posTables         = usePOSStore((s) => s.tables);
+  const pointsToRedeem    = usePOSStore((s) => s.pointsToRedeem);
+  const patchOrderItem    = usePOSStore((s) => s.patchOrderItem);
+  const addOrderExtra     = usePOSStore((s) => s.addOrderExtra);
+  const removeOrderExtra  = usePOSStore((s) => s.removeOrderExtra);
+  const setExtendModal    = usePOSStore((s) => s.setExtendModalItem);
+  const setPointsToRedeem = usePOSStore((s) => s.setPointsToRedeem);
+  const setFinalizeId     = usePOSStore((s) => s.setFinalizeOrderId);
+  const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
+  const qc                = useQueryClient();
 
   const [addExtraOpen,  setAddExtraOpen]  = useState(false);
   const [extraForm,     setExtraForm]     = useState({ name: "", price: "", quantity: "1" });
   const [customerInfo,  setCustomerInfo]  = useState<{ points_balance: number } | null>(null);
-  const [redeemInput,   setRedeemInput]   = useState(String(store.pointsToRedeem[order.id] ?? 0));
+  const [redeemInput,   setRedeemInput]   = useState(String(pointsToRedeem[order.id] ?? 0));
 
   const activeItems  = order.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
@@ -334,19 +331,19 @@ function PanelSession({
   function handleRedeemChange(val: string) {
     setRedeemInput(val);
     const n = Math.max(0, parseInt(val) || 0);
-    store.setPointsToRedeem(order.id, Math.min(n, maxRedeem));
+    setPointsToRedeem(order.id, Math.min(n, maxRedeem));
   }
 
   async function stopSession(item: OrderItem) {
     const nowISO = new Date().toISOString();
-    store.patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
+    patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
     const res = await fetch("/api/sessions/stop", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ order_item_id: item.id }),
     });
     if (!res.ok) {
-      store.patchOrderItem(item.id, { status: "running", actual_end: null });
+      patchOrderItem(item.id, { status: "running", actual_end: null });
       toast.error("Failed to stop session");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
@@ -367,7 +364,7 @@ function PanelSession({
       added_by:   null,
       created_at: new Date().toISOString(),
     };
-    store.addOrderExtra(order.id, optimistic);
+    addOrderExtra(order.id, optimistic);
     setExtraForm({ name: "", price: "", quantity: "1" });
     setAddExtraOpen(false);
     const res = await fetch(`/api/orders/${order.id}/extras`, {
@@ -380,7 +377,7 @@ function PanelSession({
       }),
     });
     if (!res.ok) {
-      store.removeOrderExtra(order.id, tempId);
+      removeOrderExtra(order.id, tempId);
       toast.error("Failed to add extra");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
@@ -388,7 +385,7 @@ function PanelSession({
   }
 
   async function deleteExtra(extraId: string) {
-    store.removeOrderExtra(order.id, extraId);
+    removeOrderExtra(order.id, extraId);
     const res = await fetch(`/api/orders/${order.id}/extras/${extraId}`, { method: "DELETE" });
     if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
   }
@@ -426,7 +423,7 @@ function PanelSession({
           </span>
         </div>
         <button
-          onClick={() => store.setSelectedTableId(null)}
+          onClick={() => setSelectedTableId(null)}
           className="shrink-0 ml-3 p-1.5 rounded-lg text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <X className="h-4 w-4" />
@@ -441,7 +438,7 @@ function PanelSession({
           const isRunning  = item.status === "running";
           const lineBill   = calculateBill([item], [], now).subtotal;
           const tableName  = (item.table as { name?: string } | null)?.name ?? "Table";
-          const tableInStore   = store.tables.find((t) => t.id === item.table_id);
+          const tableInStore   = posTables.find((t) => t.id === item.table_id);
           const hasNextBooking = !!tableInStore?.upcomingBooking;
 
           let countdown = "", elapsed = "";
@@ -572,7 +569,7 @@ function PanelSession({
                   </button>
                   {!hasNextBooking && (
                     <button
-                      onClick={() => store.setExtendModalItem(item)}
+                      onClick={() => setExtendModal(item)}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors
                         bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                         text-gray-600 dark:text-[#888] hover:text-gray-900 dark:hover:text-white hover:border-gray-400"
@@ -589,7 +586,7 @@ function PanelSession({
                   style={{ background: "#10b981" }}
                   onClick={async () => {
                     const startTime = new Date().toISOString();
-                    store.patchOrderItem(item.id, { status: "running", actual_start: startTime });
+                    patchOrderItem(item.id, { status: "running", actual_start: startTime });
                     const res = await fetch("/api/sessions/start", {
                       method:  "POST",
                       headers: { "Content-Type": "application/json" },
@@ -597,7 +594,7 @@ function PanelSession({
                     });
                     if (!res.ok) {
                       const body = await res.json() as { error?: string };
-                      store.patchOrderItem(item.id, { status: "scheduled", actual_start: null });
+                      patchOrderItem(item.id, { status: "scheduled", actual_start: null });
                       toast.error(body.error ?? "Failed to start session");
                     } else {
                       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
@@ -785,7 +782,7 @@ function PanelSession({
             </span>
           </div>
           <button
-            onClick={() => store.setFinalizeOrderId(order.id)}
+            onClick={() => setFinalizeId(order.id)}
             disabled={hasRunning}
             className={`w-full py-3 rounded-xl text-sm font-bold transition-opacity ${
               hasRunning
@@ -804,8 +801,10 @@ function PanelSession({
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
-export function ContextPanel({ locationId }: { locationId: string }) {
-  const { tables, openOrders, selectedTableId, now } = usePOSStore();
+function ContextPanelInner({ locationId }: { locationId: string }) {
+  const tables          = usePOSStore((s) => s.tables);
+  const openOrders      = usePOSStore((s) => s.openOrders);
+  const selectedTableId = usePOSStore((s) => s.selectedTableId);
 
   const table = tables.find((t) => t.id === selectedTableId) ?? null;
   if (!table) return null;
@@ -825,7 +824,7 @@ export function ContextPanel({ locationId }: { locationId: string }) {
 
   const isBillReady      = !!billReadyOrder;
   const minsUntilBooking = table.upcomingBooking
-    ? (new Date(table.upcomingBooking.scheduled_start).getTime() - now.getTime()) / 60000
+    ? (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
     : Infinity;
   const isBooked = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking <= 30;
   const isIdle   = !isRunning && !isBillReady && !isBooked;
@@ -843,3 +842,5 @@ export function ContextPanel({ locationId }: { locationId: string }) {
 
   return null;
 }
+
+export const ContextPanel = memo(ContextPanelInner);
