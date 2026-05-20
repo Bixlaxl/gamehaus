@@ -188,11 +188,16 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     return isCartOccupied(tableId, slotDate, slotTime) || isServerBlocked(slotDate, slotTime);
   }
 
-  async function openSheet(table: Table) {
+  function openSheet(table: Table) {
     setBooking(table);
     setSelected([]);
-    setBlocked([]);
-    // slotsLoading is set true by the useEffect that fires on booking?.id change
+    // Set blocked ranges immediately from pre-fetched data so slots render
+    // correctly on the first paint — no flash of "all available" before useEffect fires
+    if (initialSlots && initialDate && date === initialDate && table.id in initialSlots) {
+      setBlocked(initialSlots[table.id]);
+    } else {
+      setBlocked([]);
+    }
   }
 
   function closeSheet() {

@@ -54,7 +54,11 @@ export default async function LocationPage({
   const tableIdSet = new Set((tables ?? []).map((t) => t.id));
   const dayStartMs = new Date(dayStartIso).getTime();
   const dayEndMs   = new Date(dayEndIso).getTime();
+
+  // Pre-initialize ALL tables with empty arrays so the client skips the API
+  // call for every table today, not just those that happen to have bookings.
   const initialSlots: Record<string, { start: string; end: string }[]> = {};
+  for (const t of tables ?? []) initialSlots[t.id] = [];
 
   for (const item of rawItems ?? []) {
     if (!item.table_id || !tableIdSet.has(item.table_id)) continue;
