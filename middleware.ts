@@ -63,7 +63,7 @@ export async function middleware(request: NextRequest) {
     // The individual pages will further redirect if role doesn't match
     const token = (await supabase.auth.getSession()).data.session?.access_token;
     const claims = token ? parseJwt(token) : null;
-    const role = claims?.role as string | undefined;
+    const role = (claims?.app_role ?? claims?.role) as string | undefined;
     redirectUrl.pathname = role === "staff" ? "/pos" : "/owner";
     return NextResponse.redirect(redirectUrl);
   }
@@ -73,7 +73,7 @@ export async function middleware(request: NextRequest) {
   if (user && pathname.startsWith("/owner")) {
     const token = (await supabase.auth.getSession()).data.session?.access_token;
     const claims = token ? parseJwt(token) : null;
-    const role = claims?.role as string | undefined;
+    const role = (claims?.app_role ?? claims?.role) as string | undefined;
     if (role === "staff") {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/pos";
