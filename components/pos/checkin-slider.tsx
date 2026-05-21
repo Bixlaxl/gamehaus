@@ -15,7 +15,9 @@ const supabase = createClient();
 type BookingWithOrder = Booking & { order: Pick<Order, "customer_name" | "customer_phone"> };
 
 export function CheckinSlider({ locationId }: CheckinSliderProps) {
-  const { checkinOpen, setCheckinOpen, selectOrder } = usePOSStore();
+  const checkinOpen    = usePOSStore((s) => s.checkinOpen);
+  const setCheckinOpen = usePOSStore((s) => s.setCheckinOpen);
+  const selectOrder    = usePOSStore((s) => s.selectOrder);
   const qc = useQueryClient();
 
   const [search,     setSearch]     = useState("");

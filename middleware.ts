@@ -4,11 +4,20 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // API routes handle their own auth — skip the middleware auth round-trip
+  // API routes handle their own auth
   if (pathname.startsWith("/api/")) {
     return NextResponse.next({ request });
   }
 
+  const requiresAuth = pathname.startsWith("/owner") || pathname === "/pos";
+  const isLogin      = pathname === "/login";
+
+  // Public pages — skip auth entirely, no network call needed
+  if (!requiresAuth && !isLogin) {
+    return NextResponse.next({ request });
+  }
+
+  // Protected or login pages — need to verify the session
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -32,14 +41,7 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Paths that require authentication
-  const requiresAuth =
-    pathname.startsWith("/owner") ||
-    pathname === "/pos";
+  const { data: { user } } = await supabase.auth.getUser();
 
   // Unauthenticated user hitting a protected route → login
   if (!user && requiresAuth) {
@@ -50,23 +52,20 @@ export async function middleware(request: NextRequest) {
   }
 
   // Authenticated user hitting /login → redirect by role
-  if (user && pathname === "/login") {
+  if (user && isLogin) {
     const redirectUrl = request.nextUrl.clone();
-    // Use JWT role claim if the auth hook is set up, else fall back to /owner
-    // The individual pages will further redirect if role doesn't match
-    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    const token  = (await supabase.auth.getSession()).data.session?.access_token;
     const claims = token ? parseJwt(token) : null;
-    const role = (claims?.app_role ?? claims?.role) as string | undefined;
+    const role   = (claims?.app_role ?? claims?.role) as string | undefined;
     redirectUrl.pathname = role === "staff" ? "/pos" : "/owner";
     return NextResponse.redirect(redirectUrl);
   }
 
   // Staff explicitly trying to access /owner → redirect to /pos
-  // Only block if role claim is explicitly "staff" (hook is set up)
   if (user && pathname.startsWith("/owner")) {
-    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    const token  = (await supabase.auth.getSession()).data.session?.access_token;
     const claims = token ? parseJwt(token) : null;
-    const role = (claims?.app_role ?? claims?.role) as string | undefined;
+    const role   = (claims?.app_role ?? claims?.role) as string | undefined;
     if (role === "staff") {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/pos";

@@ -36,6 +36,7 @@ export const tableSchema = z.object({
   description: z.string().nullable().optional(),
   image_url: z.string().url().nullable().optional(),
   hourly_rate: z.number().positive(),
+  people_pricing: z.record(z.string(), z.number()).nullable().optional(),
   sort_order: z.number().int().optional(),
   is_active: z.boolean().optional(),
 });
@@ -80,7 +81,9 @@ export const extendSessionSchema = z.object({
 export const addExtraSchema = z.object({
   name: z.string().min(1),
   price: z.number().positive(),
+  cost_price: z.number().min(0).optional().default(0),
   quantity: z.number().int().positive().default(1),
+  inventory_item_id: z.string().uuid().optional(),
 });
 
 // Finalize bill
@@ -110,6 +113,38 @@ export const couponSchema = z.object({
   valid_from: z.string().datetime(),
   valid_until: z.string().datetime(),
   max_uses: z.number().int().positive().optional(),
+});
+
+// Inventory item
+export const inventoryItemSchema = z.object({
+  location_id: z.string().uuid(),
+  name: z.string().min(1),
+  category: z.string().min(1).default("Other"),
+  selling_price: z.number().min(0),
+  cost_price: z.number().min(0).default(0),
+  image_url: z.string().url().nullable().optional(),
+  sort_order: z.number().int().optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const updateInventoryItemSchema = inventoryItemSchema.partial();
+
+// Membership plan
+export const membershipPlanSchema = z.object({
+  name: z.string().min(1),
+  price: z.number().min(0),
+  duration_days: z.number().int().positive(),
+  discount_pct: z.number().min(0).max(100).default(0),
+  free_hrs: z.number().min(0).default(0),
+});
+
+export const updateMembershipPlanSchema = membershipPlanSchema.partial();
+
+// Assign membership to customer
+export const assignMembershipSchema = z.object({
+  customer_phone: z.string().min(1),
+  plan_id: z.string().uuid(),
+  starts_at: z.string().datetime().optional(),
 });
 
 // Staff create

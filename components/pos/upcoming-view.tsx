@@ -17,7 +17,8 @@ type BookingRow = Booking & {
 };
 
 export function UpcomingView({ locationId }: UpcomingViewProps) {
-  const { tables, now } = usePOSStore();
+  const tables = usePOSStore((s) => s.tables);
+  const now    = usePOSStore((s) => s.now);
   const qc = useQueryClient();
   const [shifting, setShifting] = useState<string | null>(null);
 

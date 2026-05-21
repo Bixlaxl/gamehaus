@@ -34,10 +34,18 @@ function fmtDateTime(iso: string, now: Date) {
 }
 
 export function TableSessionsDrawer() {
-  const { tableSessionsTableId, setTableSessionsTableId, tables, openOrders, selectOrder, now, setWalkInWithTable } =
-    usePOSStore();
-
+  const tableSessionsTableId = usePOSStore((s) => s.tableSessionsTableId);
   if (!tableSessionsTableId) return null;
+  return <TableSessionsDrawerInner tableSessionsTableId={tableSessionsTableId} />;
+}
+
+function TableSessionsDrawerInner({ tableSessionsTableId }: { tableSessionsTableId: string }) {
+  const setTableSessionsTableId = usePOSStore((s) => s.setTableSessionsTableId);
+  const tables          = usePOSStore((s) => s.tables);
+  const openOrders      = usePOSStore((s) => s.openOrders);
+  const selectOrder     = usePOSStore((s) => s.selectOrder);
+  const now             = usePOSStore((s) => s.now);
+  const setWalkInWithTable = usePOSStore((s) => s.setWalkInWithTable);
 
   const table = tables.find((t) => t.id === tableSessionsTableId);
   if (!table) return null;

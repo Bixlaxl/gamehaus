@@ -19,7 +19,6 @@ export async function POST(
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-  const user = session.user;
 
   const body: unknown = await request.json();
   const parsed = schema.safeParse(body);
@@ -47,22 +46,16 @@ export async function POST(
   const newStart         = new Date(new Date(booking.scheduled_start).getTime() + shiftMs).toISOString();
   const newEnd           = new Date(new Date(booking.scheduled_end).getTime() + shiftMs).toISOString();
 
-  // Update booking
-  const { error: bookingErr } = await admin
-    .from("bookings")
-    .update({ scheduled_start: newStart, scheduled_end: newEnd })
-    .eq("id", bookingId);
+  const orderItem = booking.order_item as { id: string } | null;
+
+  const [{ error: bookingErr }] = await Promise.all([
+    admin.from("bookings").update({ scheduled_start: newStart, scheduled_end: newEnd }).eq("id", bookingId),
+    orderItem?.id
+      ? admin.from("order_items").update({ scheduled_start: newStart, scheduled_end: newEnd }).eq("id", orderItem.id)
+      : Promise.resolve(null),
+  ]);
 
   if (bookingErr) return NextResponse.json(err(bookingErr.message, "DB_ERROR"), { status: 500 });
-
-  // Update the order_item scheduled times too
-  const orderItem = booking.order_item as { id: string } | null;
-  if (orderItem?.id) {
-    await admin
-      .from("order_items")
-      .update({ scheduled_start: newStart, scheduled_end: newEnd })
-      .eq("id", orderItem.id);
-  }
 
   return NextResponse.json(ok({ new_start: newStart, new_end: newEnd }));
 }

@@ -24,7 +24,7 @@ export function subscribeToPOS(
     )
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "orders" },
+      { event: "*", schema: "public", table: "orders", filter: `location_id=eq.${locationId}` },
       (payload) => {
         handlers.handleOrderChange(payload as Parameters<typeof handlers.handleOrderChange>[0]);
         if (payload.eventType === "INSERT") handlers.onInsert?.();
@@ -37,7 +37,7 @@ export function subscribeToPOS(
     )
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "tables" },
+      { event: "*", schema: "public", table: "tables", filter: `location_id=eq.${locationId}` },
       (payload) => handlers.handleTableChange(payload as Parameters<typeof handlers.handleTableChange>[0])
     )
     .on(

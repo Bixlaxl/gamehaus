@@ -68,6 +68,8 @@ export function StaffContent({
       return (data ?? []) as Location[];
     },
     initialData: initialLocations,
+    initialDataUpdatedAt: Date.now(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: staff, isLoading } = useQuery({
@@ -81,6 +83,8 @@ export function StaffContent({
       return (data ?? []) as StaffRow[];
     },
     initialData: initialStaff,
+    initialDataUpdatedAt: Date.now(),
+    staleTime: 5 * 60 * 1000,
   });
 
   // ── Create ──────────────────────────────────────────────────────────────────

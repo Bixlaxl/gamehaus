@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, memo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, memo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
+import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
 const AUTO_STOP_GRACE_MINS = 2;
@@ -122,7 +123,7 @@ function PanelWalkIn({
     setError(null);
 
     // Combined endpoint: creates order + starts session in one round trip
-    const res = await fetch("/api/walkin/start", {
+    const res = await fetch("/api/walkin", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
@@ -302,10 +303,36 @@ function PanelSession({
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
   const qc                = useQueryClient();
 
-  const [addExtraOpen,  setAddExtraOpen]  = useState(false);
-  const [extraForm,     setExtraForm]     = useState({ name: "", price: "", quantity: "1" });
-  const [customerInfo,  setCustomerInfo]  = useState<{ points_balance: number } | null>(null);
-  const [redeemInput,   setRedeemInput]   = useState(String(pointsToRedeem[order.id] ?? 0));
+  const [addExtraOpen,   setAddExtraOpen]   = useState(false);
+  const [extraMode,      setExtraMode]      = useState<"inventory" | "custom">("inventory");
+  const [extraForm,      setExtraForm]      = useState({ name: "", price: "", quantity: "1" });
+  const [redeemInput,    setRedeemInput]    = useState(String(pointsToRedeem[order.id] ?? 0));
+
+  // Lazy: only fetch inventory when the picker is opened — saves a request per order
+  const { data: inventoryItems } = useQuery<InventoryItem[]>({
+    queryKey: ["inventory", locationId],
+    queryFn: async () => {
+      const res  = await fetch(`/api/inventory?location_id=${locationId}`);
+      const body = await res.json() as { success: true; data: InventoryItem[] } | { success: false; error: string };
+      if (!body.success) return [];
+      return body.data.filter((i) => i.is_active);
+    },
+    enabled: addExtraOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Cached across order opens — same phone won't re-fetch within 60s
+  const { data: customerInfo } = useQuery<{ points_balance: number } | null>({
+    queryKey: ["customer-lookup", order.customer_phone],
+    queryFn: async () => {
+      if (!order.customer_phone) return null;
+      const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
+      const body = await res.json() as { found: boolean; customer: { points_balance: number } | null };
+      return body.customer;
+    },
+    enabled: !!order.customer_phone,
+    staleTime: 60 * 1000,
+  });
 
   const activeItems  = order.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
@@ -316,17 +343,6 @@ function PanelSession({
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
   const clampedRedeem = Math.min(redeemPoints, maxRedeem);
   const displayTotal  = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
-
-  useEffect(() => {
-    if (!order.customer_phone) return;
-    fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`)
-      .then((r) => r.json())
-      .then((data: { found: boolean; customer: { points_balance: number } | null }) => {
-        setCustomerInfo(data.customer);
-      })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order.customer_phone]);
 
   function handleRedeemChange(val: string) {
     setRedeemInput(val);
@@ -350,30 +366,38 @@ function PanelSession({
     }
   }
 
-  async function addExtra() {
-    if (!extraForm.name || !extraForm.price) return;
+  async function addExtraItem(opts: {
+    name: string;
+    price: number;
+    cost_price?: number;
+    quantity: number;
+    inventory_item_id?: string;
+  }) {
     const tempId     = crypto.randomUUID();
     const optimistic: OrderExtra = {
-      id:         tempId,
-      order_id:   order.id,
-      name:       extraForm.name,
-      price:      parseFloat(extraForm.price),
-      quantity:   parseInt(extraForm.quantity),
-      is_deleted: false,
-      deleted_at: null,
-      added_by:   null,
-      created_at: new Date().toISOString(),
+      id:                tempId,
+      order_id:          order.id,
+      name:              opts.name,
+      price:             opts.price,
+      cost_price:        opts.cost_price ?? 0,
+      quantity:          opts.quantity,
+      inventory_item_id: opts.inventory_item_id ?? null,
+      is_deleted:        false,
+      deleted_at:        null,
+      added_by:          null,
+      created_at:        new Date().toISOString(),
     };
     addOrderExtra(order.id, optimistic);
-    setExtraForm({ name: "", price: "", quantity: "1" });
     setAddExtraOpen(false);
     const res = await fetch(`/api/orders/${order.id}/extras`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
-        name:     optimistic.name,
-        price:    optimistic.price,
-        quantity: optimistic.quantity,
+        name:              opts.name,
+        price:             opts.price,
+        cost_price:        opts.cost_price ?? 0,
+        quantity:          opts.quantity,
+        inventory_item_id: opts.inventory_item_id,
       }),
     });
     if (!res.ok) {
@@ -382,6 +406,16 @@ function PanelSession({
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     }
+  }
+
+  async function addCustomExtra() {
+    if (!extraForm.name || !extraForm.price) return;
+    await addExtraItem({
+      name:     extraForm.name,
+      price:    parseFloat(extraForm.price),
+      quantity: parseInt(extraForm.quantity) || 1,
+    });
+    setExtraForm({ name: "", price: "", quantity: "1" });
   }
 
   async function deleteExtra(extraId: string) {
@@ -646,54 +680,107 @@ function PanelSession({
               </div>
             ))}
             {addExtraOpen && (
-              <div className="pt-2 space-y-2">
-                <input
-                  placeholder="Item name (e.g. Coke)"
-                  value={extraForm.name}
-                  onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                    bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
-                    text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
-                    focus:border-[#D4541A]"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder="Price (₹)"
-                    value={extraForm.price}
-                    onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
-                    className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                      bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                      text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Qty"
-                    value={extraForm.quantity}
-                    onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
-                    className="w-16 px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                      bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                      text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
-                  />
+              <div className="pt-2 space-y-3">
+                {/* Mode tabs */}
+                <div className="flex gap-1 p-0.5 rounded-lg bg-gray-100 dark:bg-[#1a1a1a]">
+                  {(["inventory", "custom"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setExtraMode(m)}
+                      className="flex-1 py-1 rounded-md text-xs font-bold capitalize transition-colors"
+                      style={
+                        extraMode === m
+                          ? { background: "#D4541A", color: "#fff" }
+                          : { color: "#666" }
+                      }
+                    >
+                      {m === "inventory" ? "Catalogue" : "Custom"}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={addExtra}
-                    className="flex-1 py-2 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-85"
-                    style={{ background: "#D4541A" }}
-                  >
-                    Add Extra
-                  </button>
-                  <button
-                    onClick={() => setAddExtraOpen(false)}
-                    className="px-4 py-2 rounded-lg text-xs font-medium transition-colors
-                      bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                      text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                </div>
+
+                {extraMode === "inventory" && (
+                  <div className="max-h-48 overflow-y-auto space-y-1 pr-0.5">
+                    {(inventoryItems ?? []).length === 0 && (
+                      <p className="text-xs text-gray-400 dark:text-[#555] py-2 text-center">
+                        No items in catalogue
+                      </p>
+                    )}
+                    {(inventoryItems ?? []).map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() =>
+                          addExtraItem({
+                            name:              item.name,
+                            price:             item.selling_price,
+                            cost_price:        item.cost_price,
+                            quantity:          1,
+                            inventory_item_id: item.id,
+                          })
+                        }
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors
+                          bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-[#222]
+                          hover:border-[#D4541A] hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
+                      >
+                        <span className="text-xs font-medium text-gray-800 dark:text-[#ccc] truncate">{item.name}</span>
+                        <span className="text-xs font-bold shrink-0 ml-2" style={{ color: "#D4541A" }}>
+                          ₹{item.selling_price}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {extraMode === "custom" && (
+                  <div className="space-y-2">
+                    <input
+                      placeholder="Item name"
+                      value={extraForm.name}
+                      onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
+                        bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
+                        text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
+                        focus:border-[#D4541A]"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        placeholder="Price (₹)"
+                        value={extraForm.price}
+                        onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
+                        className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-colors
+                          bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                          text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Qty"
+                        value={extraForm.quantity}
+                        onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
+                        className="w-16 px-3 py-2 rounded-lg text-sm outline-none transition-colors
+                          bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                          text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
+                      />
+                    </div>
+                    <button
+                      onClick={addCustomExtra}
+                      className="w-full py-2 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-85"
+                      style={{ background: "#D4541A" }}
+                    >
+                      Add Custom Extra
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setAddExtraOpen(false)}
+                  className="w-full py-1.5 rounded-lg text-xs font-medium transition-colors
+                    bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                    text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
               </div>
             )}
           </div>

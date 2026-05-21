@@ -34,28 +34,16 @@ export async function POST(
 
   const now = new Date().toISOString();
 
-  // Mark booking as no-show
-  await admin
-    .from("bookings")
-    .update({
+  // Mark booking no-show + cancel order item + fetch order — all independent
+  const [, , { data: order }] = await Promise.all([
+    admin.from("bookings").update({
       status:            "no_show",
       no_show_marked_by: user.id,
       no_show_marked_at: now,
-    })
-    .eq("id", bookingId);
-
-  // Cancel the order item — releases the table slot
-  await admin
-    .from("order_items")
-    .update({ status: "cancelled" })
-    .eq("id", booking.order_item_id);
-
-  // Finalize the order — advance already collected online, nothing more owed
-  const { data: order } = await admin
-    .from("orders")
-    .select("*")
-    .eq("id", booking.order_id)
-    .single();
+    }).eq("id", bookingId),
+    admin.from("order_items").update({ status: "cancelled" }).eq("id", booking.order_item_id),
+    admin.from("orders").select("*").eq("id", booking.order_id).single(),
+  ]);
 
   if (order && order.status === "open") {
     const advancePaid = order.advance_paid ?? 0;

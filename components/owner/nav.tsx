@@ -7,18 +7,21 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   MapPin, Grid3X3, Users, BookOpen, BarChart2,
-  Tag, Settings, LogOut, Home,
+  Tag, Settings, LogOut, Home, UserRound, Package, CreditCard,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/owner",           label: "Overview",  icon: Home,     exact: true },
-  { href: "/owner/locations", label: "Locations", icon: MapPin },
-  { href: "/owner/tables",    label: "Tables",    icon: Grid3X3 },
-  { href: "/owner/staff",     label: "Staff",     icon: Users },
-  { href: "/owner/bookings",  label: "Bookings",  icon: BookOpen },
-  { href: "/owner/coupons",   label: "Coupons",   icon: Tag },
-  { href: "/owner/reports",   label: "Reports",   icon: BarChart2 },
-  { href: "/owner/settings",  label: "Settings",  icon: Settings },
+  { href: "/owner",              label: "Overview",    icon: Home,       exact: true },
+  { href: "/owner/locations",    label: "Locations",   icon: MapPin },
+  { href: "/owner/tables",       label: "Tables",      icon: Grid3X3 },
+  { href: "/owner/inventory",    label: "Inventory",   icon: Package },
+  { href: "/owner/staff",        label: "Staff",       icon: Users },
+  { href: "/owner/bookings",     label: "Bookings",    icon: BookOpen },
+  { href: "/owner/customers",    label: "Customers",   icon: UserRound },
+  { href: "/owner/memberships",  label: "Memberships", icon: CreditCard },
+  { href: "/owner/coupons",      label: "Coupons",     icon: Tag },
+  { href: "/owner/reports",      label: "Reports",     icon: BarChart2 },
+  { href: "/owner/settings",     label: "Settings",    icon: Settings },
 ];
 
 interface OwnerNavProps {

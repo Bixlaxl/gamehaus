@@ -26,15 +26,17 @@ function makeItem(overrides: Partial<OrderItem> = {}): OrderItem {
 
 function makeExtra(overrides: Partial<OrderExtra> = {}): OrderExtra {
   return {
-    id: "extra-1",
-    order_id: "order-1",
-    name: "Red Bull",
-    price: 100,
-    quantity: 1,
-    is_deleted: false,
-    deleted_at: null,
-    added_by: null,
-    created_at: new Date().toISOString(),
+    id:                "extra-1",
+    order_id:          "order-1",
+    name:              "Red Bull",
+    price:             100,
+    cost_price:        0,
+    quantity:          1,
+    inventory_item_id: null,
+    is_deleted:        false,
+    deleted_at:        null,
+    added_by:          null,
+    created_at:        new Date().toISOString(),
     ...overrides,
   };
 }

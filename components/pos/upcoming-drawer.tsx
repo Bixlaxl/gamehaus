@@ -16,7 +16,15 @@ type BookingRow = Booking & {
 };
 
 export function UpcomingDrawer({ locationId }: UpcomingDrawerProps) {
-  const { upcomingOpen, setUpcomingOpen, tables, now } = usePOSStore();
+  const upcomingOpen = usePOSStore((s) => s.upcomingOpen);
+  if (!upcomingOpen) return null;
+  return <UpcomingDrawerInner locationId={locationId} />;
+}
+
+function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
+  const setUpcomingOpen = usePOSStore((s) => s.setUpcomingOpen);
+  const tables          = usePOSStore((s) => s.tables);
+  const now             = usePOSStore((s) => s.now);
   const qc = useQueryClient();
   const [shifting, setShifting] = useState<string | null>(null);
 
@@ -29,8 +37,6 @@ export function UpcomingDrawer({ locationId }: UpcomingDrawerProps) {
     },
     staleTime: 30000,
   });
-
-  if (!upcomingOpen) return null;
 
   const upcoming = bookings
     .filter((b) => {

@@ -34,7 +34,7 @@ export async function POST(
     return NextResponse.json(err("Order not found or not open", "INVALID_STATE"), { status: 400 });
   }
 
-  const { name, price, quantity } = parsed.data;
+  const { name, price, cost_price, quantity, inventory_item_id } = parsed.data;
 
   const { data: extra, error } = await admin
     .from("order_extras")
@@ -42,7 +42,9 @@ export async function POST(
       order_id: orderId,
       name,
       price,
+      cost_price: cost_price ?? 0,
       quantity,
+      inventory_item_id: inventory_item_id ?? null,
       added_by: user.id,
     })
     .select()

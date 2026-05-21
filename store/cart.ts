@@ -6,6 +6,7 @@ export interface CartItem {
   tableName: string;
   tableType: string;
   ratePerHour: number;
+  numPeople?: number; // for snooker/pool (4/5/6) or PS5 (1/2 controllers); null = flat hourly rate
   scheduledStart: string; // ISO string
   scheduledEnd: string;   // ISO string
   durationMins: number;

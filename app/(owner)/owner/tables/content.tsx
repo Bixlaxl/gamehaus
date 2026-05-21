@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import NextImage from "next/image";
 import type { Table, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, Trash2, Image } from "lucide-react";
@@ -36,6 +37,7 @@ type TableForm = {
   hourly_rate: string;
   sort_order: string;
   image_file: File | null;
+  people_pricing: Record<string, string>;
 };
 
 const defaultForm: TableForm = {
@@ -47,6 +49,7 @@ const defaultForm: TableForm = {
   hourly_rate: "",
   sort_order: "0",
   image_file: null,
+  people_pricing: {},
 };
 
 export function TablesContent({
@@ -74,6 +77,8 @@ export function TablesContent({
       return data ?? [];
     },
     initialData: initialLocations,
+    initialDataUpdatedAt: Date.now(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: tables, isLoading } = useQuery({
@@ -90,6 +95,8 @@ export function TablesContent({
       return data ?? [];
     },
     initialData: selectedLocation === "all" ? initialTables : undefined,
+    initialDataUpdatedAt: Date.now(),
+    staleTime: 5 * 60 * 1000,
   });
 
   async function uploadImage(file: File, tableId: string, locationId: string): Promise<string> {
@@ -105,14 +112,22 @@ export function TablesContent({
 
   const upsertMutation = useMutation({
     mutationFn: async (values: TableForm & { editId?: string }) => {
+      const pricingKeys = Object.keys(values.people_pricing).filter(
+        (k) => values.people_pricing[k] && parseFloat(values.people_pricing[k]) > 0
+      );
+      const peoplePricing = pricingKeys.length > 0
+        ? Object.fromEntries(pricingKeys.map((k) => [k, parseFloat(values.people_pricing[k])]))
+        : null;
+
       const payload = {
-        location_id: values.location_id,
-        name: values.name,
-        type: values.type,
-        size: values.size || undefined,
-        description: values.description || undefined,
-        hourly_rate: parseFloat(values.hourly_rate),
-        sort_order: parseInt(values.sort_order),
+        location_id:    values.location_id,
+        name:           values.name,
+        type:           values.type,
+        size:           values.size || undefined,
+        description:    values.description || undefined,
+        hourly_rate:    parseFloat(values.hourly_rate),
+        sort_order:     parseInt(values.sort_order),
+        people_pricing: peoplePricing,
       };
 
       if (values.editId) {
@@ -153,18 +168,25 @@ export function TablesContent({
       if (!values.editId) return undefined;
       await qc.cancelQueries({ queryKey: ["tables"] });
       const prev = qc.getQueryData<Table[]>(["tables", selectedLocation]);
+      const ppKeys = Object.keys(values.people_pricing).filter(
+        (k) => values.people_pricing[k] && parseFloat(values.people_pricing[k]) > 0
+      );
+      const ppOpt = ppKeys.length > 0
+        ? Object.fromEntries(ppKeys.map((k) => [k, parseFloat(values.people_pricing[k])]))
+        : null;
       qc.setQueryData<Table[]>(["tables", selectedLocation], (old) =>
         (old ?? []).map((t) =>
           t.id === values.editId
             ? {
                 ...t,
-                name:         values.name,
-                type:         values.type,
-                hourly_rate:  parseFloat(values.hourly_rate),
-                sort_order:   parseInt(values.sort_order),
-                size:         values.size || null,
-                description:  values.description || null,
-                location_id:  values.location_id,
+                name:           values.name,
+                type:           values.type,
+                hourly_rate:    parseFloat(values.hourly_rate),
+                sort_order:     parseInt(values.sort_order),
+                size:           values.size || null,
+                description:    values.description || null,
+                location_id:    values.location_id,
+                people_pricing: ppOpt,
               }
             : t
         )
@@ -264,15 +286,22 @@ export function TablesContent({
 
   function openEdit(t: Table) {
     setEditing(t);
+    const pp: Record<string, string> = {};
+    if (t.people_pricing) {
+      for (const [k, v] of Object.entries(t.people_pricing)) {
+        pp[k] = String(v);
+      }
+    }
     setForm({
-      location_id: t.location_id,
-      name: t.name,
-      type: t.type,
-      size: t.size ?? "",
-      description: t.description ?? "",
-      hourly_rate: String(t.hourly_rate),
-      sort_order: String(t.sort_order),
-      image_file: null,
+      location_id:    t.location_id,
+      name:           t.name,
+      type:           t.type,
+      size:           t.size ?? "",
+      description:    t.description ?? "",
+      hourly_rate:    String(t.hourly_rate),
+      sort_order:     String(t.sort_order),
+      image_file:     null,
+      people_pricing: pp,
     });
     setDialogOpen(true);
   }
@@ -324,13 +353,14 @@ export function TablesContent({
               key={table.id}
               className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
             >
-              <div className="h-36 bg-gray-100 flex items-center justify-center">
+              <div className="relative h-36 bg-gray-100 flex items-center justify-center">
                 {table.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <NextImage
                     src={table.image_url}
                     alt={table.name}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 33vw"
                   />
                 ) : (
                   <Image className="h-8 w-8 text-gray-300" />
@@ -350,6 +380,15 @@ export function TablesContent({
                 <p className="text-sm font-medium">
                   {formatCurrency(table.hourly_rate)}/hr
                 </p>
+                {table.people_pricing && Object.keys(table.people_pricing).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {Object.entries(table.people_pricing).sort(([a], [b]) => Number(a) - Number(b)).map(([k, v]) => (
+                      <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">
+                        {table.type === "ps5" ? `${k}ctrl` : `${k}p`} ₹{v}/hr
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 pt-1">
                   {!table.is_active && (
                     <>
@@ -474,6 +513,58 @@ export function TablesContent({
                 />
               </div>
             </div>
+            {/* Per-person / per-controller hourly rate */}
+            {(form.type === "snooker" || form.type === "pool") && (
+              <div className="space-y-2">
+                <Label>Per-Player Hourly Rate (₹/hr) — optional</Label>
+                <p className="text-xs text-gray-400">Override the flat hourly rate based on group size. Leave blank to use the flat rate above.</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {["4", "5", "6"].map((n) => (
+                    <div key={n} className="space-y-1">
+                      <p className="text-xs text-gray-500 font-medium">{n} players</p>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="₹/hr"
+                        value={form.people_pricing[n] ?? ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            people_pricing: { ...form.people_pricing, [n]: e.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {form.type === "ps5" && (
+              <div className="space-y-2">
+                <Label>Per-Controller Hourly Rate (₹/hr) — optional</Label>
+                <p className="text-xs text-gray-400">Override the flat hourly rate based on controller count. Leave blank to use the flat rate above.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {["1", "2"].map((n) => (
+                    <div key={n} className="space-y-1">
+                      <p className="text-xs text-gray-500 font-medium">{n} controller{n === "2" ? "s" : ""}</p>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="₹/hr"
+                        value={form.people_pricing[n] ?? ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            people_pricing: { ...form.people_pricing, [n]: e.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="size">Size (optional)</Label>
               <Input

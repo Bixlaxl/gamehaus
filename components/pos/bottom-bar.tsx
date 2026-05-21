@@ -9,14 +9,12 @@ interface BottomBarProps {
 }
 
 export function BottomBar({ locationId: _locationId }: BottomBarProps) {
-  const { setWalkInOpen, setCheckinOpen, setUpcomingOpen } = usePOSStore();
-
   return (
     <div className="shrink-0 flex items-center gap-3 px-4 py-3 bg-gray-800 border-t border-gray-700">
       <Button
         size="lg"
         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-        onClick={() => setWalkInOpen(true)}
+        onClick={() => usePOSStore.getState().setWalkInOpen(true)}
       >
         <UserPlus className="h-5 w-5" />
         New Walk-in
@@ -25,7 +23,7 @@ export function BottomBar({ locationId: _locationId }: BottomBarProps) {
         size="lg"
         variant="outline"
         className="flex-1 border-gray-600 text-white hover:bg-gray-700"
-        onClick={() => setCheckinOpen(true)}
+        onClick={() => usePOSStore.getState().setCheckinOpen(true)}
       >
         <QrCode className="h-5 w-5" />
         Check-in Booking
@@ -34,7 +32,7 @@ export function BottomBar({ locationId: _locationId }: BottomBarProps) {
         size="lg"
         variant="outline"
         className="border-gray-600 text-white hover:bg-gray-700"
-        onClick={() => setUpcomingOpen(true)}
+        onClick={() => usePOSStore.getState().setUpcomingOpen(true)}
       >
         <Clock className="h-4 w-4" />
         Upcoming

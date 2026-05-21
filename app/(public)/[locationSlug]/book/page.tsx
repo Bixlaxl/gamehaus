@@ -350,6 +350,11 @@ export default function CheckoutPage() {
                         <Clock className="h-3 w-3" />
                         {fmtTime(item.scheduledStart)} – {fmtTime(item.scheduledEnd)}
                       </span>
+                      {item.numPeople && (
+                        <span className="text-xs font-medium" style={{ color: textSec }}>
+                          · {item.numPeople} {item.tableType === "ps5" ? `controller${item.numPeople === 1 ? "" : "s"}` : "players"} · ₹{item.ratePerHour}/hr
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">

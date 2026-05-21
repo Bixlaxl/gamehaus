@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
-const INTERVAL_MS = 30_000;
+const INTERVAL_MS = 120_000;
 
 export function DashboardRefresh() {
   const router  = useRouter();

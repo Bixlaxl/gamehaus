@@ -18,6 +18,12 @@ function initials(name: string) {
 }
 
 export function OrderPanel({ locationId }: OrderPanelProps) {
+  const selectedOrderId = usePOSStore((s) => s.selectedOrderId);
+  if (!selectedOrderId) return null;
+  return <OrderPanelInner locationId={locationId} />;
+}
+
+function OrderPanelInner({ locationId }: OrderPanelProps) {
   const store         = usePOSStore();
   const selectedOrder = getSelectedOrder(store);
   const now           = store.now;
@@ -55,15 +61,17 @@ export function OrderPanel({ locationId }: OrderPanelProps) {
     if (!extraForm.name || !extraForm.price || !selectedOrder) return;
     const tempId  = crypto.randomUUID();
     const optimistic: OrderExtra = {
-      id:         tempId,
-      order_id:   selectedOrder.id,
-      name:       extraForm.name,
-      price:      parseFloat(extraForm.price),
-      quantity:   parseInt(extraForm.quantity),
-      is_deleted: false,
-      deleted_at: null,
-      added_by:   null,
-      created_at: new Date().toISOString(),
+      id:                tempId,
+      order_id:          selectedOrder.id,
+      name:              extraForm.name,
+      price:             parseFloat(extraForm.price),
+      cost_price:        0,
+      quantity:          parseInt(extraForm.quantity),
+      inventory_item_id: null,
+      is_deleted:        false,
+      deleted_at:        null,
+      added_by:          null,
+      created_at:        new Date().toISOString(),
     };
     store.addOrderExtra(selectedOrder.id, optimistic);
     setExtraForm({ name: "", price: "", quantity: "1" });

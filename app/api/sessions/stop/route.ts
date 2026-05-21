@@ -12,7 +12,6 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-  const user = session.user;
 
   const body: unknown = await request.json();
   const parsed = stopSessionSchema.safeParse(body);
@@ -54,15 +53,5 @@ export async function POST(request: Request) {
     return NextResponse.json(err(updateError.message, "DB_ERROR"), { status: 500 });
   }
 
-  // Check if all items in this order are now finished — prompt to finalize
-  const { data: allItems } = await admin
-    .from("order_items")
-    .select("status, is_deleted")
-    .eq("order_id", item.order_id);
-
-  const allDone = (allItems ?? [])
-    .filter((i) => !i.is_deleted && i.status !== "cancelled")
-    .every((i) => i.status === "finished");
-
-  return NextResponse.json(ok({ stopped_at: now.toISOString(), final_amount: finalAmount, all_done: allDone }));
+  return NextResponse.json(ok({ stopped_at: now.toISOString(), final_amount: finalAmount }));
 }

@@ -48,24 +48,16 @@ export async function POST(request: Request) {
     if (paymentRow) {
       const now = new Date().toISOString();
 
-      // Mark payment completed
-      await admin.from("payments").update({
-        status:              "completed",
-        razorpay_payment_id: payment.id,
-        collected_at:        now,
-      }).eq("id", paymentRow.id);
-
-      // Update order's advance_paid
-      await admin.from("orders").update({
-        advance_paid: paymentRow.amount,
-      }).eq("id", paymentRow.order_id);
-
-      // Award loyalty points — fetch order for phone + points_redeemed
-      const { data: order } = await admin
-        .from("orders")
-        .select("customer_phone, customer_name, points_redeemed")
-        .eq("id", paymentRow.order_id)
-        .single();
+      // All three are independent — run in parallel
+      const [, , { data: order }] = await Promise.all([
+        admin.from("payments").update({
+          status:              "completed",
+          razorpay_payment_id: payment.id,
+          collected_at:        now,
+        }).eq("id", paymentRow.id),
+        admin.from("orders").update({ advance_paid: paymentRow.amount }).eq("id", paymentRow.order_id),
+        admin.from("orders").select("customer_phone, customer_name, points_redeemed").eq("id", paymentRow.order_id).single(),
+      ]);
 
       if (order?.customer_phone) {
         const pointsEarned = Math.floor(paymentRow.amount / 100);

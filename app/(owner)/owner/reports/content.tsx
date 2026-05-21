@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
@@ -57,8 +57,9 @@ type ReportOrder = {
   type: string;
   finalized_at: string | null;
   location: { id: string; name: string } | null;
-  items: Array<{ status: string }>;
+  items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null }>;
   payments: Array<{ method: string; amount: number; status: string }>;
+  extras: Array<{ price: number; cost_price: number; quantity: number; is_deleted: boolean }>;
 };
 
 type ReportLocation = {
@@ -117,8 +118,9 @@ export function ReportsContent({
         .select(`
           id, customer_name, customer_phone, amount_due, advance_paid, type, finalized_at,
           location:locations(id, name),
-          items:order_items(status),
-          payments(method, amount, status)
+          items:order_items(status, rate_per_hour, actual_start, expected_end),
+          payments(method, amount, status),
+          extras:order_extras(price, cost_price, quantity, is_deleted)
         `)
         .eq("status", "finalized")
         .gte("finalized_at", fromISO)
@@ -127,55 +129,92 @@ export function ReportsContent({
       return { orders: (orders ?? []) as ReportOrder[], locations: (locations ?? []) as ReportLocation[] };
     },
     initialData: initialReportData,
+    initialDataUpdatedAt: Date.now(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const orders    = reportData?.orders    ?? [];
   const locations = reportData?.locations ?? [];
 
-  const filteredOrders = selectedLocationId
-    ? orders.filter((o) => o.location?.id === selectedLocationId)
-    : orders;
+  const filteredOrders = useMemo(
+    () => selectedLocationId
+      ? orders.filter((o) => o.location?.id === selectedLocationId)
+      : orders,
+    [orders, selectedLocationId]
+  );
 
-  // Revenue by location
-  const revenueByLocation = locations.map((loc) => {
-    const locOrders    = filteredOrders.filter((o) => o.location?.id === loc.id);
-    const revenue      = locOrders.reduce((s, o) => s + (o.amount_due ?? 0) + (o.advance_paid ?? 0), 0);
-    const sessionCount = locOrders.flatMap((o) =>
-      o.items.filter((i) => i.status === "finished")
-    ).length;
-    return { name: loc.name, revenue, sessionCount, orderCount: locOrders.length };
-  });
-
-  const totalRevenue  = revenueByLocation.reduce((s, l) => s + l.revenue, 0);
-  const totalSessions = revenueByLocation.reduce((s, l) => s + l.sessionCount, 0);
-
-  // Payment method breakdown
-  const methodMap = new Map<string, number>();
-  for (const order of filteredOrders) {
-    for (const p of order.payments) {
-      if (p.status !== "completed") continue;
-      methodMap.set(p.method, (methodMap.get(p.method) ?? 0) + (p.amount ?? 0));
+  // Single pass over filteredOrders for all derived stats — avoids 5+ separate loops on every render
+  const stats = useMemo(() => {
+    const revByLoc = new Map<string, { name: string; revenue: number; sessionCount: number; orderCount: number }>();
+    for (const loc of locations) {
+      revByLoc.set(loc.id, { name: loc.name, revenue: 0, sessionCount: 0, orderCount: 0 });
     }
-  }
-  const paymentBreakdown = [...methodMap.entries()]
-    .map(([method, amount]) => ({ method, amount }))
-    .sort((a, b) => b.amount - a.amount);
+    const methodMap   = new Map<string, number>();
+    const customerMap = new Map<string, { name: string; visits: number; spent: number }>();
+    let tableRevenue    = 0;
+    let inventoryProfit = 0;
 
-  // Top customers
-  const customerMap = new Map<string, { name: string; visits: number; spent: number }>();
-  for (const order of filteredOrders) {
-    if (!order.customer_phone) continue;
-    const existing = customerMap.get(order.customer_phone) ?? { name: order.customer_name, visits: 0, spent: 0 };
-    customerMap.set(order.customer_phone, {
-      name:   existing.name,
-      visits: existing.visits + 1,
-      spent:  existing.spent + (order.amount_due ?? 0),
-    });
-  }
-  const topCustomers = [...customerMap.entries()]
-    .map(([phone, data]) => ({ phone, ...data }))
-    .sort((a, b) => b.visits - a.visits)
-    .slice(0, 10);
+    for (const o of filteredOrders) {
+      const locRow = o.location?.id ? revByLoc.get(o.location.id) : undefined;
+      if (locRow) {
+        locRow.revenue    += (o.amount_due ?? 0) + (o.advance_paid ?? 0);
+        locRow.orderCount += 1;
+        for (const i of o.items) if (i.status === "finished") locRow.sessionCount += 1;
+      }
+
+      // Profit: tables = 100% margin, extras = price - cost
+      for (const i of o.items) {
+        if (i.status !== "finished" || !i.actual_start || !i.expected_end) continue;
+        const mins = (new Date(i.expected_end).getTime() - new Date(i.actual_start).getTime()) / 60000;
+        tableRevenue += (i.rate_per_hour / 60) * mins;
+      }
+      for (const e of o.extras ?? []) {
+        if (e.is_deleted) continue;
+        inventoryProfit += (e.price - e.cost_price) * e.quantity;
+      }
+
+      // Payment methods
+      for (const p of o.payments) {
+        if (p.status !== "completed") continue;
+        methodMap.set(p.method, (methodMap.get(p.method) ?? 0) + (p.amount ?? 0));
+      }
+
+      // Top customers
+      if (o.customer_phone) {
+        const existing = customerMap.get(o.customer_phone) ?? { name: o.customer_name, visits: 0, spent: 0 };
+        customerMap.set(o.customer_phone, {
+          name:   existing.name,
+          visits: existing.visits + 1,
+          spent:  existing.spent + (o.amount_due ?? 0),
+        });
+      }
+    }
+
+    const revenueByLocation = [...revByLoc.values()];
+    const totalRevenue      = revenueByLocation.reduce((s, l) => s + l.revenue, 0);
+    const totalSessions     = revenueByLocation.reduce((s, l) => s + l.sessionCount, 0);
+    const totalProfit       = tableRevenue + inventoryProfit;
+    const marginPct         = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
+    const paymentBreakdown  = [...methodMap.entries()]
+      .map(([method, amount]) => ({ method, amount }))
+      .sort((a, b) => b.amount - a.amount);
+    const topCustomers      = [...customerMap.entries()]
+      .map(([phone, data]) => ({ phone, ...data }))
+      .sort((a, b) => b.visits - a.visits)
+      .slice(0, 10);
+
+    return {
+      revenueByLocation, totalRevenue, totalSessions,
+      tableRevenue, inventoryProfit, totalProfit, marginPct,
+      paymentBreakdown, topCustomers,
+    };
+  }, [filteredOrders, locations]);
+
+  const {
+    revenueByLocation, totalRevenue, totalSessions,
+    tableRevenue, inventoryProfit, totalProfit, marginPct,
+    paymentBreakdown, topCustomers,
+  } = stats;
 
   return (
     <div className="space-y-6">
@@ -243,10 +282,17 @@ export function ReportsContent({
       {isLoading && <p className="text-gray-500">Loading...</p>}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Revenue</p>
           <p className="text-3xl font-bold mt-2 tabular-nums">{formatCurrency(totalRevenue)}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Gross Profit</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums" style={{ color: "#10b981" }}>
+            {formatCurrency(totalProfit)}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{marginPct}% margin</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Orders</p>
@@ -329,6 +375,43 @@ export function ReportsContent({
               })
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Profit breakdown */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Profit Breakdown</h2>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {[
+            { label: "Table Sessions", profit: tableRevenue, note: "100% margin (no cost)" },
+            { label: "Inventory Sales", profit: inventoryProfit, note: "selling − cost price" },
+          ].map(({ label, profit, note }) => {
+            const pct = totalProfit > 0 ? Math.round((profit / totalProfit) * 100) : 0;
+            return (
+              <div key={label} className="px-5 py-3 flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">{label}</span>
+                      <span className="text-xs text-gray-400 ml-2">{note}</span>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
+                      {formatCurrency(profit)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct}%`, background: "#10b981" }}
+                    />
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">{pct}%</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

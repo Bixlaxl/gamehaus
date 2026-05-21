@@ -9,8 +9,9 @@ import { X } from "lucide-react";
 import { toast } from "sonner";
 
 export function ExtendModal() {
-  const store = usePOSStore();
-  const { extendModalItem, setExtendModalItem } = store;
+  const extendModalItem  = usePOSStore((s) => s.extendModalItem);
+  const setExtendModalItem = usePOSStore((s) => s.setExtendModalItem);
+  const patchOrderItem   = usePOSStore((s) => s.patchOrderItem);
   const qc = useQueryClient();
   const [customMins, setCustomMins] = useState("");
   const [loading,    setLoading]    = useState(false);
@@ -30,7 +31,7 @@ export function ExtendModal() {
     const newExpectedEnd  = new Date(
       (prevExpectedEnd ? new Date(prevExpectedEnd) : new Date()).getTime() + mins * 60 * 1000
     ).toISOString();
-    store.patchOrderItem(extendModalItem.id, { expected_end: newExpectedEnd });
+    patchOrderItem(extendModalItem.id, { expected_end: newExpectedEnd });
     close();
 
     const res  = await fetch("/api/sessions/extend", {
@@ -44,11 +45,10 @@ export function ExtendModal() {
       | { success: false; error: string };
 
     if (!body.success) {
-      store.patchOrderItem(extendModalItem.id, { expected_end: prevExpectedEnd } as Partial<OrderItem>);
+      patchOrderItem(extendModalItem.id, { expected_end: prevExpectedEnd } as Partial<OrderItem>);
       toast.error(body.error ?? "Failed to extend session");
     } else {
-      // Sync with server's authoritative value
-      store.patchOrderItem(extendModalItem.id, { expected_end: body.data.new_expected_end });
+      patchOrderItem(extendModalItem.id, { expected_end: body.data.new_expected_end });
       qc.invalidateQueries({ queryKey: ["pos-orders"] });
     }
     setLoading(false);

@@ -12,7 +12,6 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-  const user = session.user;
 
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get("locationId");

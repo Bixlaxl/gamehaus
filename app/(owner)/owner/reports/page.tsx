@@ -27,7 +27,7 @@ export default async function ReportsPage() {
 
   const { data: orders } = await admin
     .from("orders")
-    .select(`id, customer_name, customer_phone, amount_due, advance_paid, type, finalized_at, location:locations(id, name), items:order_items(status), payments(method, amount, status)`)
+    .select(`id, customer_name, customer_phone, amount_due, advance_paid, type, finalized_at, location:locations(id, name), items:order_items(status, rate_per_hour, actual_start, expected_end), payments(method, amount, status), extras:order_extras(price, cost_price, quantity, is_deleted)`)
     .eq("status", "finalized")
     .gte("finalized_at", fromISO)
     .lte("finalized_at", toISO);

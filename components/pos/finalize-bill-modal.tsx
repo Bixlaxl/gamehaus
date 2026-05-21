@@ -25,14 +25,27 @@ type HandoverBooking = Pick<Booking, "id" | "scheduled_start" | "scheduled_end">
 };
 
 export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
-  const store         = usePOSStore();
-  const isOpen        = !!store.finalizeOrderId;
-  const selectedOrder = store.openOrders.find((o) => o.id === store.finalizeOrderId) ?? null;
-  const qc            = useQueryClient();
-  const now           = store.now;
+  const finalizeOrderId = usePOSStore((s) => s.finalizeOrderId);
+  if (!finalizeOrderId) return null;
+  return <FinalizeBillModalInner locationId={locationId} />;
+}
 
-  const orderId     = store.finalizeOrderId;
-  const savedPoints = orderId ? (store.pointsToRedeem[orderId] ?? 0) : 0;
+function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
+  const finalizeOrderId = usePOSStore((s) => s.finalizeOrderId)!;
+  const openOrders      = usePOSStore((s) => s.openOrders);
+  const now             = usePOSStore((s) => s.now);
+  const pointsToRedeem  = usePOSStore((s) => s.pointsToRedeem);
+  const storeTablesRef  = usePOSStore((s) => s.tables);
+  const setFinalizeOrderId = usePOSStore((s) => s.setFinalizeOrderId);
+  const selectOrder_fn  = usePOSStore((s) => s.selectOrder);
+  const setPointsToRedeem  = usePOSStore((s) => s.setPointsToRedeem);
+
+  const isOpen        = true;
+  const selectedOrder = openOrders.find((o) => o.id === finalizeOrderId) ?? null;
+  const qc            = useQueryClient();
+
+  const orderId     = finalizeOrderId;
+  const savedPoints = pointsToRedeem[orderId] ?? 0;
 
   const [method,           setMethod]           = useState<PaymentMethod | null>(null);
   const [loading,          setLoading]          = useState(false);
@@ -74,11 +87,11 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   function handleRedeemChange(val: string) {
     setRedeemInput(val);
     const n = Math.max(0, parseInt(val) || 0);
-    if (orderId) store.setPointsToRedeem(orderId, Math.min(n, maxRedeem));
+    if (orderId) setPointsToRedeem(orderId, Math.min(n, maxRedeem));
   }
 
   function close() {
-    store.setFinalizeOrderId(null);
+    setFinalizeOrderId(null);
     setMethod(null);
     setError(null);
     setStep("bill");
@@ -88,11 +101,11 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
   }
 
   async function confirmPayment() {
-    if (!method || !store.finalizeOrderId) return;
+    if (!method) return;
     setLoading(true);
     setError(null);
 
-    const res = await fetch(`/api/orders/${store.finalizeOrderId}/finalize`, {
+    const res = await fetch(`/api/orders/${finalizeOrderId}/finalize`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -114,7 +127,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
 
     // Capture handovers from current table state BEFORE queries invalidate
     const finalizedTableIds = new Set((selectedOrder?.items ?? []).map((i) => i.table_id));
-    const handovers: HandoverBooking[] = store.tables
+    const handovers: HandoverBooking[] = storeTablesRef
       .filter((t) => finalizedTableIds.has(t.id) && t.upcomingBooking !== null)
       .map((t) => ({
         id:              t.upcomingBooking!.id,
@@ -126,7 +139,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
     qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
     qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
     qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
-    store.selectOrder(null);
+    selectOrder_fn(null);
     setLoading(false);
 
     if (handovers.length > 0) {
@@ -148,7 +161,7 @@ export function FinalizeBillModal({ locationId }: FinalizeBillModalProps) {
       qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
       qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
       qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
-      store.selectOrder(body.data.order_id);
+      selectOrder_fn(body.data.order_id);
     }
     close();
   }

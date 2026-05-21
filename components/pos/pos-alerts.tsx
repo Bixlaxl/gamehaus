@@ -4,7 +4,8 @@ import { useRef } from "react";
 import { usePOSStore } from "@/store/pos";
 
 export function POSAlerts() {
-  const { tables, now } = usePOSStore();
+  const tables = usePOSStore((s) => s.tables);
+  const now    = usePOSStore((s) => s.now);
   const beepedRef  = useRef<Set<string>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
 

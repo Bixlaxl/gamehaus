@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
@@ -112,6 +113,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const [date, setDate]               = useState(new Date().toISOString().split("T")[0]);
   const [booking, setBooking]         = useState<Table | null>(null);
   const [selectedSlots, setSelected]  = useState<string[]>([]);
+  const [numPeople, setNumPeople]     = useState<string | null>(null); // key into people_pricing
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
   const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
   const [slotsLoading,  setSlotsLoading] = useState(false);
@@ -153,13 +155,28 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     ? visibleSlots(location.opening_time, location.closing_time, date)
     : [];
 
+  /* People/controller pricing options for the current booking */
+  const pricingOptions = useMemo(() => {
+    if (!booking?.people_pricing) return [];
+    return Object.keys(booking.people_pricing).sort((a, b) => Number(a) - Number(b));
+  }, [booking]);
+
+  /* Effective hourly rate — uses people_pricing if a count is selected, else flat rate */
+  const effectiveRate = (() => {
+    if (!booking) return 0;
+    if (numPeople && booking.people_pricing?.[numPeople]) {
+      return booking.people_pricing[numPeople];
+    }
+    return booking.hourly_rate;
+  })();
+
   /* Derived totals from slot selection */
   const selMins  = selectedSlots.length * 15;
   const selLabel = selMins === 0 ? "" : selMins >= 60
     ? `${Math.floor(selMins / 60)}h${selMins % 60 ? ` ${selMins % 60}m` : ""}`
     : `${selMins}m`;
   const selTotal = (booking && selMins > 0)
-    ? formatCurrency((selMins / 60) * booking.hourly_rate)
+    ? formatCurrency((selMins / 60) * effectiveRate)
     : "";
 
   /* Slot is in customer's own cart (show green occupied card) */
@@ -191,6 +208,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function openSheet(table: Table) {
     setBooking(table);
     setSelected([]);
+    // Default people selection to smallest group size if pricing exists
+    const keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+    setNumPeople(keys[0] ?? null);
     // Set blocked ranges immediately from pre-fetched data so slots render
     // correctly on the first paint — no flash of "all available" before useEffect fires
     if (initialSlots && initialDate && date === initialDate && table.id in initialSlots) {
@@ -203,6 +223,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function closeSheet() {
     setBooking(null);
     setSelected([]);
+    setNumPeople(null);
     setBlocked([]);
     setSlotsLoading(false);
   }
@@ -261,11 +282,13 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       closeSheet();
       return;
     }
+    const rate: number = (numPeople && t.people_pricing?.[numPeople]) || t.hourly_rate;
     cart.addItem({
       tableId: t.id, tableName: t.name, tableType: t.type,
-      ratePerHour: t.hourly_rate,
+      ratePerHour: rate,
+      numPeople: numPeople ? Number(numPeople) : undefined,
       scheduledStart: startIso, scheduledEnd: endIso,
-      durationMins, amount: (durationMins / 60) * t.hourly_rate,
+      durationMins, amount: (durationMins / 60) * rate,
     });
     closeSheet();
   }
@@ -419,12 +442,11 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                 >
                   <div className="relative overflow-hidden shrink-0" style={{ aspectRatio: "16/9" }}>
                     {table.image_url && !imgFailed ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         src={table.image_url} alt={table.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        decoding="async"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                         onError={() => setErrorImgs(p => new Set([...p, table.id]))}
                       />
                     ) : (
@@ -445,7 +467,18 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                         color: tc.accent, backdropFilter: "blur(8px)",
                       }}
                     >
-                      {formatCurrency(table.hourly_rate)}/hr
+                      {(() => {
+                        const pp = table.people_pricing;
+                        if (pp && Object.keys(pp).length > 0) {
+                          const rates = Object.values(pp).sort((a, b) => a - b);
+                          const lo = rates[0];
+                          const hi = rates[rates.length - 1];
+                          return lo === hi
+                            ? `${formatCurrency(lo)}/hr`
+                            : `${formatCurrency(lo)}–${formatCurrency(hi)}/hr`;
+                        }
+                        return `${formatCurrency(table.hourly_rate)}/hr`;
+                      })()}
                     </span>
                   </div>
 
@@ -513,12 +546,54 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                     {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
                   </span>
                   <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
-                  <p className="text-sm mt-0.5" style={{ color: textSec }}>{formatCurrency(booking.hourly_rate)}/hr</p>
+                  <p className="text-sm mt-0.5" style={{ color: textSec }}>
+                    {formatCurrency(effectiveRate)}/hr
+                    {numPeople && pricingOptions.length > 0 && (
+                      <span className="ml-1.5" style={{ color: textMut }}>
+                        · {numPeople} {booking.type === "ps5" ? `controller${numPeople === "1" ? "" : "s"}` : "players"}
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
+
+              {/* People / Controller selector */}
+              {pricingOptions.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
+                    {booking.type === "ps5" ? "Controllers" : "Players"}
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {pricingOptions.map((n) => {
+                      const active = numPeople === n;
+                      const rate   = booking.people_pricing?.[n] ?? 0;
+                      return (
+                        <button
+                          key={n}
+                          onClick={() => setNumPeople(n)}
+                          className="flex flex-col items-center justify-center py-2.5 rounded-xl transition-all"
+                          style={{
+                            background: active ? sheetType.accent : inputBg,
+                            color:      active ? "#FFF" : textPri,
+                            border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
+                            boxShadow:  active ? `0 4px 14px ${sheetType.accent}40` : "none",
+                          }}
+                        >
+                          <span className="text-sm font-bold leading-none">
+                            {n} {booking.type === "ps5" ? (n === "1" ? "ctrl" : "ctrls") : "ppl"}
+                          </span>
+                          <span className="text-[10px] font-semibold mt-0.5 opacity-80">
+                            ₹{rate}/hr
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Date + live selection summary */}
               <div

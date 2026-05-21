@@ -1,0 +1,67 @@
+-- ============================================================
+-- Gamehaus — DB Migrations (run in Supabase SQL Editor)
+-- ============================================================
+
+-- Phase 2: Inventory catalogue (per location)
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  location_id     UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  category        TEXT NOT NULL DEFAULT 'Other',
+  selling_price   NUMERIC NOT NULL,
+  cost_price      NUMERIC NOT NULL DEFAULT 0,
+  image_url       TEXT,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Snapshot cost_price + link back to catalogue on each extra sold
+ALTER TABLE order_extras ADD COLUMN IF NOT EXISTS inventory_item_id UUID REFERENCES inventory_items(id);
+ALTER TABLE order_extras ADD COLUMN IF NOT EXISTS cost_price NUMERIC NOT NULL DEFAULT 0;
+
+-- Phase 4: Per-person / per-controller pricing stored as JSONB
+-- snooker/pool: {"4": 800, "5": 1000, "6": 1200}
+-- ps5:          {"1": 400, "2": 600}
+-- foosball:     null (flat hourly_rate only)
+ALTER TABLE tables ADD COLUMN IF NOT EXISTS people_pricing JSONB;
+
+-- Phase 5: Membership plans
+CREATE TABLE IF NOT EXISTS membership_plans (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  price           NUMERIC NOT NULL,
+  duration_days   INTEGER NOT NULL,
+  discount_pct    NUMERIC NOT NULL DEFAULT 0,
+  free_hrs        NUMERIC NOT NULL DEFAULT 0,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Assigned memberships (one active per customer)
+CREATE TABLE IF NOT EXISTS customer_memberships (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_phone  TEXT NOT NULL,
+  plan_id         UUID NOT NULL REFERENCES membership_plans(id),
+  starts_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at      TIMESTAMPTZ NOT NULL,
+  free_hrs_used   NUMERIC NOT NULL DEFAULT 0,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_memberships_phone ON customer_memberships(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_location ON inventory_items(location_id);
+
+-- Composite index for finalize-route lookup: phone + is_active + expires_at
+-- (hot path on every walk-in finalization)
+CREATE INDEX IF NOT EXISTS idx_customer_memberships_active_lookup
+  ON customer_memberships(customer_phone, is_active, expires_at);
+
+-- Reports page joins order_extras to orders; the FK already auto-indexes order_id in most setups,
+-- but we add it explicitly to be safe (Supabase doesn't always auto-index FKs)
+CREATE INDEX IF NOT EXISTS idx_order_extras_order_id ON order_extras(order_id);
+
+-- Inventory picker in POS sorts active items by category — index speeds the active-only filter
+CREATE INDEX IF NOT EXISTS idx_inventory_items_location_active
+  ON inventory_items(location_id, is_active) WHERE is_active = TRUE;

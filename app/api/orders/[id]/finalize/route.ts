@@ -35,12 +35,16 @@ export async function POST(
   const { payment_method, coupon_code, points_redeemed, customer_phone: phoneOverride } = parsed.data;
   const admin = createAdminClient();
 
-  // Fetch full order via admin client (bypasses RLS — works for both walk-in and online orders)
-  const { data: order, error: orderError } = await admin
-    .from("orders")
-    .select("*, coupon:coupons(*)")
-    .eq("id", orderId)
-    .single();
+  // Fetch order, items, and extras in parallel — 3 round trips → 1
+  const [
+    { data: order, error: orderError },
+    { data: items },
+    { data: extras },
+  ] = await Promise.all([
+    admin.from("orders").select("*, coupon:coupons(*)").eq("id", orderId).single(),
+    admin.from("order_items").select("*").eq("order_id", orderId).eq("is_deleted", false),
+    admin.from("order_extras").select("*").eq("order_id", orderId).eq("is_deleted", false),
+  ]);
 
   if (orderError || !order) {
     return NextResponse.json(err("Order not found", "NOT_FOUND"), { status: 404 });
@@ -48,13 +52,6 @@ export async function POST(
   if (order.status !== "open") {
     return NextResponse.json(err("Order is not open", "INVALID_STATE"), { status: 400 });
   }
-
-  // Ensure all items are finished
-  const { data: items } = await admin
-    .from("order_items")
-    .select("*")
-    .eq("order_id", orderId)
-    .eq("is_deleted", false);
 
   const activeItems = (items ?? []).filter((i) => i.status !== "cancelled");
   if (activeItems.some((i) => i.status === "running")) {
@@ -64,30 +61,19 @@ export async function POST(
     );
   }
 
-  // Fetch extras
-  const { data: extras } = await admin
-    .from("order_extras")
-    .select("*")
-    .eq("order_id", orderId)
-    .eq("is_deleted", false);
-
-  // If staff entered a phone at finalize time (walk-in without phone), save it to the order
   const effectivePhone = order.customer_phone ?? phoneOverride ?? null;
-  if (phoneOverride && !order.customer_phone) {
-    await admin.from("orders").update({ customer_phone: phoneOverride }).eq("id", orderId);
-  }
-
-  // Resolve coupon
   let coupon: Coupon | null = order.coupon as Coupon | null;
-  if (coupon_code && !coupon) {
-    const { data: c } = await admin
-      .from("coupons")
-      .select("*")
-      .eq("code", coupon_code.toUpperCase())
-      .eq("is_active", true)
-      .single();
-    coupon = c ?? null;
-  }
+
+  // Run optional coupon lookup and phone override save in parallel
+  const [couponLookup] = await Promise.all([
+    (!coupon && coupon_code)
+      ? admin.from("coupons").select("*").eq("code", coupon_code.toUpperCase()).eq("is_active", true).single()
+      : Promise.resolve({ data: null, error: null }),
+    (phoneOverride && !order.customer_phone)
+      ? admin.from("orders").update({ customer_phone: phoneOverride }).eq("id", orderId)
+      : Promise.resolve(null),
+  ]);
+  if (!coupon && coupon_code) coupon = couponLookup.data as Coupon | null;
 
   const now = new Date();
   const bill = calculateBill(
@@ -98,60 +84,73 @@ export async function POST(
     order.advance_paid
   );
 
-  // Validate points — customer must have enough
+  // Fetch membership and points balance in parallel if phone known
+  const [membershipResult, pointsProfileResult] = await Promise.all([
+    effectivePhone
+      ? admin
+          .from("customer_memberships")
+          .select("*, plan:membership_plans(discount_pct)")
+          .eq("customer_phone", effectivePhone)
+          .eq("is_active", true)
+          .gte("expires_at", now.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    (points_redeemed > 0 && effectivePhone)
+      ? admin.from("customer_profiles").select("points_balance").eq("phone", effectivePhone).single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  // Apply membership discount (before points)
+  const membershipRow = (membershipResult as { data: { plan: { discount_pct: number } | null } | null }).data;
+  const membershipDiscountPct = membershipRow?.plan?.discount_pct ?? 0;
+  const membershipDiscount    = membershipDiscountPct > 0
+    ? Math.floor(bill.totalDue * membershipDiscountPct / 100)
+    : 0;
+  const billAfterMembership   = Math.max(0, bill.totalDue - membershipDiscount);
+
+  // Validate points against remaining balance
   let validatedPoints = points_redeemed;
   if (validatedPoints > 0 && effectivePhone) {
-    const { data: profile } = await admin
-      .from("customer_profiles")
-      .select("points_balance")
-      .eq("phone", effectivePhone)
-      .single();
-
-    const balance = profile?.points_balance ?? 0;
-    validatedPoints = Math.min(validatedPoints, balance, Math.floor(bill.totalDue));
+    const balance = (pointsProfileResult as { data: { points_balance: number } | null }).data?.points_balance ?? 0;
+    validatedPoints = Math.min(validatedPoints, balance, Math.floor(billAfterMembership));
   } else {
     validatedPoints = 0;
   }
 
-  // Apply points discount on top of what calculateBill returned
-  const finalDue    = Math.max(0, Math.round((bill.totalDue - validatedPoints) * 100) / 100);
+  // Apply points discount on top of membership discount
+  const finalDue = Math.max(0, Math.round((billAfterMembership - validatedPoints) * 100) / 100);
   const pointsEarned = Math.floor(finalDue / 100);
 
-  // Update order with final amounts
-  const { error: finalizeError } = await admin
-    .from("orders")
-    .update({
-      status:          "finalized",
-      subtotal:        bill.subtotal,
-      discount_amount: bill.discountAmount,
-      total_amount:    bill.subtotal - bill.discountAmount,
-      amount_due:      finalDue,
-      points_redeemed: validatedPoints,
-      finalized_at:    now.toISOString(),
-      coupon_id:       coupon?.id ?? order.coupon_id,
-    })
-    .eq("id", orderId);
-
-  if (finalizeError) {
-    return NextResponse.json(err(finalizeError.message, "DB_ERROR"), { status: 500 });
-  }
-
-  // Create payment record
-  const { error: paymentError } = await admin.from("payments").insert({
-    order_id:     orderId,
-    amount:       finalDue,
-    method:       payment_method,
-    status:       "completed",
-    collected_by: user.id,
-    collected_at: now.toISOString(),
-  });
-
-  if (paymentError) {
-    return NextResponse.json(err(paymentError.message, "DB_ERROR"), { status: 500 });
-  }
-
-  // Run coupon increment and customer profile fetch in parallel
-  const [, profileResult] = await Promise.all([
+  // All four writes/reads are independent — run them in parallel (4 round trips → 1)
+  const [
+    { error: finalizeError },
+    { error: paymentError },
+    ,
+    profileResult,
+  ] = await Promise.all([
+    admin
+      .from("orders")
+      .update({
+        status:          "finalized",
+        subtotal:        bill.subtotal,
+        discount_amount: bill.discountAmount,
+        total_amount:    bill.subtotal - bill.discountAmount,
+        amount_due:      finalDue,
+        points_redeemed: validatedPoints,
+        finalized_at:    now.toISOString(),
+        coupon_id:       coupon?.id ?? order.coupon_id,
+      })
+      .eq("id", orderId),
+    admin.from("payments").insert({
+      order_id:     orderId,
+      amount:       finalDue,
+      method:       payment_method,
+      status:       "completed",
+      collected_by: user.id,
+      collected_at: now.toISOString(),
+    }),
     coupon
       ? admin.from("coupons").update({ used_count: coupon.used_count + 1 }).eq("id", coupon.id)
       : Promise.resolve(null),
@@ -159,6 +158,13 @@ export async function POST(
       ? admin.from("customer_profiles").select("points_balance, visit_count, total_spent").eq("phone", effectivePhone).single()
       : Promise.resolve(null),
   ]);
+
+  if (finalizeError) {
+    return NextResponse.json(err(finalizeError.message, "DB_ERROR"), { status: 500 });
+  }
+  if (paymentError) {
+    return NextResponse.json(err(paymentError.message, "DB_ERROR"), { status: 500 });
+  }
 
   if (effectivePhone) {
     const profile = (profileResult as { data: { points_balance: number; visit_count: number; total_spent: number } | null } | null)?.data ?? null;
@@ -185,8 +191,9 @@ export async function POST(
   }
 
   return NextResponse.json(ok({
-    total_due:      finalDue,
-    points_redeemed: validatedPoints,
-    points_earned:   pointsEarned,
+    total_due:           finalDue,
+    points_redeemed:     validatedPoints,
+    points_earned:       pointsEarned,
+    membership_discount: membershipDiscount,
   }));
 }

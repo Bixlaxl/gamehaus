@@ -10,7 +10,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-  const user = session.user;
 
   const { id } = await params;
   const body = await request.json();
@@ -24,7 +23,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-  const user = session.user;
 
   const { id } = await params;
   const permanent = new URL(request.url).searchParams.get("permanent") === "true";

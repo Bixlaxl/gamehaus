@@ -99,6 +99,7 @@ export interface Database {
           description: string | null;
           image_url: string | null;
           hourly_rate: number;
+          people_pricing: Record<string, number> | null;
           sort_order: number;
           is_active: boolean;
           created_at: string;
@@ -112,6 +113,7 @@ export interface Database {
           description?: string | null;
           image_url?: string | null;
           hourly_rate: number;
+          people_pricing?: Record<string, number> | null;
           sort_order?: number;
           is_active?: boolean;
           created_at?: string;
@@ -125,6 +127,7 @@ export interface Database {
           description?: string | null;
           image_url?: string | null;
           hourly_rate?: number;
+          people_pricing?: Record<string, number> | null;
           sort_order?: number;
           is_active?: boolean;
           created_at?: string;
@@ -346,7 +349,9 @@ export interface Database {
           order_id: string;
           name: string;
           price: number;
+          cost_price: number;
           quantity: number;
+          inventory_item_id: string | null;
           is_deleted: boolean;
           deleted_at: string | null;
           added_by: string | null;
@@ -357,7 +362,9 @@ export interface Database {
           order_id: string;
           name: string;
           price: number;
+          cost_price?: number;
           quantity?: number;
+          inventory_item_id?: string | null;
           is_deleted?: boolean;
           deleted_at?: string | null;
           added_by?: string | null;
@@ -368,7 +375,9 @@ export interface Database {
           order_id?: string;
           name?: string;
           price?: number;
+          cost_price?: number;
           quantity?: number;
+          inventory_item_id?: string | null;
           is_deleted?: boolean;
           deleted_at?: string | null;
           added_by?: string | null;
@@ -590,6 +599,127 @@ export interface Database {
         };
         Relationships: [];
       };
+      inventory_items: {
+        Row: {
+          id: string;
+          location_id: string;
+          name: string;
+          category: string;
+          selling_price: number;
+          cost_price: number;
+          image_url: string | null;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          location_id: string;
+          name: string;
+          category?: string;
+          selling_price: number;
+          cost_price?: number;
+          image_url?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          location_id?: string;
+          name?: string;
+          category?: string;
+          selling_price?: number;
+          cost_price?: number;
+          image_url?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_location_id_fkey";
+            columns: ["location_id"];
+            isOneToOne: false;
+            referencedRelation: "locations";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      membership_plans: {
+        Row: {
+          id: string;
+          name: string;
+          price: number;
+          duration_days: number;
+          discount_pct: number;
+          free_hrs: number;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          price: number;
+          duration_days: number;
+          discount_pct?: number;
+          free_hrs?: number;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          price?: number;
+          duration_days?: number;
+          discount_pct?: number;
+          free_hrs?: number;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      customer_memberships: {
+        Row: {
+          id: string;
+          customer_phone: string;
+          plan_id: string;
+          starts_at: string;
+          expires_at: string;
+          free_hrs_used: number;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_phone: string;
+          plan_id: string;
+          starts_at?: string;
+          expires_at: string;
+          free_hrs_used?: number;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_phone?: string;
+          plan_id?: string;
+          starts_at?: string;
+          expires_at?: string;
+          free_hrs_used?: number;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "customer_memberships_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "membership_plans";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -611,3 +741,9 @@ export type TableAvailabilityOverride =
   Database["public"]["Tables"]["table_availability_overrides"]["Row"];
 export type CustomerProfile =
   Database["public"]["Tables"]["customer_profiles"]["Row"];
+export type InventoryItem =
+  Database["public"]["Tables"]["inventory_items"]["Row"];
+export type MembershipPlan =
+  Database["public"]["Tables"]["membership_plans"]["Row"];
+export type CustomerMembership =
+  Database["public"]["Tables"]["customer_memberships"]["Row"];

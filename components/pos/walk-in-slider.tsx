@@ -25,7 +25,16 @@ const DURATION_PRESETS = [
 ];
 
 export function WalkInSlider({ locationId }: WalkInSliderProps) {
-  const { walkInOpen, walkInPrefilledTableId, setWalkInOpen, tables, now } = usePOSStore();
+  const walkInOpen = usePOSStore((s) => s.walkInOpen);
+  if (!walkInOpen) return null;
+  return <WalkInSliderInner locationId={locationId} />;
+}
+
+function WalkInSliderInner({ locationId }: WalkInSliderProps) {
+  const walkInPrefilledTableId = usePOSStore((s) => s.walkInPrefilledTableId);
+  const setWalkInOpen          = usePOSStore((s) => s.setWalkInOpen);
+  const tables                 = usePOSStore((s) => s.tables);
+  const now                    = usePOSStore((s) => s.now);
   const qc = useQueryClient();
 
   const [customerName,     setCustomerName]     = useState("");
@@ -54,11 +63,11 @@ export function WalkInSlider({ locationId }: WalkInSliderProps) {
   }
 
   useEffect(() => {
-    if (walkInOpen && walkInPrefilledTableId) {
+    if (walkInPrefilledTableId) {
       setSelectedTableIds([walkInPrefilledTableId]);
       setDurations({ [walkInPrefilledTableId]: 60 });
     }
-  }, [walkInOpen, walkInPrefilledTableId]);
+  }, [walkInPrefilledTableId]);
 
   function handlePhoneChange(val: string) {
     setCustomerPhone(val);
@@ -106,14 +115,14 @@ export function WalkInSlider({ locationId }: WalkInSliderProps) {
 
     const items = selectedTableIds.map((tid) => {
       const table = tables.find((t) => t.id === tid) as Table;
-      return { table_id: tid, scheduled_duration_mins: durations[tid] ?? 60, rate_per_hour: table.hourly_rate };
+      return { table_id: tid, duration_mins: durations[tid] ?? 60, rate_per_hour: table.hourly_rate };
     });
 
-    const res  = await fetch("/api/orders", {
+    const res = await fetch("/api/walkin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        location_id: locationId, type: "walk_in",
+        location_id: locationId,
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || undefined,
         items,
@@ -121,26 +130,16 @@ export function WalkInSlider({ locationId }: WalkInSliderProps) {
     });
 
     const body = await res.json() as
-      | { success: true;  data: { order_id: string; items: { id: string; table_id: string }[] } }
+      | { success: true;  data: { order_id: string } }
       | { success: false; error: string };
 
     if (!body.success) { setError(body.error); setLoading(false); return; }
-
-    await Promise.all(body.data.items.map((createdItem) =>
-      fetch("/api/sessions/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_item_id: createdItem.id }),
-      })
-    ));
 
     qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
     close();
     setLoading(false);
   }
-
-  if (!walkInOpen) return null;
 
   return (
     <div className="fixed inset-0 z-40 flex">
