@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -23,14 +23,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Prefetch both post-login destinations while user is typing — the role-based
-  // redirect will already have JS + RSC payload warm by the time auth completes
-  useEffect(() => {
-    router.prefetch("/owner");
-    router.prefetch("/pos");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -52,6 +44,12 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+
+    // Auth cookie is now set — safe to prefetch both possible destinations.
+    // Runs in parallel with the role lookup below so whichever route we redirect
+    // to has a head start on warming its RSC payload.
+    router.prefetch("/owner");
+    router.prefetch("/pos");
 
     // Look up role from public.users (works even without auth hook)
     const { data: profile, error: profileError } = await supabase
