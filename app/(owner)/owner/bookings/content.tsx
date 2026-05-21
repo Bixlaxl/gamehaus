@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,6 +116,7 @@ export function BookingsContent({
     initialData: initialBookings,
     initialDataUpdatedAt: Date.now(),
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const filtered = useMemo(() => (bookings ?? []).filter((b) => {

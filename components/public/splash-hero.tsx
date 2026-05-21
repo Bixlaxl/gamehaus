@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Clock, ChevronRight, Lock, Loader2 } from "lucide-react";
@@ -40,6 +40,15 @@ export function SplashHero({ locations }: { locations: Location[] }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [adminLoading, setAdminLoading] = useState(false);
   const router = useRouter();
+
+  // Prefetch the location browse routes (RSC + JS chunks) so first tap is instant.
+  // The location page server-fetches today's slot data into the RSC payload,
+  // so router.prefetch covers both the JS chunks and the initial slot data.
+  useEffect(() => {
+    for (const loc of locations) router.prefetch(`/${loc.slug}`);
+    router.prefetch("/login");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function onImageReady() {
     setPhase("enter");
@@ -197,7 +206,14 @@ export function SplashHero({ locations }: { locations: Location[] }) {
               const delay  = 180 + i * 120;
 
               return (
-                <Link key={loc.id} href={`/${loc.slug}`} className="block group active:scale-[0.985] transition-transform duration-150">
+                <Link
+                  key={loc.id}
+                  href={`/${loc.slug}`}
+                  prefetch
+                  onMouseEnter={() => router.prefetch(`/${loc.slug}`)}
+                  onTouchStart={() => router.prefetch(`/${loc.slug}`)}
+                  className="block group active:scale-[0.985] transition-transform duration-150"
+                >
                   <div
                     style={{
                       opacity:   phase === "gone" ? 1 : 0,

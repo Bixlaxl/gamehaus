@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +97,7 @@ export function TablesContent({
     initialData: selectedLocation === "all" ? initialTables : undefined,
     initialDataUpdatedAt: Date.now(),
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   async function uploadImage(file: File, tableId: string, locationId: string): Promise<string> {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { BarChart2, Users } from "lucide-react";
@@ -131,6 +131,7 @@ export function ReportsContent({
     initialData: initialReportData,
     initialDataUpdatedAt: Date.now(),
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const orders    = reportData?.orders    ?? [];

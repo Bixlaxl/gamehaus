@@ -56,6 +56,15 @@ export function OwnerNav({ userName }: OwnerNavProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Prefetch every owner route after login — makes sidebar nav feel instant
+  // (router.prefetch pulls down both JS chunks and the RSC payload so loading.tsx never flashes)
+  useEffect(() => {
+    for (const item of navItems) {
+      if (item.href !== pathname) router.prefetch(item.href);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
     {signingOut && (
@@ -88,6 +97,9 @@ export function OwnerNav({ userName }: OwnerNavProps) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
+              onMouseEnter={() => router.prefetch(item.href)}
+              onTouchStart={() => router.prefetch(item.href)}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                 isActive
