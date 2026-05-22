@@ -96,10 +96,21 @@ export default function CheckoutPage() {
   const [customer, setCustomer]       = useState<CustomerLookup | null>(null);
   const [lookingUp, setLookingUp]     = useState(false);
   const [redeemInput, setRedeemInput] = useState("0");
+  const [now, setNow]                 = useState(() => new Date());
   const lookupTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitting   = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Live tick so expired-slot warning appears even if user leaves page open
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Any cart item whose start time has already passed by the time the user reaches checkout
+  const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
+  const hasExpired   = expiredItems.length > 0;
 
   const dark    = !mounted ? false : resolvedTheme === "dark";
   const bg      = dark ? "#0A0A0A" : "#F7F5F2";
@@ -141,19 +152,36 @@ export default function CheckoutPage() {
   }
 
   function handlePhoneChange(val: string) {
-    setPhone(val);
-    triggerLookup(val, name);
+    // Digits only, max 10
+    const cleaned = val.replace(/\D/g, "").slice(0, 10);
+    setPhone(cleaned);
+    triggerLookup(cleaned, name);
   }
 
   function handleNameChange(val: string) {
-    setName(val);
-    triggerLookup(phone, val);
+    // Letters and spaces only
+    const cleaned = val.replace(/[^a-zA-Z\s]/g, "");
+    setName(cleaned);
+    triggerLookup(phone, cleaned);
+  }
+
+  function removeExpiredFromCart() {
+    for (const i of expiredItems) cart.removeItem(i.tableId, i.scheduledStart);
+    setError(null);
   }
 
   async function checkout() {
     if (submitting.current) return;
-    if (!name.trim() || !phone.trim()) {
-      setError("Name and phone are required");
+    if (hasExpired) {
+      setError("Some selected slots have already started. Please remove them and pick fresh slots.");
+      return;
+    }
+    if (!name.trim() || name.trim().length < 2) {
+      setError("Please enter a valid name");
+      return;
+    }
+    if (phone.length !== 10) {
+      setError("Phone must be exactly 10 digits");
       return;
     }
     if (cart.items.length === 0) {
@@ -241,7 +269,9 @@ export default function CheckoutPage() {
 
   async function demoPay() {
     if (submitting.current) return;
-    if (!name.trim() || !phone.trim()) { setError("Name and phone are required"); return; }
+    if (hasExpired) { setError("Some selected slots have already started. Please remove them and pick fresh slots."); return; }
+    if (!name.trim() || name.trim().length < 2) { setError("Please enter a valid name"); return; }
+    if (phone.length !== 10) { setError("Phone must be exactly 10 digits"); return; }
     if (cart.items.length === 0) { setError("Cart is empty"); return; }
     submitting.current = true;
     setLoading(true);
@@ -315,6 +345,37 @@ export default function CheckoutPage() {
 
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
 
+          {/* Expired-slot banner */}
+          {hasExpired && (
+            <div
+              className="rounded-2xl border px-4 py-3.5 flex items-start gap-3"
+              style={{
+                background: "rgba(239,68,68,0.08)",
+                borderColor: "rgba(239,68,68,0.35)",
+                color: "#EF4444",
+              }}
+            >
+              <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold leading-snug">
+                  {expiredItems.length === 1
+                    ? "1 slot has already started."
+                    : `${expiredItems.length} slots have already started.`}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: dark ? "#aaa" : "#777" }}>
+                  Please remove them and pick fresh slots before checking out.
+                </p>
+              </div>
+              <button
+                onClick={removeExpiredFromCart}
+                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-opacity hover:opacity-85 text-white"
+                style={{ background: "#EF4444" }}
+              >
+                Remove expired
+              </button>
+            </div>
+          )}
+
           {/* Cart items */}
           <Section surface={surface} border={border} dark={dark}>
             <SectionHeader title="Your booking" border={border} textMut={textMut} />
@@ -327,11 +388,17 @@ export default function CheckoutPage() {
                 </Link>
               </div>
             ) : (
-              cart.items.map((item, i) => (
+              cart.items.map((item, i) => {
+                const isExpired = new Date(item.scheduledStart) <= now;
+                return (
                 <div
                   key={i}
                   className="flex items-start gap-4 px-5 py-4 border-b last:border-0"
-                  style={{ borderColor: border }}
+                  style={{
+                    borderColor: border,
+                    background: isExpired ? "rgba(239,68,68,0.06)" : undefined,
+                    opacity: isExpired ? 0.85 : 1,
+                  }}
                 >
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
@@ -340,7 +407,17 @@ export default function CheckoutPage() {
                     {TYPE_EMOJI[item.tableType] ?? "🎯"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold capitalize" style={{ color: textPri }}>{item.tableName}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold capitalize" style={{ color: textPri }}>{item.tableName}</p>
+                      {isExpired && (
+                        <span
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                          style={{ background: "rgba(239,68,68,0.15)", color: "#EF4444" }}
+                        >
+                          Expired
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                       <span className="flex items-center gap-1 text-xs" style={{ color: textSec }}>
                         <Calendar className="h-3 w-3" />
@@ -370,7 +447,8 @@ export default function CheckoutPage() {
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </Section>
 
@@ -386,6 +464,7 @@ export default function CheckoutPage() {
                   value={name}
                   onChange={e => handleNameChange(e.target.value)}
                   placeholder="Your full name"
+                  autoComplete="name"
                   className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none transition-colors"
                   style={{
                     background: inputBg,
@@ -402,9 +481,13 @@ export default function CheckoutPage() {
                 </label>
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={10}
                   value={phone}
                   onChange={e => handlePhoneChange(e.target.value)}
-                  placeholder="+91 98765 43210"
+                  placeholder="10-digit mobile number"
+                  autoComplete="tel"
                   className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none transition-colors"
                   style={{ background: inputBg, border: `1.5px solid ${inputBdr}`, color: textPri }}
                   onFocus={e => (e.currentTarget.style.borderColor = "#D4541A")}
@@ -546,21 +629,21 @@ export default function CheckoutPage() {
 
           <button
             onClick={checkout}
-            disabled={loading || cart.items.length === 0}
+            disabled={loading || cart.items.length === 0 || hasExpired}
             className="w-full py-4 rounded-2xl font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40"
             style={{
               background: "#D4541A",
-              boxShadow: cart.items.length > 0 ? "0 8px 28px rgba(212,84,26,0.35)" : "none",
+              boxShadow: cart.items.length > 0 && !hasExpired ? "0 8px 28px rgba(212,84,26,0.35)" : "none",
             }}
           >
-            {loading ? "Processing..." : (
+            {loading ? "Processing..." : hasExpired ? "Remove expired slots to continue" : (
               <>Pay {formatCurrency(amountToPay)} <ChevronRight className="h-5 w-5" /></>
             )}
           </button>
 
           <button
             onClick={demoPay}
-            disabled={loading || cart.items.length === 0}
+            disabled={loading || cart.items.length === 0 || hasExpired}
             className="w-full py-3 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 border"
             style={{ color: textSec, borderColor: border, background: "transparent" }}
           >

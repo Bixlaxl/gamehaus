@@ -32,17 +32,17 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Order item not found", "NOT_FOUND"), { status: 404 });
   }
 
-  if (item.status !== "running") {
-    return NextResponse.json(err("Can only extend a running session", "INVALID_STATE"), { status: 400 });
+  if (item.status !== "running" && item.status !== "finished") {
+    return NextResponse.json(err("Session is not in an extendable state", "INVALID_STATE"), { status: 400 });
   }
 
-  const currentExpectedEnd = item.expected_end
-    ? new Date(item.expected_end)
-    : new Date();
+  // For finished sessions (bill-ready), anchor the extension to "now" so we don't
+  // back-date into already-elapsed time. Running sessions extend from current expected_end.
+  const anchor = item.status === "finished"
+    ? new Date()
+    : (item.expected_end ? new Date(item.expected_end) : new Date());
 
-  const newExpectedEnd = new Date(
-    currentExpectedEnd.getTime() + extend_mins * 60 * 1000
-  );
+  const newExpectedEnd = new Date(anchor.getTime() + extend_mins * 60 * 1000);
 
   // Check for confirmed online bookings on this table that would conflict (10-min buffer)
   const bufferTime = new Date(newExpectedEnd.getTime() + BUFFER_MINS * 60 * 1000);
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const nextStart = new Date(nextBooking.scheduled_start);
     const latestAllowed = new Date(nextStart.getTime() - BUFFER_MINS * 60 * 1000);
     const maxExtendMins = Math.floor(
-      (latestAllowed.getTime() - currentExpectedEnd.getTime()) / 60000
+      (latestAllowed.getTime() - anchor.getTime()) / 60000
     );
 
     if (maxExtendMins <= 0) {
@@ -92,12 +92,25 @@ export async function POST(request: Request) {
     }
   }
 
+  // Resurrect a finished session: flip status back to running, clear actual_end so
+  // the bill engine recomputes against the new expected_end.
+  const updatePayload: {
+    expected_end: string;
+    extended_mins: number;
+    status?: "running";
+    actual_end?: null;
+  } = {
+    expected_end:  newExpectedEnd.toISOString(),
+    extended_mins: item.extended_mins + extend_mins,
+  };
+  if (item.status === "finished") {
+    updatePayload.status     = "running";
+    updatePayload.actual_end = null;
+  }
+
   const { error: updateError } = await admin
     .from("order_items")
-    .update({
-      expected_end: newExpectedEnd.toISOString(),
-      extended_mins: item.extended_mins + extend_mins,
-    })
+    .update(updatePayload)
     .eq("id", order_item_id);
 
   if (updateError) {

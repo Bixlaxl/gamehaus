@@ -22,13 +22,15 @@ import type { Table, Order, OrderItem, Booking } from "@/lib/supabase/types";
 interface POSScreenProps {
   locationId: string;
   locationName: string;
+  openingTime: string;
+  closingTime: string;
   staffName: string;
   userId: string;
 }
 
 const supabase = createClient();
 
-export function POSScreen({ locationId, locationName, staffName }: POSScreenProps) {
+export function POSScreen({ locationId, locationName, closingTime, staffName }: POSScreenProps) {
   const router = useRouter();
 
   const qc                    = useQueryClient();
@@ -273,7 +275,7 @@ export function POSScreen({ locationId, locationName, staffName }: POSScreenProp
             }}
           >
             <div style={{ width: 380, height: "100%" }}>
-              <ContextPanel locationId={locationId} />
+              <ContextPanel locationId={locationId} closingTime={closingTime} />
             </div>
           </div>
         </div>

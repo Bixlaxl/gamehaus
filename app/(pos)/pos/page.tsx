@@ -66,7 +66,7 @@ VALUES (
 
   const { data: location } = await supabase
     .from("locations")
-    .select("name, timezone")
+    .select("name, timezone, opening_time, closing_time")
     .eq("id", profile.location_id)
     .single();
 
@@ -74,6 +74,8 @@ VALUES (
     <POSScreen
       locationId={profile.location_id}
       locationName={location?.name ?? ""}
+      openingTime={location?.opening_time ?? "10:00"}
+      closingTime={location?.closing_time ?? "23:00"}
       staffName={profile.name}
       userId={user.id}
     />

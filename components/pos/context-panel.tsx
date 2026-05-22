@@ -97,13 +97,15 @@ function PanelWalkIn({
   const availablePresets = DURATION_PRESETS.filter((p) => p.mins <= maxMins);
 
   function handlePhoneChange(val: string) {
-    setCustomerPhone(val);
+    // Digits only, max 10
+    const cleaned = val.replace(/\D/g, "").slice(0, 10);
+    setCustomerPhone(cleaned);
     setCustomer(null);
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
-    if (val.trim().length >= 6) {
+    if (cleaned.length === 10) {
       setLookingUp(true);
       lookupTimer.current = setTimeout(async () => {
-        const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(val.trim())}`);
+        const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(cleaned)}`);
         const data = await res.json() as { found: boolean; customer: CustomerLookup | null };
         setCustomer(data.customer);
         if (data.found && data.customer?.name && !customerName.trim()) {
@@ -116,8 +118,14 @@ function PanelWalkIn({
     }
   }
 
+  function handleNameChange(val: string) {
+    // Letters and spaces only
+    setCustomerName(val.replace(/[^a-zA-Z\s]/g, ""));
+  }
+
   async function startWalkIn() {
-    if (!customerName.trim()) { setError("Customer name is required"); return; }
+    if (!customerName.trim() || customerName.trim().length < 2) { setError("Customer name is required"); return; }
+    if (customerPhone && customerPhone.length !== 10) { setError("Phone must be exactly 10 digits"); return; }
 
     setLoading(true);
     setError(null);
@@ -175,9 +183,10 @@ function PanelWalkIn({
           </p>
           <input
             value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
+            onChange={(e) => handleNameChange(e.target.value)}
             placeholder="Customer name *"
             autoFocus
+            autoComplete="name"
             className="w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors
               bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
               text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
@@ -185,9 +194,13 @@ function PanelWalkIn({
           />
           <input
             type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={10}
             value={customerPhone}
             onChange={(e) => handlePhoneChange(e.target.value)}
-            placeholder="Phone (optional)"
+            placeholder="10-digit phone (optional)"
+            autoComplete="tel"
             className="w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors
               bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
               text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
@@ -207,7 +220,7 @@ function PanelWalkIn({
               </span>
             </div>
           )}
-          {!lookingUp && customerPhone.trim().length >= 6 && !customer && (
+          {!lookingUp && customerPhone.length === 10 && !customer && (
             <p className="text-xs text-gray-400 dark:text-[#444]">New customer</p>
           )}
         </div>
@@ -287,13 +300,16 @@ function PanelWalkIn({
 function PanelSession({
   locationId,
   order,
+  closingTime,
 }: {
   locationId: string;
   order: POSOrder;
+  closingTime: string;
 }) {
   const now               = usePOSStore((s) => s.now);
   const posTables         = usePOSStore((s) => s.tables);
   const pointsToRedeem    = usePOSStore((s) => s.pointsToRedeem);
+  const selectedTableId   = usePOSStore((s) => s.selectedTableId);
   const patchOrderItem    = usePOSStore((s) => s.patchOrderItem);
   const addOrderExtra     = usePOSStore((s) => s.addOrderExtra);
   const removeOrderExtra  = usePOSStore((s) => s.removeOrderExtra);
@@ -422,6 +438,74 @@ function PanelSession({
     removeOrderExtra(order.id, extraId);
     const res = await fetch(`/api/orders/${order.id}/extras/${extraId}`, { method: "DELETE" });
     if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+  }
+
+  // ─── Extend-from-bill ──────────────────────────────────────────────────────
+  // The finished item being billed for the currently-selected table (or any finished
+  // item in the order if none matches — multi-table fallback).
+  const finishedItem =
+    activeItems.find((i) => i.status === "finished" && i.table_id === selectedTableId) ??
+    activeItems.find((i) => i.status === "finished") ??
+    null;
+
+  const upcomingForFinishedTable = finishedItem
+    ? posTables.find((t) => t.id === finishedItem.table_id)?.upcomingBooking ?? null
+    : null;
+
+  // Compute today's shop-closing timestamp from "HH:MM" (treats hours <6 as next-day, e.g. 02:00 close)
+  const closingMs = (() => {
+    const [ch, cm] = closingTime.split(":").map(Number);
+    const close = new Date(now);
+    close.setHours(ch, cm, 0, 0);
+    if (close.getTime() < now.getTime() && ch < 6) {
+      close.setDate(close.getDate() + 1);
+    }
+    return close.getTime();
+  })();
+
+  // Max minutes available to extend a finished session from "now"
+  // (extend API anchors finished sessions to now; we mirror that here for UI gating).
+  const maxExtendMins = (() => {
+    if (!finishedItem) return 0;
+    const EXTEND_BUFFER_MINS = 10;
+    const upcomingMs = upcomingForFinishedTable
+      ? new Date(upcomingForFinishedTable.scheduled_start).getTime() - EXTEND_BUFFER_MINS * 60 * 1000
+      : Infinity;
+    const ceilingMs = Math.min(upcomingMs, closingMs);
+    return Math.max(0, Math.floor((ceilingMs - now.getTime()) / 60000));
+  })();
+
+  const EXTEND_PRESETS = [15, 30, 60];
+
+  async function extendFromBill(mins: number) {
+    if (!finishedItem) return;
+    const newExpectedEnd = new Date(now.getTime() + mins * 60 * 1000).toISOString();
+    // Optimistic: flip back to running so UI reflects it immediately
+    patchOrderItem(finishedItem.id, {
+      status:       "running",
+      actual_end:   null,
+      expected_end: newExpectedEnd,
+    });
+    const res = await fetch("/api/sessions/extend", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ order_item_id: finishedItem.id, extend_mins: mins }),
+    });
+    const body = await res.json() as
+      | { success: true;  data: { new_expected_end: string } }
+      | { success: false; error: string };
+    if (!body.success) {
+      // Revert
+      patchOrderItem(finishedItem.id, {
+        status:       "finished",
+        actual_end:   new Date().toISOString(),
+        expected_end: finishedItem.expected_end,
+      });
+      toast.error(body.error);
+    } else {
+      patchOrderItem(finishedItem.id, { expected_end: body.data.new_expected_end });
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    }
   }
 
   return (
@@ -868,6 +952,47 @@ function PanelSession({
               {formatCurrency(hasRunning ? bill.totalDue : displayTotal)}
             </span>
           </div>
+
+          {/* Extend-from-bill — only when bill is ready (session finished) */}
+          {!hasRunning && finishedItem && (
+            <div className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-[#555] mb-1.5">
+                Add more time
+              </p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {EXTEND_PRESETS.map((mins) => {
+                  const blocked = mins > maxExtendMins;
+                  return (
+                    <button
+                      key={mins}
+                      onClick={() => extendFromBill(mins)}
+                      disabled={blocked}
+                      title={
+                        blocked
+                          ? upcomingForFinishedTable && new Date(upcomingForFinishedTable.scheduled_start).getTime() < closingMs
+                            ? "Next booking too close"
+                            : "Past closing time"
+                          : `Resume session for ${mins} more minutes`
+                      }
+                      className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                        blocked
+                          ? "bg-gray-50 dark:bg-[#0d0d0d] text-gray-300 dark:text-[#333] cursor-not-allowed line-through"
+                          : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-white border border-gray-200 dark:border-[#2a2a2a] hover:border-[#D4541A] hover:text-[#D4541A] cursor-pointer"
+                      }`}
+                    >
+                      +{mins}m
+                    </button>
+                  );
+                })}
+              </div>
+              {maxExtendMins === 0 && (
+                <p className="text-[10px] mt-1.5 text-gray-400 dark:text-[#555]">
+                  {upcomingForFinishedTable ? "Next booking too close to extend" : "Shop closing — extension unavailable"}
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             onClick={() => setFinalizeId(order.id)}
             disabled={hasRunning}
@@ -888,7 +1013,7 @@ function PanelSession({
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
-function ContextPanelInner({ locationId }: { locationId: string }) {
+function ContextPanelInner({ locationId, closingTime }: { locationId: string; closingTime: string }) {
   const tables          = usePOSStore((s) => s.tables);
   const openOrders      = usePOSStore((s) => s.openOrders);
   const selectedTableId = usePOSStore((s) => s.selectedTableId);
@@ -924,8 +1049,8 @@ function ContextPanelInner({ locationId }: { locationId: string }) {
   if (isBooked) return null;
 
   if (isIdle)                        return <PanelWalkIn  locationId={locationId} table={table} />;
-  if (isRunning && runningOrder)     return <PanelSession locationId={locationId} order={runningOrder} />;
-  if (isBillReady && billReadyOrder) return <PanelSession locationId={locationId} order={billReadyOrder} />;
+  if (isRunning && runningOrder)     return <PanelSession locationId={locationId} order={runningOrder} closingTime={closingTime} />;
+  if (isBillReady && billReadyOrder) return <PanelSession locationId={locationId} order={billReadyOrder} closingTime={closingTime} />;
 
   return null;
 }

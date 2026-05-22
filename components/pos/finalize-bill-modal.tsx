@@ -333,9 +333,16 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
             {!selectedOrder?.customer_phone && (
               <input
                 type="tel"
-                placeholder="Enter customer phone"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={10}
+                placeholder="10-digit phone"
                 value={manualPhone}
-                onChange={(e) => { setManualPhone(e.target.value); setCustomerInfo(null); }}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setManualPhone(cleaned);
+                  setCustomerInfo(null);
+                }}
                 className="w-full text-sm rounded-lg px-3 py-1.5 outline-none transition-colors
                   bg-gray-100 dark:bg-[#1A1A1A]
                   border border-gray-200 dark:border-[#2A2A2A]
