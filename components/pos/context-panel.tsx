@@ -313,6 +313,7 @@ function PanelSession({
   const patchOrderItem    = usePOSStore((s) => s.patchOrderItem);
   const addOrderExtra     = usePOSStore((s) => s.addOrderExtra);
   const removeOrderExtra  = usePOSStore((s) => s.removeOrderExtra);
+  const patchOrderExtra   = usePOSStore((s) => s.patchOrderExtra);
   const setExtendModal    = usePOSStore((s) => s.setExtendModalItem);
   const setPointsToRedeem = usePOSStore((s) => s.setPointsToRedeem);
   const setFinalizeId     = usePOSStore((s) => s.setFinalizeOrderId);
@@ -440,6 +441,47 @@ function PanelSession({
     if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
   }
 
+  // ─── Inventory quantity stepper helpers ───────────────────────────────────
+  async function patchExtraQuantity(extraId: string, newQuantity: number, prevQuantity: number) {
+    patchOrderExtra(order.id, extraId, { quantity: newQuantity });
+    const res = await fetch(`/api/orders/${order.id}/extras/${extraId}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ quantity: newQuantity }),
+    });
+    if (!res.ok) {
+      patchOrderExtra(order.id, extraId, { quantity: prevQuantity });
+      toast.error("Failed to update quantity");
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    }
+  }
+
+  async function incrementInventoryItem(item: InventoryItem) {
+    const existing = activeExtras.find((e) => e.inventory_item_id === item.id);
+    if (existing) {
+      await patchExtraQuantity(existing.id, existing.quantity + 1, existing.quantity);
+    } else {
+      await addExtraItem({
+        name:              item.name,
+        price:             item.selling_price,
+        cost_price:        item.cost_price,
+        quantity:          1,
+        inventory_item_id: item.id,
+      });
+    }
+  }
+
+  async function decrementInventoryItem(inventoryItemId: string) {
+    const existing = activeExtras.find((e) => e.inventory_item_id === inventoryItemId);
+    if (!existing) return;
+    if (existing.quantity > 1) {
+      await patchExtraQuantity(existing.id, existing.quantity - 1, existing.quantity);
+    } else {
+      await deleteExtra(existing.id);
+    }
+  }
+
   // ─── Extend-from-bill ──────────────────────────────────────────────────────
   // The finished item being billed for the currently-selected table (or any finished
   // item in the order if none matches — multi-table fallback).
@@ -463,8 +505,13 @@ function PanelSession({
     return close.getTime();
   })();
 
-  // Max minutes available to extend a finished session from "now"
-  // (extend API anchors finished sessions to now; we mirror that here for UI gating).
+  // Max minutes available to extend a finished session — ANCHORED TO expected_end
+  // (not to "now"), so brief staff delays after the session ends don't eat into
+  // the customer's add-on time. Server enforces the same rule.
+  const finishedAnchorMs = finishedItem?.expected_end
+    ? new Date(finishedItem.expected_end).getTime()
+    : now.getTime();
+
   const maxExtendMins = (() => {
     if (!finishedItem) return 0;
     const EXTEND_BUFFER_MINS = 10;
@@ -472,14 +519,15 @@ function PanelSession({
       ? new Date(upcomingForFinishedTable.scheduled_start).getTime() - EXTEND_BUFFER_MINS * 60 * 1000
       : Infinity;
     const ceilingMs = Math.min(upcomingMs, closingMs);
-    return Math.max(0, Math.floor((ceilingMs - now.getTime()) / 60000));
+    return Math.max(0, Math.floor((ceilingMs - finishedAnchorMs) / 60000));
   })();
 
   const EXTEND_PRESETS = [15, 30, 60];
 
   async function extendFromBill(mins: number) {
     if (!finishedItem) return;
-    const newExpectedEnd = new Date(now.getTime() + mins * 60 * 1000).toISOString();
+    // Anchor to expected_end (not now) so 9pm + 30min = 9:30pm, regardless of click time
+    const newExpectedEnd = new Date(finishedAnchorMs + mins * 60 * 1000).toISOString();
     // Optimistic: flip back to running so UI reflects it immediately
     patchOrderItem(finishedItem.id, {
       status:       "running",
@@ -784,34 +832,67 @@ function PanelSession({
                 </div>
 
                 {extraMode === "inventory" && (
-                  <div className="max-h-48 overflow-y-auto space-y-1 pr-0.5">
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
                     {(inventoryItems ?? []).length === 0 && (
                       <p className="text-xs text-gray-400 dark:text-[#555] py-2 text-center">
                         No items in catalogue
                       </p>
                     )}
-                    {(inventoryItems ?? []).map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() =>
-                          addExtraItem({
-                            name:              item.name,
-                            price:             item.selling_price,
-                            cost_price:        item.cost_price,
-                            quantity:          1,
-                            inventory_item_id: item.id,
-                          })
-                        }
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors
-                          bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-[#222]
-                          hover:border-[#D4541A] hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
-                      >
-                        <span className="text-xs font-medium text-gray-800 dark:text-[#ccc] truncate">{item.name}</span>
-                        <span className="text-xs font-bold shrink-0 ml-2" style={{ color: "#D4541A" }}>
-                          ₹{item.selling_price}
-                        </span>
-                      </button>
-                    ))}
+                    {(inventoryItems ?? []).map((item) => {
+                      const existing = activeExtras.find((e) => e.inventory_item_id === item.id);
+                      const qty      = existing?.quantity ?? 0;
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg
+                            bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-[#222]"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-800 dark:text-[#ccc] truncate">{item.name}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-[#555]">₹{item.selling_price}</p>
+                          </div>
+                          {qty === 0 ? (
+                            <button
+                              onClick={() => incrementInventoryItem(item)}
+                              className="text-[11px] font-bold px-3 py-1.5 rounded-md text-white transition-opacity hover:opacity-85"
+                              style={{ background: "#D4541A" }}
+                            >
+                              ADD
+                            </button>
+                          ) : (
+                            <div
+                              className="flex items-center rounded-md overflow-hidden"
+                              style={{ border: "1px solid #D4541A" }}
+                            >
+                              <button
+                                onClick={() => decrementInventoryItem(item.id)}
+                                className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
+                                  hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
+                                style={{ color: "#D4541A" }}
+                                aria-label="Decrease quantity"
+                              >
+                                −
+                              </button>
+                              <span
+                                className="w-6 text-center text-xs font-bold tabular-nums"
+                                style={{ color: "#D4541A" }}
+                              >
+                                {qty}
+                              </span>
+                              <button
+                                onClick={() => incrementInventoryItem(item)}
+                                className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
+                                  hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
+                                style={{ color: "#D4541A" }}
+                                aria-label="Increase quantity"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

@@ -8,10 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { X } from "lucide-react";
 import { toast } from "sonner";
 
+const EXTEND_BUFFER_MINS = 10;
+
 export function ExtendModal() {
-  const extendModalItem  = usePOSStore((s) => s.extendModalItem);
+  const extendModalItem    = usePOSStore((s) => s.extendModalItem);
   const setExtendModalItem = usePOSStore((s) => s.setExtendModalItem);
-  const patchOrderItem   = usePOSStore((s) => s.patchOrderItem);
+  const patchOrderItem     = usePOSStore((s) => s.patchOrderItem);
+  const tables             = usePOSStore((s) => s.tables);
+  const closingTime        = usePOSStore((s) => s.closingTime);
+  const now                = usePOSStore((s) => s.now);
   const qc = useQueryClient();
   const [customMins, setCustomMins] = useState("");
   const [loading,    setLoading]    = useState(false);
@@ -22,15 +27,52 @@ export function ExtendModal() {
     setCustomMins(""); setError(null);
   }
 
+  // ─── Max allowed extension (anchored to expected_end) ─────────────────────
+  // We always extend from expected_end (the originally booked end) — not from
+  // "now" — so brief staff delays don't shrink the customer's add-on time.
+  const anchorMs = extendModalItem?.expected_end
+    ? new Date(extendModalItem.expected_end).getTime()
+    : now.getTime();
+
+  const upcomingBooking = extendModalItem
+    ? tables.find((t) => t.id === extendModalItem.table_id)?.upcomingBooking ?? null
+    : null;
+
+  // Today's shop closing in ms. Treat closings <6am as next-day (midnight cross).
+  const closingMs = (() => {
+    const [ch, cm] = closingTime.split(":").map(Number);
+    const close = new Date(now);
+    close.setHours(ch, cm, 0, 0);
+    if (close.getTime() < now.getTime() && ch < 6) close.setDate(close.getDate() + 1);
+    return close.getTime();
+  })();
+
+  // Whichever boundary is closer caps the extension
+  const bookingBoundaryMs = upcomingBooking
+    ? new Date(upcomingBooking.scheduled_start).getTime() - EXTEND_BUFFER_MINS * 60 * 1000
+    : Infinity;
+  const ceilingMs    = Math.min(closingMs, bookingBoundaryMs);
+  const maxExtendMins = Math.max(0, Math.floor((ceilingMs - anchorMs) / 60000));
+
+  function blockedReason(): string | null {
+    if (maxExtendMins > 0) return null;
+    if (bookingBoundaryMs < closingMs) return "Next booking too close to extend";
+    return "Past shop closing — can't extend further";
+  }
+
   async function extend(mins: number) {
     if (!extendModalItem || loading) return;
+    if (mins <= 0 || mins > maxExtendMins) {
+      setError(maxExtendMins > 0
+        ? `Maximum extension is ${maxExtendMins} min`
+        : (blockedReason() ?? "Cannot extend"));
+      return;
+    }
     setLoading(true); setError(null);
 
-    // Optimistically update the expected_end so countdown refreshes instantly
+    // Anchor optimistic update to expected_end too (server does the same)
     const prevExpectedEnd = extendModalItem.expected_end;
-    const newExpectedEnd  = new Date(
-      (prevExpectedEnd ? new Date(prevExpectedEnd) : new Date()).getTime() + mins * 60 * 1000
-    ).toISOString();
+    const newExpectedEnd  = new Date(anchorMs + mins * 60 * 1000).toISOString();
     patchOrderItem(extendModalItem.id, { expected_end: newExpectedEnd });
     close();
 
@@ -71,45 +113,60 @@ export function ExtendModal() {
 
         <div className="px-5 py-5 space-y-4">
           <p className="text-xs text-gray-500 dark:text-[#666]">
-            Checks for upcoming bookings (10 min buffer).
+            {maxExtendMins > 0
+              ? `Up to ${maxExtendMins} min available (until ${
+                  bookingBoundaryMs < closingMs ? "next booking" : "shop closing"
+                }).`
+              : (blockedReason() ?? "Cannot extend")}
           </p>
 
-          {/* Quick presets */}
-          <div className="grid grid-cols-2 gap-2">
-            {[30, 60].map((mins) => (
-              <button
-                key={mins}
-                onClick={() => extend(mins)}
-                disabled={loading}
-                className="py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-85 disabled:opacity-40
-                  bg-gray-100 dark:bg-[#161616]
-                  border border-gray-200 dark:border-[#2A2A2A]
-                  text-gray-900 dark:text-white"
-              >
-                +{mins} min
-              </button>
-            ))}
+          {/* Quick presets — disabled when they would exceed shop closing or next booking */}
+          <div className="grid grid-cols-3 gap-2">
+            {[15, 30, 60].map((mins) => {
+              const blocked = mins > maxExtendMins;
+              return (
+                <button
+                  key={mins}
+                  onClick={() => extend(mins)}
+                  disabled={loading || blocked}
+                  title={blocked ? (blockedReason() ?? "Too close to next limit") : `Extend by ${mins} minutes`}
+                  className={`py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${blocked
+                      ? "bg-gray-50 dark:bg-[#0d0d0d] text-gray-300 dark:text-[#333] line-through cursor-not-allowed"
+                      : "bg-gray-100 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white hover:opacity-85"}
+                    disabled:opacity-60`}
+                >
+                  +{mins} min
+                </button>
+              );
+            })}
           </div>
 
-          {/* Custom */}
+          {/* Custom — client cap matches the same ceiling as presets */}
           <div className="flex gap-2">
             <input
               type="number"
-              placeholder="Custom mins"
+              placeholder={maxExtendMins > 0 ? `Max ${maxExtendMins} min` : "Unavailable"}
               value={customMins}
               onChange={(e) => setCustomMins(e.target.value)}
               min="5"
-              max="240"
+              max={maxExtendMins || undefined}
+              disabled={maxExtendMins === 0}
               className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none transition-colors
                 bg-gray-100 dark:bg-[#1A1A1A]
                 border border-gray-200 dark:border-[#2A2A2A]
                 text-gray-900 dark:text-white
                 placeholder-gray-400 dark:placeholder-[#444]
-                focus:border-[#D4541A]"
+                focus:border-[#D4541A] disabled:opacity-40"
             />
             <button
               onClick={() => extend(parseInt(customMins))}
-              disabled={loading || !customMins}
+              disabled={
+                loading ||
+                !customMins ||
+                parseInt(customMins) > maxExtendMins ||
+                parseInt(customMins) <= 0
+              }
               className="px-4 py-2.5 rounded-lg font-bold text-sm text-white transition-opacity hover:opacity-85 disabled:opacity-40"
               style={{ background: "#D4541A" }}
             >

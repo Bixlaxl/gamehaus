@@ -1,10 +1,42 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
 export const runtime = 'edge';
 
+const patchSchema = z.object({
+  quantity: z.number().int().min(1),
+});
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string; extraId: string }> }
+) {
+  const { extraId } = await params;
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+
+  const body: unknown = await request.json();
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("order_extras")
+    .update({ quantity: parsed.data.quantity })
+    .eq("id", extraId)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+
+  return NextResponse.json(ok(data));
+}
 
 export async function DELETE(
   _request: Request,

@@ -32,8 +32,12 @@ interface POSStore {
   tableSessionsTableId: string | null;
   selectedTableId: string | null;
 
+  // Location config (set once at mount)
+  closingTime: string; // "HH:MM" — shop close used to cap extensions
+
   // Actions
   setNow: (now: Date) => void;
+  setClosingTime: (closingTime: string) => void;
   setTables: (tables: TableWithStatus[]) => void;
   setOpenOrders: (orders: POSOrder[]) => void;
   selectOrder: (orderId: string | null) => void;
@@ -51,6 +55,7 @@ interface POSStore {
   patchOrderItem: (itemId: string, patch: Partial<OrderItem>) => void;
   addOrderExtra: (orderId: string, extra: OrderExtra) => void;
   removeOrderExtra: (orderId: string, extraId: string) => void;
+  patchOrderExtra: (orderId: string, extraId: string, patch: Partial<OrderExtra>) => void;
 
   // Realtime handlers
   handleOrderItemChange: (payload: RealtimePostgresChangesPayload<OrderItem>) => void;
@@ -72,8 +77,10 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   pointsToRedeem: {},
   tableSessionsTableId: null,
   selectedTableId: null,
+  closingTime: "23:00",
 
   setNow: (now) => set({ now }),
+  setClosingTime: (closingTime) => set({ closingTime }),
   setTables: (tables) => set({ tables }),
   setOpenOrders: (openOrders) => set({ openOrders }),
   selectOrder: (selectedOrderId) => set({ selectedOrderId }),
@@ -112,6 +119,18 @@ export const usePOSStore = create<POSStore>((set, get) => ({
       openOrders: state.openOrders.map((order) =>
         order.id === orderId
           ? { ...order, extras: order.extras.filter((e) => e.id !== extraId) }
+          : order
+      ),
+    })),
+
+  patchOrderExtra: (orderId, extraId, patch) =>
+    set((state) => ({
+      openOrders: state.openOrders.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              extras: order.extras.map((e) => (e.id === extraId ? { ...e, ...patch } : e)),
+            }
           : order
       ),
     })),

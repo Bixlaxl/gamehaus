@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
   const { data: item, error: itemError } = await admin
     .from("order_items")
-    .select("*")
+    .select("*, table:tables(location:locations(closing_time))")
     .eq("id", order_item_id)
     .single();
 
@@ -36,13 +36,31 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Session is not in an extendable state", "INVALID_STATE"), { status: 400 });
   }
 
-  // For finished sessions (bill-ready), anchor the extension to "now" so we don't
-  // back-date into already-elapsed time. Running sessions extend from current expected_end.
-  const anchor = item.status === "finished"
-    ? new Date()
-    : (item.expected_end ? new Date(item.expected_end) : new Date());
-
+  // Always anchor extension to expected_end — never to "now" — so brief staff
+  // delays after the session ends don't shrink the customer's add-on time.
+  const anchor = item.expected_end ? new Date(item.expected_end) : new Date();
   const newExpectedEnd = new Date(anchor.getTime() + extend_mins * 60 * 1000);
+
+  // Enforce shop closing time as a hard ceiling
+  const closingTime = (item.table as { location: { closing_time: string } | null } | null)?.location?.closing_time;
+  if (closingTime) {
+    const [ch, cm] = closingTime.split(":").map(Number);
+    const todayClose = new Date(anchor);
+    todayClose.setHours(ch, cm, 0, 0);
+    if (todayClose.getTime() < anchor.getTime() && ch < 6) {
+      todayClose.setDate(todayClose.getDate() + 1);
+    }
+    if (newExpectedEnd.getTime() > todayClose.getTime()) {
+      const maxMins = Math.max(0, Math.floor((todayClose.getTime() - anchor.getTime()) / 60000));
+      return NextResponse.json(
+        err(
+          `Cannot extend past shop closing — only ${maxMins} mins available`,
+          "PAST_CLOSING"
+        ),
+        { status: 409 }
+      );
+    }
+  }
 
   // Check for confirmed online bookings on this table that would conflict (10-min buffer)
   const bufferTime = new Date(newExpectedEnd.getTime() + BUFFER_MINS * 60 * 1000);

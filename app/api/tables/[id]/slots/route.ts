@@ -25,15 +25,16 @@ export async function GET(
   const dayStartMs = new Date(dayStart).getTime();
   const dayEndMs   = new Date(dayEnd).getTime();
 
+  // Don't SQL-filter on scheduled_start — walk-ins have NULL scheduled_start
+  // and would be excluded, leaving the table appearing free to public bookers.
+  // Post-filter handles date scoping using actual_start (running) or scheduled_start (scheduled).
   const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
     admin
       .from("order_items")
       .select("actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
       .eq("table_id", tableId)
       .eq("is_deleted", false)
-      .in("status", ["running", "scheduled"])
-      .gte("scheduled_start", new Date(dayStartMs).toISOString())
-      .lte("scheduled_start", new Date(dayEndMs).toISOString()),
+      .in("status", ["running", "scheduled"]),
 
     admin
       .from("bookings")
