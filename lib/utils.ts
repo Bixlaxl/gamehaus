@@ -45,3 +45,18 @@ export function formatCountdown(endTime: Date, now: Date): string {
   }
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/** Signed countdown — negative when `now` has passed `endTime`. Returns e.g. "-05:23". */
+export function formatSignedCountdown(endTime: Date, now: Date): { text: string; isOvertime: boolean } {
+  const diffMs    = endTime.getTime() - now.getTime();
+  const isOvertime = diffMs < 0;
+  const absMs     = Math.abs(diffMs);
+  const totalSecs = Math.floor(absMs / 1000);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  const body = h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return { text: isOvertime ? `-${body}` : body, isOvertime };
+}

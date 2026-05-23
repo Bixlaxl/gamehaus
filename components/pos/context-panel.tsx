@@ -6,8 +6,7 @@ import { usePOSStore } from "@/store/pos";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
-const AUTO_STOP_GRACE_MINS = 2;
-import { formatCurrency, formatCountdown } from "@/lib/utils";
+import { formatCurrency, formatSignedCountdown } from "@/lib/utils";
 import { X, Plus, Trash2, Square, Timer, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
@@ -48,17 +47,17 @@ function PanelHeader({
   onClose?: () => void;
 }) {
   return (
-    <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-gray-200 dark:border-[#1f1f1f]">
+    <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#222]">
       <div className="min-w-0">
-        <p className="font-bold text-gray-900 dark:text-white text-sm truncate">{title}</p>
+        <p className="font-bold text-gray-900 dark:text-white text-base truncate">{title}</p>
         {subtitle && (
-          <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555] truncate">{subtitle}</p>
+          <p className="text-xs mt-0.5 text-gray-600 dark:text-[#aaa] truncate">{subtitle}</p>
         )}
       </div>
       {onClose && (
         <button
           onClick={onClose}
-          className="shrink-0 ml-3 p-1.5 rounded-lg text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+          className="shrink-0 ml-3 p-1.5 rounded-lg text-gray-500 dark:text-[#888] hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
@@ -82,6 +81,7 @@ function PanelWalkIn({
   const [customerName,  setCustomerName]  = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [duration,      setDuration]      = useState(60);
+  const [durationInput, setDurationInput] = useState("60"); // raw string so it can be erased
   const [loading,       setLoading]       = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const [customer,      setCustomer]      = useState<CustomerLookup | null>(null);
@@ -178,7 +178,7 @@ function PanelWalkIn({
 
         {/* Customer */}
         <div className="space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
             Customer
           </p>
           <input
@@ -187,9 +187,9 @@ function PanelWalkIn({
             placeholder="Customer name *"
             autoFocus
             autoComplete="name"
-            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors
+            className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
               bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-              text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
+              text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
               focus:border-[#D4541A]"
           />
           <input
@@ -201,44 +201,44 @@ function PanelWalkIn({
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder="10-digit phone (optional)"
             autoComplete="tel"
-            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors
+            className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
               bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-              text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
+              text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
               focus:border-[#D4541A]"
           />
           {lookingUp && (
-            <p className="text-xs text-gray-400 dark:text-[#555]">Looking up...</p>
+            <p className="text-xs text-gray-500 dark:text-[#999]">Looking up…</p>
           )}
           {!lookingUp && customer && (
             <div
               className="flex items-center gap-2 px-3 py-2 rounded-lg"
-              style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.18)" }}
+              style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)" }}
             >
-              <Star className="h-3 w-3 shrink-0" style={{ color: "#f59e0b" }} />
-              <span className="text-xs font-medium" style={{ color: "#fbbf24" }}>
+              <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />
+              <span className="text-sm font-semibold" style={{ color: "#fbbf24" }}>
                 {customer.points_balance} pts · {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
               </span>
             </div>
           )}
           {!lookingUp && customerPhone.length === 10 && !customer && (
-            <p className="text-xs text-gray-400 dark:text-[#444]">New customer</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-[#888]">New customer</p>
           )}
         </div>
 
         {/* Duration */}
         <div className="space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
             Duration
           </p>
           <div className="flex gap-2">
             {availablePresets.map((p) => (
               <button
                 key={p.mins}
-                onClick={() => setDuration(p.mins)}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                onClick={() => { setDuration(p.mins); setDurationInput(String(p.mins)); }}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                   duration === p.mins
                     ? "text-white"
-                    : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-600 dark:text-[#666]"
+                    : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
                 }`}
                 style={duration === p.mins ? { background: "#D4541A" } : {}}
               >
@@ -252,17 +252,34 @@ function PanelWalkIn({
               min="15"
               max={maxMins}
               step="15"
-              value={duration}
-              onChange={(e) =>
-                setDuration(Math.min(maxMins, Math.max(15, parseInt(e.target.value) || 60)))
-              }
-              className="w-20 text-sm rounded-lg px-2.5 py-1.5 outline-none transition-colors
+              value={durationInput}
+              onChange={(e) => {
+                // Allow the field to be fully erased; only update `duration` when there's a value
+                const raw = e.target.value;
+                setDurationInput(raw);
+                if (raw === "") return;
+                const n = parseInt(raw);
+                if (Number.isFinite(n) && n > 0) setDuration(Math.min(maxMins, n));
+              }}
+              onBlur={() => {
+                // Snap back to a valid number on blur if user left it blank or below min
+                const n = parseInt(durationInput);
+                if (!Number.isFinite(n) || n < 15) {
+                  setDuration(60);
+                  setDurationInput("60");
+                } else {
+                  const clamped = Math.min(maxMins, n);
+                  setDuration(clamped);
+                  setDurationInput(String(clamped));
+                }
+              }}
+              className="w-20 text-sm font-semibold rounded-lg px-2.5 py-1.5 outline-none transition-colors
                 bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                 text-gray-900 dark:text-white focus:border-[#D4541A]"
             />
-            <span className="text-xs text-gray-400 dark:text-[#555]">mins</span>
+            <span className="text-xs font-semibold text-gray-500 dark:text-[#999]">mins</span>
             {table.upcomingBooking && (
-              <span className="text-xs text-gray-400 dark:text-[#555]">(max {maxMins}m)</span>
+              <span className="text-xs text-gray-500 dark:text-[#999]">(max {maxMins}m)</span>
             )}
           </div>
         </div>
@@ -281,14 +298,14 @@ function PanelWalkIn({
         )}
       </div>
 
-      <div className="shrink-0 px-5 py-4 border-t border-gray-200 dark:border-[#1f1f1f]">
+      <div className="shrink-0 px-5 py-4 border-t border-gray-200 dark:border-[#222]">
         <button
           onClick={startWalkIn}
           disabled={loading}
-          className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-          style={{ background: "#D4541A" }}
+          className="w-full py-3.5 rounded-xl font-bold text-white text-base transition-opacity hover:opacity-90 disabled:opacity-40 shadow-lg"
+          style={{ background: "#D4541A", boxShadow: "0 6px 20px rgba(212,84,26,0.35)" }}
         >
-          {loading ? "Starting..." : "Start Walk-in"}
+          {loading ? "Starting…" : "Start Walk-in"}
         </button>
       </div>
     </div>
@@ -320,11 +337,12 @@ function PanelSession({
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
   const qc                = useQueryClient();
 
-  const [addExtraOpen,   setAddExtraOpen]   = useState(false);
-  const [extraForm,      setExtraForm]      = useState({ name: "", price: "", quantity: "1" });
+  const [addExtraOpen,    setAddExtraOpen]    = useState(false);
+  const [catalogueOpen,   setCatalogueOpen]   = useState(false);
+  const [extraForm,       setExtraForm]       = useState({ name: "", price: "", quantity: "1" });
   const [redeemInput,    setRedeemInput]    = useState(String(pointsToRedeem[order.id] ?? 0));
 
-  // Catalogue is always visible in the panel — fetch on mount, cache 5 min
+  // Lazy — only fetch when staff opens the catalogue. Cached 5 min after first open.
   const { data: inventoryItems } = useQuery<InventoryItem[]>({
     queryKey: ["inventory", locationId],
     queryFn: async () => {
@@ -333,6 +351,7 @@ function PanelSession({
       if (!body.success) return [];
       return body.data.filter((i) => i.is_active);
     },
+    enabled: catalogueOpen,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -614,20 +633,16 @@ function PanelSession({
           const hasNextBooking = !!upcomingForItem;
 
           let countdown = "";
-          let isGrace = false;
-          if (isRunning) {
-            if (item.expected_end) {
-              const exp  = new Date(item.expected_end);
-              const otMs = Math.max(0, now.getTime() - exp.getTime());
-              isGrace    = otMs > 0 && otMs <= AUTO_STOP_GRACE_MINS * 60 * 1000 && !hasNextBooking;
-              countdown  = isGrace
-                ? formatCountdown(new Date(exp.getTime() + AUTO_STOP_GRACE_MINS * 60 * 1000), now)
-                : formatCountdown(exp, now);
-            }
+          let isOvertime = false;
+          if (isRunning && item.expected_end) {
+            const exp    = new Date(item.expected_end);
+            const signed = formatSignedCountdown(exp, now);
+            countdown    = signed.text;
+            isOvertime   = signed.isOvertime;
           }
 
           const progressPct =
-            isRunning && item.actual_start && item.expected_end && !isGrace
+            isRunning && item.actual_start && item.expected_end && !isOvertime
               ? Math.min(100, Math.max(0,
                   (now.getTime() - new Date(item.actual_start).getTime()) /
                   (new Date(item.expected_end).getTime() - new Date(item.actual_start).getTime()) * 100
@@ -639,37 +654,37 @@ function PanelSession({
               key={item.id}
               className={`rounded-2xl p-4 space-y-3 bg-white dark:bg-[#0d0d0d] shadow-sm ${
                 isRunning
-                  ? isGrace
-                    ? "border-2 border-amber-300 dark:border-[rgba(245,158,11,0.35)]"
-                    : "border-2 border-emerald-300 dark:border-[rgba(16,185,129,0.35)]"
-                  : "border border-gray-100 dark:border-[#1f1f1f]"
+                  ? isOvertime
+                    ? "border-2 border-red-400 dark:border-[rgba(239,68,68,0.45)]"
+                    : "border-2 border-emerald-400 dark:border-[rgba(16,185,129,0.45)]"
+                  : "border border-gray-200 dark:border-[#262626]"
               }`}
             >
               {/* Top row */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white text-sm">{tableName}</p>
+                  <p className="font-bold text-gray-900 dark:text-white text-base">{tableName}</p>
                   {isRunning && (
                     <span
-                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
                       style={
-                        isGrace
-                          ? { background: "rgba(245,158,11,0.1)", color: "#f59e0b" }
-                          : { background: "rgba(16,185,129,0.1)", color: "#10b981" }
+                        isOvertime
+                          ? { background: "rgba(239,68,68,0.15)", color: "#ef4444" }
+                          : { background: "rgba(16,185,129,0.15)", color: "#10b981" }
                       }
                     >
-                      {isGrace ? "Grace" : "Live"}
+                      {isOvertime ? "Over time" : "Live"}
                     </span>
                   )}
                   {item.status === "finished" && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-gray-100 dark:bg-[#1A1A1A] text-gray-400 dark:text-[#555]">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide bg-gray-200 dark:bg-[#222] text-gray-600 dark:text-[#aaa]">
                       Finished
                     </span>
                   )}
                   {item.status === "scheduled" && (
                     <span
-                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                      style={{ background: "rgba(245,158,11,0.1)", color: "#f59e0b" }}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                      style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
                     >
                       Scheduled
                     </span>
@@ -677,51 +692,52 @@ function PanelSession({
                 </div>
                 <div className="text-right shrink-0">
                   <p
-                    className="font-bold text-base tabular-nums"
+                    className="font-bold text-lg tabular-nums"
                     style={{ color: isRunning ? "#D4541A" : undefined }}
                   >
                     {formatCurrency(lineBill)}
                   </p>
-                  <p className="text-[10px] mt-0.5 text-gray-400 dark:text-[#444]">
+                  <p className="text-[11px] mt-0.5 text-gray-500 dark:text-[#888]">
                     ₹{item.rate_per_hour}/hr
                   </p>
                 </div>
               </div>
 
-              {/* Start time + countdown */}
+              {/* Start time + countdown / overtime */}
               {isRunning && (
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-[#1a1a1a]">
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-200 dark:border-[#222]">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Started</span>
-                    <span className="text-xs font-mono font-semibold tabular-nums text-gray-700 dark:text-[#aaa]">
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-[#999] uppercase tracking-wide">
+                      Started
+                    </span>
+                    <span className="text-sm font-mono font-bold tabular-nums text-gray-900 dark:text-white">
                       {item.actual_start ? fmtTime(item.actual_start) : "—"}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {isGrace ? (
-                      <span className="text-xs font-mono font-semibold tabular-nums" style={{ color: "#f59e0b" }}>
-                        {countdown} grace left
-                      </span>
-                    ) : (
-                      <>
-                        <span className="text-[10px] text-gray-400 uppercase tracking-wide">Left</span>
-                        <span className="text-xs font-mono font-semibold tabular-nums" style={{ color: "#D4541A" }}>
-                          {countdown}
-                        </span>
-                      </>
-                    )}
+                    <span className="text-[11px] font-semibold uppercase tracking-wide"
+                      style={{ color: isOvertime ? "#ef4444" : "#999" }}
+                    >
+                      {isOvertime ? "Over" : "Left"}
+                    </span>
+                    <span
+                      className="text-sm font-mono font-bold tabular-nums"
+                      style={{ color: isOvertime ? "#ef4444" : "#D4541A" }}
+                    >
+                      {countdown}
+                    </span>
                   </div>
                 </div>
               )}
 
               {/* Progress bar */}
-              {isRunning && (progressPct > 0 || isGrace) && (
+              {isRunning && (progressPct > 0 || isOvertime) && (
                 <div className="h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-[#1A1A1A]">
                   <div
                     className="h-full rounded-full"
                     style={{
-                      width:      isGrace ? "100%" : `${progressPct}%`,
-                      background: isGrace ? "#f59e0b" : progressPct > 85 ? "#ef4444" : "#D4541A",
+                      width:      isOvertime ? "100%" : `${progressPct}%`,
+                      background: isOvertime ? "#ef4444" : progressPct > 85 ? "#f59e0b" : "#10b981",
                       transition: "width 1s linear",
                     }}
                   />
@@ -779,89 +795,118 @@ function PanelSession({
           );
         })}
 
-        {/* Extras — catalogue always visible, no toggle, no Cancel obstacle */}
-        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#0d0d0d] border border-gray-100 dark:border-[#1f1f1f] shadow-sm">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-[#1f1f1f]">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+        {/* Extras — catalogue & custom both behind toggles. Default closed. */}
+        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-[#222] shadow-sm">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#222]">
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
               Extras
             </p>
-            <button
-              onClick={() => setAddExtraOpen((v) => !v)}
-              className="flex items-center gap-1 text-xs font-semibold transition-colors hover:brightness-75"
-              style={{ color: "#D4541A" }}
-            >
-              <Plus className="h-3 w-3" /> {addExtraOpen ? "Hide custom" : "Custom item"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCatalogueOpen((v) => !v)}
+                className="flex items-center gap-1 text-xs font-semibold transition-colors hover:brightness-75"
+                style={{ color: "#D4541A" }}
+              >
+                <Plus className="h-3.5 w-3.5" /> {catalogueOpen ? "Hide items" : "Extra items"}
+              </button>
+              <button
+                onClick={() => setAddExtraOpen((v) => !v)}
+                className="text-xs font-semibold text-gray-500 dark:text-[#999] hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                {addExtraOpen ? "Hide custom" : "Custom"}
+              </button>
+            </div>
           </div>
 
-          {/* Catalogue — clickable in place, no two-step process */}
-          <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
-            {(inventoryItems ?? []).length === 0 && (
-              <p className="text-xs text-gray-400 dark:text-[#555] py-2 text-center">
-                No items in catalogue
-              </p>
-            )}
-            {(inventoryItems ?? []).map((item) => {
-              const existing = activeExtras.find((e) => e.inventory_item_id === item.id);
-              const qty      = existing?.quantity ?? 0;
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg
-                    bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-[#222]"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-800 dark:text-[#ccc] truncate">{item.name}</p>
-                    <p className="text-[10px] text-gray-400 dark:text-[#555]">₹{item.selling_price}</p>
-                  </div>
-                  {qty === 0 ? (
-                    <button
-                      onClick={() => incrementInventoryItem(item)}
-                      className="text-[11px] font-bold px-3 py-1.5 rounded-md text-white transition-opacity hover:opacity-85"
-                      style={{ background: "#D4541A" }}
-                    >
-                      ADD
-                    </button>
-                  ) : (
-                    <div
-                      className="flex items-center rounded-md overflow-hidden"
-                      style={{ border: "1px solid #D4541A" }}
-                    >
-                      <button
-                        onClick={() => decrementInventoryItem(item.id)}
-                        className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
-                          hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
-                        style={{ color: "#D4541A" }}
-                        aria-label="Decrease quantity"
-                      >
-                        −
-                      </button>
-                      <span
-                        className="w-6 text-center text-xs font-bold tabular-nums"
-                        style={{ color: "#D4541A" }}
-                      >
-                        {qty}
-                      </span>
+          {/* Catalogue — only shown when toggled open */}
+          {catalogueOpen && (
+            <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto border-b border-gray-100 dark:border-[#1f1f1f]">
+              {(inventoryItems ?? []).length === 0 && (
+                <p className="text-xs text-gray-400 dark:text-[#666] py-3 text-center">
+                  No items in catalogue
+                </p>
+              )}
+              {(inventoryItems ?? []).map((item) => {
+                const existing = activeExtras.find((e) => e.inventory_item_id === item.id);
+                const qty      = existing?.quantity ?? 0;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg
+                      bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#262626]"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-[#999]">₹{item.selling_price}</p>
+                    </div>
+                    {qty === 0 ? (
                       <button
                         onClick={() => incrementInventoryItem(item)}
-                        className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
-                          hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
-                        style={{ color: "#D4541A" }}
-                        aria-label="Increase quantity"
+                        className="text-xs font-bold px-3.5 py-1.5 rounded-md text-white transition-opacity hover:opacity-85"
+                        style={{ background: "#D4541A" }}
                       >
-                        +
+                        ADD
                       </button>
+                    ) : (
+                      <div
+                        className="flex items-center rounded-md overflow-hidden"
+                        style={{ border: "1.5px solid #D4541A" }}
+                      >
+                        <button
+                          onClick={() => decrementInventoryItem(item.id)}
+                          className="w-8 h-8 flex items-center justify-center text-base font-bold transition-colors
+                            hover:bg-orange-50 dark:hover:bg-[#2a1300]"
+                          style={{ color: "#D4541A" }}
+                          aria-label="Decrease quantity"
+                        >
+                          −
+                        </button>
+                        <span
+                          className="w-7 text-center text-sm font-bold tabular-nums"
+                          style={{ color: "#D4541A" }}
+                        >
+                          {qty}
+                        </span>
+                        <button
+                          onClick={() => incrementInventoryItem(item)}
+                          className="w-8 h-8 flex items-center justify-center text-base font-bold transition-colors
+                            hover:bg-orange-50 dark:hover:bg-[#2a1300]"
+                          style={{ color: "#D4541A" }}
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Catalogue items already added — summary list (always visible if any) */}
+          {activeExtras.filter((e) => e.inventory_item_id).length > 0 && (
+            <div className="px-3 py-2 space-y-1 border-b border-gray-100 dark:border-[#1f1f1f]">
+              {activeExtras
+                .filter((e) => e.inventory_item_id)
+                .map((extra) => (
+                  <div key={extra.id} className="flex items-center justify-between py-0.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium text-gray-800 dark:text-[#ddd] truncate">{extra.name}</span>
+                      <span className="text-xs shrink-0 text-gray-500 dark:text-[#999]">×{extra.quantity}</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
+                      {formatCurrency(extra.price * extra.quantity)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
 
           {/* Custom items list — only shown if any non-catalogue extras exist */}
           {activeExtras.some((e) => !e.inventory_item_id) && (
-            <div className="border-t border-gray-100 dark:border-[#1f1f1f] px-3 pt-2 pb-3 space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444] mb-1">
+            <div className="border-b border-gray-100 dark:border-[#1f1f1f] px-3 pt-2 pb-3 space-y-1">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#888] mb-1">
                 Custom items
               </p>
               {activeExtras
@@ -870,10 +915,10 @@ function PanelSession({
                   <div key={extra.id} className="flex items-center justify-between py-1 px-1">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-sm text-gray-900 dark:text-white truncate">{extra.name}</span>
-                      <span className="text-xs shrink-0 text-gray-400 dark:text-[#555]">×{extra.quantity}</span>
+                      <span className="text-xs shrink-0 text-gray-500 dark:text-[#999]">×{extra.quantity}</span>
                     </div>
                     <div className="flex items-center gap-2.5 shrink-0">
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">
                         {formatCurrency(extra.price * extra.quantity)}
                       </span>
                       <button
@@ -891,14 +936,14 @@ function PanelSession({
 
           {/* Custom item form — collapsed by default, only shows when toggled */}
           {addExtraOpen && (
-            <div className="border-t border-gray-100 dark:border-[#1f1f1f] p-3 space-y-2">
+            <div className="p-3 space-y-2">
               <input
                 placeholder="Item name"
                 value={extraForm.name}
                 onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
                   bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
-                  text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
+                  text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
                   focus:border-[#D4541A]"
                 autoFocus
               />
@@ -910,7 +955,7 @@ function PanelSession({
                   onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
                   className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-colors
                     bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                    text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
+                    text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666] focus:border-[#D4541A]"
                 />
                 <input
                   type="number"
@@ -919,13 +964,13 @@ function PanelSession({
                   onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
                   className="w-16 px-3 py-2 rounded-lg text-sm outline-none transition-colors
                     bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                    text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
+                    text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666] focus:border-[#D4541A]"
                 />
               </div>
               <button
                 onClick={addCustomExtra}
                 disabled={!extraForm.name || !extraForm.price}
-                className="w-full py-2 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-85 disabled:opacity-40"
+                className="w-full py-2 rounded-lg text-white text-sm font-bold transition-opacity hover:opacity-85 disabled:opacity-40"
                 style={{ background: "#D4541A" }}
               >
                 Add to order
@@ -938,9 +983,9 @@ function PanelSession({
       </div>
 
       {/* Pinned bill footer */}
-      <div className="shrink-0 bg-white dark:bg-[#111] border-t border-gray-200 dark:border-[#1f1f1f]">
+      <div className="shrink-0 bg-white dark:bg-[#111] border-t border-gray-200 dark:border-[#222]">
         <div className="px-5 pt-3 pb-1 max-h-36 overflow-y-auto space-y-1">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-gray-400 dark:text-[#555] mb-2">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-gray-600 dark:text-[#aaa] mb-2">
             Receipt
           </p>
           {bill.tableLines.map((line) => {
@@ -948,10 +993,10 @@ function PanelSession({
             const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
             return (
               <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                <span className="truncate text-xs font-medium text-gray-800 dark:text-[#ccc]">
+                <span className="truncate text-sm font-medium text-gray-800 dark:text-[#ddd]">
                   {tn} · {line.durationMins}m
                 </span>
-                <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">
+                <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-sm">
                   {formatCurrency(line.amount)}
                 </span>
               </div>
@@ -959,10 +1004,10 @@ function PanelSession({
           })}
           {bill.extraLines.map((line) => (
             <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="truncate text-xs font-medium text-gray-800 dark:text-[#ccc]">
+              <span className="truncate text-sm font-medium text-gray-800 dark:text-[#ddd]">
                 {line.name} ×{line.quantity}
               </span>
-              <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-xs">
+              <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-sm">
                 {formatCurrency(line.amount)}
               </span>
             </div>
@@ -988,8 +1033,8 @@ function PanelSession({
         {/* Loyalty points row — only when bill is ready */}
         {!hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance > 0 && (
           <div className="px-5 py-2.5 border-t border-gray-100 dark:border-[#1a1a1a] flex items-center gap-2">
-            <Star className="h-3 w-3 shrink-0" style={{ color: "#f59e0b" }} />
-            <span className="text-xs text-gray-400 dark:text-[#555] flex-1">
+            <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />
+            <span className="text-xs font-semibold text-gray-700 dark:text-[#ccc] flex-1">
               {customerInfo.points_balance} pts
             </span>
             <input
@@ -999,20 +1044,20 @@ function PanelSession({
               value={redeemInput}
               onChange={(e) => handleRedeemChange(e.target.value)}
               placeholder="0"
-              className="w-16 text-xs rounded-lg px-2 py-1 outline-none text-center tabular-nums
+              className="w-16 text-xs font-semibold rounded-lg px-2 py-1 outline-none text-center tabular-nums
                 bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                 text-gray-900 dark:text-white focus:border-[#f59e0b]"
             />
-            <span className="text-xs text-gray-400 dark:text-[#555] shrink-0">/ {maxRedeem} max</span>
+            <span className="text-xs font-medium text-gray-500 dark:text-[#999] shrink-0">/ {maxRedeem} max</span>
           </div>
         )}
 
         <div className="px-5 pb-5 pt-3 border-t border-gray-100 dark:border-[#1a1a1a]">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-[#555]">
+            <span className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-[#bbb]">
               Total due
             </span>
-            <span className="text-2xl font-bold tabular-nums leading-none" style={{ color: "#D4541A" }}>
+            <span className="text-3xl font-extrabold tabular-nums leading-none" style={{ color: "#D4541A" }}>
               {formatCurrency(hasRunning ? bill.totalDue : displayTotal)}
             </span>
           </div>
@@ -1020,7 +1065,7 @@ function PanelSession({
           {/* Extend-from-bill — only when bill is ready (session finished) */}
           {!hasRunning && finishedItem && (
             <div className="mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-[#555] mb-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-600 dark:text-[#bbb] mb-1.5">
                 Add more time
               </p>
               <div className="grid grid-cols-3 gap-1.5">
@@ -1050,7 +1095,7 @@ function PanelSession({
                 })}
               </div>
               {maxExtendMins === 0 && (
-                <p className="text-[10px] mt-1.5 text-gray-400 dark:text-[#555]">
+                <p className="text-xs mt-1.5 text-gray-500 dark:text-[#999]">
                   {upcomingForFinishedTable ? "Next booking too close to extend" : "Shop closing — extension unavailable"}
                 </p>
               )}
@@ -1060,12 +1105,12 @@ function PanelSession({
           <button
             onClick={() => setFinalizeId(order.id)}
             disabled={hasRunning}
-            className={`w-full py-3 rounded-xl text-sm font-bold transition-opacity ${
+            className={`w-full py-3.5 rounded-xl text-base font-bold transition-opacity ${
               hasRunning
-                ? "bg-gray-100 dark:bg-[#1a1a1a] text-gray-300 dark:text-[#333] cursor-not-allowed"
-                : "text-white hover:brightness-110 active:brightness-95 cursor-pointer"
+                ? "bg-gray-100 dark:bg-[#1a1a1a] text-gray-400 dark:text-[#555] cursor-not-allowed"
+                : "text-white hover:brightness-110 active:brightness-95 cursor-pointer shadow-lg"
             }`}
-            style={hasRunning ? {} : { background: "#D4541A" }}
+            style={hasRunning ? {} : { background: "#D4541A", boxShadow: "0 6px 20px rgba(212,84,26,0.35)" }}
           >
             {hasRunning ? "Stop sessions first" : "Finalize & Collect"}
           </button>

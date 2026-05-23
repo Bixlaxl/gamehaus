@@ -4,13 +4,12 @@ import { useState, useMemo, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
-import { formatCountdown, formatCurrency } from "@/lib/utils";
+import { formatSignedCountdown, formatCurrency } from "@/lib/utils";
 import { CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
 import type { Order, OrderItem, Booking } from "@/lib/supabase/types";
 
-const AUTO_STOP_GRACE_MINS  = 2;
 const BOOKED_THRESHOLD_MINS = 30;
 
 const typeIcon: Record<string, string> = {
@@ -101,18 +100,16 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
 
   let countdown        = "";
   let isFiveMinWarning = false;
-  let isGrace          = false;
+  let isOvertime       = false;
   let progressPct      = 0;
 
   if (item.expected_end) {
     const exp    = new Date(item.expected_end);
     const diffMs = exp.getTime() - now.getTime();
-    const otMins = -diffMs / 60000;
+    const signed = formatSignedCountdown(exp, now);
+    countdown    = signed.text;
+    isOvertime   = signed.isOvertime;
     isFiveMinWarning = diffMs > 0 && diffMs < 5 * 60 * 1000;
-    isGrace          = otMins > 0 && otMins <= AUTO_STOP_GRACE_MINS;
-    countdown        = isGrace
-      ? formatCountdown(new Date(exp.getTime() + AUTO_STOP_GRACE_MINS * 60 * 1000), now)
-      : formatCountdown(exp, now);
     if (item.actual_start && diffMs > 0) {
       progressPct = Math.min(100, Math.max(0,
         (now.getTime() - new Date(item.actual_start).getTime()) /
@@ -129,12 +126,12 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
   })();
   const canExtend15 = gapToNextMins >= 15;
   const canExtend30 = gapToNextMins >= 30;
-  const accentColor    = isGrace ? "#f97316" : isFiveMinWarning ? "#f59e0b" : "#10b981";
-  const bgClass        = isGrace
-    ? "bg-orange-50 dark:bg-[rgba(249,115,22,0.06)]"
+  const accentColor    = isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981";
+  const bgClass        = isOvertime
+    ? "bg-red-50 dark:bg-[rgba(239,68,68,0.08)]"
     : isFiveMinWarning
-    ? "bg-amber-50 dark:bg-[rgba(245,158,11,0.06)]"
-    : "bg-emerald-50 dark:bg-[rgba(16,185,129,0.05)]";
+    ? "bg-amber-50 dark:bg-[rgba(245,158,11,0.07)]"
+    : "bg-emerald-50 dark:bg-[rgba(16,185,129,0.06)]";
 
   async function stopSession(e: React.MouseEvent) {
     e.stopPropagation();
@@ -188,18 +185,18 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
-            <span className="text-xs font-semibold text-gray-600 dark:text-[#888] truncate">
+            <span className="text-base">{typeIcon[table.type] ?? "🎱"}</span>
+            <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
             className={`text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide ${
-              isGrace || isFiveMinWarning ? "animate-pulse" : ""
+              isOvertime || isFiveMinWarning ? "animate-pulse" : ""
             }`}
             style={{ background: accentColor }}
           >
-            {isGrace ? "Grace" : isFiveMinWarning ? "Ending" : "Live"}
+            {isOvertime ? "Over time" : isFiveMinWarning ? "Ending" : "Live"}
           </span>
         </div>
 
@@ -216,28 +213,28 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
         {/* Progress bar */}
         <div
           className="h-1.5 rounded-full overflow-hidden"
-          style={{ background: isGrace ? "rgba(249,115,22,0.15)" : "rgba(0,0,0,0.07)" }}
+          style={{ background: isOvertime ? "rgba(239,68,68,0.18)" : "rgba(0,0,0,0.07)" }}
         >
           <div
             className="h-full rounded-full"
             style={{
-              width:      isGrace ? "100%" : `${progressPct}%`,
-              background: isGrace ? "#f97316" : progressPct > 90 ? "#f59e0b" : "#D4541A",
+              width:      isOvertime ? "100%" : `${progressPct}%`,
+              background: isOvertime ? "#ef4444" : progressPct > 90 ? "#f59e0b" : "#10b981",
               transition: "width 1s linear",
             }}
           />
         </div>
 
-        {/* Start time + countdown */}
+        {/* Start time + countdown / overtime */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-mono tabular-nums text-gray-500 dark:text-[#666]">
+          <span className="text-xs font-mono font-semibold tabular-nums text-gray-700 dark:text-[#bbb]">
             {startedAt}
           </span>
           <span
-            className="text-xs font-mono font-bold tabular-nums"
-            style={{ color: isGrace ? "#f97316" : isFiveMinWarning ? "#f59e0b" : "#10b981" }}
+            className="text-sm font-mono font-bold tabular-nums"
+            style={{ color: isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981" }}
           >
-            {isGrace ? `${countdown} stop` : `${countdown} left`}
+            {countdown}{isOvertime ? " over" : " left"}
           </span>
         </div>
 
@@ -360,8 +357,8 @@ function BookedCard({ table, locationId, isSelected, onClick }: {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
-            <span className="text-xs font-semibold text-gray-600 dark:text-[#888] truncate">
+            <span className="text-base">{typeIcon[table.type] ?? "🎱"}</span>
+            <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
@@ -474,8 +471,8 @@ function BillReadyCard({ table, order, isSelected, onClick }: {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm">{typeIcon[table.type] ?? "🎱"}</span>
-            <span className="text-xs font-semibold text-gray-600 dark:text-[#888] truncate">
+            <span className="text-base">{typeIcon[table.type] ?? "🎱"}</span>
+            <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>

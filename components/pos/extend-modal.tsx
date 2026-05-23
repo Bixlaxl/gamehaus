@@ -5,7 +5,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import type { OrderItem } from "@/lib/supabase/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { X } from "lucide-react";
 import { toast } from "sonner";
 
 const EXTEND_BUFFER_MINS = 0;
@@ -100,15 +99,7 @@ export function ExtendModal() {
     <Dialog open={!!extendModalItem} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-xs p-0 gap-0 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
         <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 dark:border-[#1F1F1F]">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Extend Session</DialogTitle>
-            <button
-              onClick={close}
-              className="text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Extend Session</DialogTitle>
         </DialogHeader>
 
         <div className="px-5 py-5 space-y-4">
