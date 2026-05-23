@@ -7,7 +7,7 @@ import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
 const AUTO_STOP_GRACE_MINS = 2;
-import { formatCurrency, formatCountdown, formatElapsed } from "@/lib/utils";
+import { formatCurrency, formatCountdown } from "@/lib/utils";
 import { X, Plus, Trash2, Square, Timer, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
@@ -321,11 +321,10 @@ function PanelSession({
   const qc                = useQueryClient();
 
   const [addExtraOpen,   setAddExtraOpen]   = useState(false);
-  const [extraMode,      setExtraMode]      = useState<"inventory" | "custom">("inventory");
   const [extraForm,      setExtraForm]      = useState({ name: "", price: "", quantity: "1" });
   const [redeemInput,    setRedeemInput]    = useState(String(pointsToRedeem[order.id] ?? 0));
 
-  // Lazy: only fetch inventory when the picker is opened — saves a request per order
+  // Catalogue is always visible in the panel — fetch on mount, cache 5 min
   const { data: inventoryItems } = useQuery<InventoryItem[]>({
     queryKey: ["inventory", locationId],
     queryFn: async () => {
@@ -334,7 +333,6 @@ function PanelSession({
       if (!body.success) return [];
       return body.data.filter((i) => i.is_active);
     },
-    enabled: addExtraOpen,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -514,9 +512,8 @@ function PanelSession({
 
   const maxExtendMins = (() => {
     if (!finishedItem) return 0;
-    const EXTEND_BUFFER_MINS = 10;
     const upcomingMs = upcomingForFinishedTable
-      ? new Date(upcomingForFinishedTable.scheduled_start).getTime() - EXTEND_BUFFER_MINS * 60 * 1000
+      ? new Date(upcomingForFinishedTable.scheduled_start).getTime()
       : Infinity;
     const ceilingMs = Math.min(upcomingMs, closingMs);
     return Math.max(0, Math.floor((ceilingMs - finishedAnchorMs) / 60000));
@@ -605,12 +602,20 @@ function PanelSession({
           const lineBill   = calculateBill([item], [], now).subtotal;
           const tableName  = (item.table as { name?: string } | null)?.name ?? "Table";
           const tableInStore   = posTables.find((t) => t.id === item.table_id);
-          const hasNextBooking = !!tableInStore?.upcomingBooking;
+          const upcomingForItem = tableInStore?.upcomingBooking ?? null;
+          // Mins of usable extension between this session and the next booking
+          const gapToNextMins = (() => {
+            if (!upcomingForItem || !item.expected_end) return Infinity;
+            const ms = new Date(upcomingForItem.scheduled_start).getTime() - new Date(item.expected_end).getTime();
+            return Math.max(0, Math.floor(ms / 60000));
+          })();
+          // Extend allowed if there's no next booking OR if at least 15 min gap
+          const canExtend      = gapToNextMins >= 15;
+          const hasNextBooking = !!upcomingForItem;
 
-          let countdown = "", elapsed = "";
+          let countdown = "";
           let isGrace = false;
           if (isRunning) {
-            if (item.actual_start) elapsed = formatElapsed(new Date(item.actual_start), now);
             if (item.expected_end) {
               const exp  = new Date(item.expected_end);
               const otMs = Math.max(0, now.getTime() - exp.getTime());
@@ -683,13 +688,13 @@ function PanelSession({
                 </div>
               </div>
 
-              {/* Elapsed + countdown */}
+              {/* Start time + countdown */}
               {isRunning && (
                 <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-[#1a1a1a]">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Elapsed</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Started</span>
                     <span className="text-xs font-mono font-semibold tabular-nums text-gray-700 dark:text-[#aaa]">
-                      {elapsed || "—"}
+                      {item.actual_start ? fmtTime(item.actual_start) : "—"}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -733,7 +738,7 @@ function PanelSession({
                   >
                     <Square className="h-3 w-3 fill-current" /> Stop
                   </button>
-                  {!hasNextBooking && (
+                  {canExtend && (
                     <button
                       onClick={() => setExtendModal(item)}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors
@@ -774,181 +779,159 @@ function PanelSession({
           );
         })}
 
-        {/* Extras */}
+        {/* Extras — catalogue always visible, no toggle, no Cancel obstacle */}
         <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#0d0d0d] border border-gray-100 dark:border-[#1f1f1f] shadow-sm">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-[#1f1f1f]">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">Extras</p>
-            {!addExtraOpen && (
-              <button
-                onClick={() => setAddExtraOpen(true)}
-                className="flex items-center gap-1 text-xs font-semibold transition-colors hover:brightness-75"
-                style={{ color: "#D4541A" }}
-              >
-                <Plus className="h-3 w-3" /> Add
-              </button>
-            )}
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+              Extras
+            </p>
+            <button
+              onClick={() => setAddExtraOpen((v) => !v)}
+              className="flex items-center gap-1 text-xs font-semibold transition-colors hover:brightness-75"
+              style={{ color: "#D4541A" }}
+            >
+              <Plus className="h-3 w-3" /> {addExtraOpen ? "Hide custom" : "Custom item"}
+            </button>
           </div>
-          <div className="p-3 space-y-1">
-            {activeExtras.length === 0 && !addExtraOpen && (
-              <p className="text-xs py-1.5 text-gray-400 dark:text-[#444]">None added</p>
+
+          {/* Catalogue — clickable in place, no two-step process */}
+          <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
+            {(inventoryItems ?? []).length === 0 && (
+              <p className="text-xs text-gray-400 dark:text-[#555] py-2 text-center">
+                No items in catalogue
+              </p>
             )}
-            {activeExtras.map((extra) => (
-              <div key={extra.id} className="flex items-center justify-between py-1 px-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm text-gray-900 dark:text-white truncate">{extra.name}</span>
-                  <span className="text-xs shrink-0 text-gray-400 dark:text-[#555]">×{extra.quantity}</span>
-                </div>
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    {formatCurrency(extra.price * extra.quantity)}
-                  </span>
-                  <button
-                    onClick={() => deleteExtra(extra.id)}
-                    className="text-gray-400 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-            {addExtraOpen && (
-              <div className="pt-2 space-y-3">
-                {/* Mode tabs */}
-                <div className="flex gap-1 p-0.5 rounded-lg bg-gray-100 dark:bg-[#1a1a1a]">
-                  {(["inventory", "custom"] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setExtraMode(m)}
-                      className="flex-1 py-1 rounded-md text-xs font-bold capitalize transition-colors"
-                      style={
-                        extraMode === m
-                          ? { background: "#D4541A", color: "#fff" }
-                          : { color: "#666" }
-                      }
-                    >
-                      {m === "inventory" ? "Catalogue" : "Custom"}
-                    </button>
-                  ))}
-                </div>
-
-                {extraMode === "inventory" && (
-                  <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
-                    {(inventoryItems ?? []).length === 0 && (
-                      <p className="text-xs text-gray-400 dark:text-[#555] py-2 text-center">
-                        No items in catalogue
-                      </p>
-                    )}
-                    {(inventoryItems ?? []).map((item) => {
-                      const existing = activeExtras.find((e) => e.inventory_item_id === item.id);
-                      const qty      = existing?.quantity ?? 0;
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg
-                            bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-[#222]"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 dark:text-[#ccc] truncate">{item.name}</p>
-                            <p className="text-[10px] text-gray-400 dark:text-[#555]">₹{item.selling_price}</p>
-                          </div>
-                          {qty === 0 ? (
-                            <button
-                              onClick={() => incrementInventoryItem(item)}
-                              className="text-[11px] font-bold px-3 py-1.5 rounded-md text-white transition-opacity hover:opacity-85"
-                              style={{ background: "#D4541A" }}
-                            >
-                              ADD
-                            </button>
-                          ) : (
-                            <div
-                              className="flex items-center rounded-md overflow-hidden"
-                              style={{ border: "1px solid #D4541A" }}
-                            >
-                              <button
-                                onClick={() => decrementInventoryItem(item.id)}
-                                className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
-                                  hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
-                                style={{ color: "#D4541A" }}
-                                aria-label="Decrease quantity"
-                              >
-                                −
-                              </button>
-                              <span
-                                className="w-6 text-center text-xs font-bold tabular-nums"
-                                style={{ color: "#D4541A" }}
-                              >
-                                {qty}
-                              </span>
-                              <button
-                                onClick={() => incrementInventoryItem(item)}
-                                className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
-                                  hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
-                                style={{ color: "#D4541A" }}
-                                aria-label="Increase quantity"
-                              >
-                                +
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+            {(inventoryItems ?? []).map((item) => {
+              const existing = activeExtras.find((e) => e.inventory_item_id === item.id);
+              const qty      = existing?.quantity ?? 0;
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg
+                    bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-[#222]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-800 dark:text-[#ccc] truncate">{item.name}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-[#555]">₹{item.selling_price}</p>
                   </div>
-                )}
-
-                {extraMode === "custom" && (
-                  <div className="space-y-2">
-                    <input
-                      placeholder="Item name"
-                      value={extraForm.name}
-                      onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                        bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
-                        text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
-                        focus:border-[#D4541A]"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        placeholder="Price (₹)"
-                        value={extraForm.price}
-                        onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
-                        className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                          bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                          text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
-                      />
-                      <input
-                        type="number"
-                        placeholder="Qty"
-                        value={extraForm.quantity}
-                        onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
-                        className="w-16 px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                          bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                          text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
-                      />
-                    </div>
+                  {qty === 0 ? (
                     <button
-                      onClick={addCustomExtra}
-                      className="w-full py-2 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-85"
+                      onClick={() => incrementInventoryItem(item)}
+                      className="text-[11px] font-bold px-3 py-1.5 rounded-md text-white transition-opacity hover:opacity-85"
                       style={{ background: "#D4541A" }}
                     >
-                      Add Custom Extra
+                      ADD
                     </button>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setAddExtraOpen(false)}
-                  className="w-full py-1.5 rounded-lg text-xs font-medium transition-colors
-                    bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                    text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+                  ) : (
+                    <div
+                      className="flex items-center rounded-md overflow-hidden"
+                      style={{ border: "1px solid #D4541A" }}
+                    >
+                      <button
+                        onClick={() => decrementInventoryItem(item.id)}
+                        className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
+                          hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
+                        style={{ color: "#D4541A" }}
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+                      <span
+                        className="w-6 text-center text-xs font-bold tabular-nums"
+                        style={{ color: "#D4541A" }}
+                      >
+                        {qty}
+                      </span>
+                      <button
+                        onClick={() => incrementInventoryItem(item)}
+                        className="w-7 h-7 flex items-center justify-center text-sm font-bold transition-colors
+                          hover:bg-orange-50 dark:hover:bg-[#1a0d00]"
+                        style={{ color: "#D4541A" }}
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+
+          {/* Custom items list — only shown if any non-catalogue extras exist */}
+          {activeExtras.some((e) => !e.inventory_item_id) && (
+            <div className="border-t border-gray-100 dark:border-[#1f1f1f] px-3 pt-2 pb-3 space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444] mb-1">
+                Custom items
+              </p>
+              {activeExtras
+                .filter((e) => !e.inventory_item_id)
+                .map((extra) => (
+                  <div key={extra.id} className="flex items-center justify-between py-1 px-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm text-gray-900 dark:text-white truncate">{extra.name}</span>
+                      <span className="text-xs shrink-0 text-gray-400 dark:text-[#555]">×{extra.quantity}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {formatCurrency(extra.price * extra.quantity)}
+                      </span>
+                      <button
+                        onClick={() => deleteExtra(extra.id)}
+                        className="text-gray-400 hover:text-red-400 transition-colors"
+                        aria-label="Remove custom item"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* Custom item form — collapsed by default, only shows when toggled */}
+          {addExtraOpen && (
+            <div className="border-t border-gray-100 dark:border-[#1f1f1f] p-3 space-y-2">
+              <input
+                placeholder="Item name"
+                value={extraForm.name}
+                onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
+                  bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
+                  text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#444]
+                  focus:border-[#D4541A]"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Price (₹)"
+                  value={extraForm.price}
+                  onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-colors
+                    bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                    text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
+                />
+                <input
+                  type="number"
+                  placeholder="Qty"
+                  value={extraForm.quantity}
+                  onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
+                  className="w-16 px-3 py-2 rounded-lg text-sm outline-none transition-colors
+                    bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                    text-gray-900 dark:text-white placeholder-gray-400 focus:border-[#D4541A]"
+                />
+              </div>
+              <button
+                onClick={addCustomExtra}
+                disabled={!extraForm.name || !extraForm.price}
+                className="w-full py-2 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-85 disabled:opacity-40"
+                style={{ background: "#D4541A" }}
+              >
+                Add to order
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="h-2" />

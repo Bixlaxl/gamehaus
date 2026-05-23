@@ -4,7 +4,7 @@ import { useState, useMemo, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
-import { formatElapsed, formatCountdown, formatCurrency } from "@/lib/utils";
+import { formatCountdown, formatCurrency } from "@/lib/utils";
 import { CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
@@ -95,7 +95,9 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
   const [extending, setExtending] = useState<number | null>(null);
 
   const liveBill = calculateBill([item], [], now).subtotal;
-  const elapsed  = item.actual_start ? formatElapsed(new Date(item.actual_start), now) : "";
+  const startedAt = item.actual_start
+    ? new Date(item.actual_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+    : "";
 
   let countdown        = "";
   let isFiveMinWarning = false;
@@ -119,7 +121,14 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
     }
   }
 
-  const hasNextBooking = !!table.upcomingBooking;
+  // Mins of usable gap between current session end and next booking
+  const gapToNextMins = (() => {
+    if (!table.upcomingBooking || !item.expected_end) return Infinity;
+    const ms = new Date(table.upcomingBooking.scheduled_start).getTime() - new Date(item.expected_end).getTime();
+    return Math.max(0, Math.floor(ms / 60000));
+  })();
+  const canExtend15 = gapToNextMins >= 15;
+  const canExtend30 = gapToNextMins >= 30;
   const accentColor    = isGrace ? "#f97316" : isFiveMinWarning ? "#f59e0b" : "#10b981";
   const bgClass        = isGrace
     ? "bg-orange-50 dark:bg-[rgba(249,115,22,0.06)]"
@@ -219,10 +228,10 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
           />
         </div>
 
-        {/* Elapsed + countdown */}
+        {/* Start time + countdown */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono tabular-nums text-gray-500 dark:text-[#666]">
-            {elapsed}
+            {startedAt}
           </span>
           <span
             className="text-xs font-mono font-bold tabular-nums"
@@ -246,33 +255,33 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
 
         {/* Action buttons */}
         <div className="flex gap-1.5 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
-          {!hasNextBooking && (
-            <>
-              <button
-                onClick={(e) => quickExtend(e, 15)}
-                disabled={!!extending || stopping}
-                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
-                style={{
-                  background: "rgba(16,185,129,0.1)",
-                  color:      "#10b981",
-                  border:     "1px solid rgba(16,185,129,0.2)",
-                }}
-              >
-                {extending === 15 ? "…" : "+15m"}
-              </button>
-              <button
-                onClick={(e) => quickExtend(e, 30)}
-                disabled={!!extending || stopping}
-                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
-                style={{
-                  background: "rgba(16,185,129,0.1)",
-                  color:      "#10b981",
-                  border:     "1px solid rgba(16,185,129,0.2)",
-                }}
-              >
-                {extending === 30 ? "…" : "+30m"}
-              </button>
-            </>
+          {canExtend15 && (
+            <button
+              onClick={(e) => quickExtend(e, 15)}
+              disabled={!!extending || stopping}
+              className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
+              style={{
+                background: "rgba(16,185,129,0.1)",
+                color:      "#10b981",
+                border:     "1px solid rgba(16,185,129,0.2)",
+              }}
+            >
+              {extending === 15 ? "…" : "+15m"}
+            </button>
+          )}
+          {canExtend30 && (
+            <button
+              onClick={(e) => quickExtend(e, 30)}
+              disabled={!!extending || stopping}
+              className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
+              style={{
+                background: "rgba(16,185,129,0.1)",
+                color:      "#10b981",
+                border:     "1px solid rgba(16,185,129,0.2)",
+              }}
+            >
+              {extending === 30 ? "…" : "+30m"}
+            </button>
           )}
           <button
             onClick={stopSession}

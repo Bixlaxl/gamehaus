@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { X } from "lucide-react";
 import { toast } from "sonner";
 
-const EXTEND_BUFFER_MINS = 10;
+const EXTEND_BUFFER_MINS = 0;
 
 export function ExtendModal() {
   const extendModalItem    = usePOSStore((s) => s.extendModalItem);

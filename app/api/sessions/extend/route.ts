@@ -6,7 +6,10 @@ import { extendSessionSchema, ok, err } from "@/lib/validators/schemas";
 export const runtime = 'edge';
 
 
-const BUFFER_MINS = 10;
+// No buffer — the gap from a session's expected_end to the next booking's
+// scheduled_start is fully usable as extend time. (Staff judgement decides
+// table-turnover practicality.)
+const BUFFER_MINS = 0;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
