@@ -14,6 +14,7 @@ import { OrderPanel } from "./order-panel";
 import { WalkInSlider } from "./walk-in-slider";
 import { CheckinSlider } from "./checkin-slider";
 import { ExtendModal } from "./extend-modal";
+import { StopConfirmModal } from "./stop-confirm-modal";
 import { FinalizeBillModal } from "./finalize-bill-modal";
 import { POSAlerts } from "./pos-alerts";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
@@ -291,6 +292,7 @@ export function POSScreen({ locationId, locationName, closingTime, staffName }: 
       <WalkInSlider locationId={locationId} />
       <CheckinSlider locationId={locationId} />
       <ExtendModal />
+      <StopConfirmModal locationId={locationId} />
       <FinalizeBillModal locationId={locationId} />
     </div>
   );

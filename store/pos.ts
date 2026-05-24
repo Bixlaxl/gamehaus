@@ -27,6 +27,7 @@ interface POSStore {
   checkinOpen: boolean;
   upcomingOpen: boolean;
   extendModalItem: OrderItem | null;
+  stopConfirmItem: OrderItem | null;
   finalizeOrderId: string | null;
   pointsToRedeem: Record<string, number>; // orderId → points to redeem
   tableSessionsTableId: string | null;
@@ -46,6 +47,7 @@ interface POSStore {
   setCheckinOpen: (open: boolean) => void;
   setUpcomingOpen: (open: boolean) => void;
   setExtendModalItem: (item: OrderItem | null) => void;
+  setStopConfirmItem: (item: OrderItem | null) => void;
   setFinalizeOrderId: (id: string | null) => void;
   setPointsToRedeem: (orderId: string, points: number) => void;
   setTableSessionsTableId: (id: string | null) => void;
@@ -73,6 +75,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   checkinOpen: false,
   upcomingOpen: false,
   extendModalItem: null,
+  stopConfirmItem: null,
   finalizeOrderId: null,
   pointsToRedeem: {},
   tableSessionsTableId: null,
@@ -89,6 +92,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setCheckinOpen: (checkinOpen) => set({ checkinOpen }),
   setUpcomingOpen: (upcomingOpen) => set({ upcomingOpen }),
   setExtendModalItem: (extendModalItem) => set({ extendModalItem }),
+  setStopConfirmItem: (stopConfirmItem) => set({ stopConfirmItem }),
   setFinalizeOrderId: (finalizeOrderId) => set({ finalizeOrderId }),
   setTableSessionsTableId: (tableSessionsTableId) => set({ tableSessionsTableId }),
   setSelectedTableId: (selectedTableId) => set({ selectedTableId }),

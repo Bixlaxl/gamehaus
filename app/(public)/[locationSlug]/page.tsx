@@ -35,13 +35,16 @@ export default async function LocationPage({
       .eq("location_id", location.id)
       .eq("is_active", true)
       .order("sort_order"),
+    // Don't SQL-filter on scheduled_start — walk-ins have NULL there and would
+    // be silently excluded, leaving the table appearing free to public bookers.
+    // The post-filter loop below scopes by date using actual_start (running) or
+    // scheduled_start (scheduled). Result set stays small because we already
+    // restrict to open items (status: running/scheduled, not deleted).
     supabase
       .from("order_items")
       .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
       .eq("is_deleted", false)
-      .in("status", ["running", "scheduled"])
-      .gte("scheduled_start", dayStartIso)
-      .lte("scheduled_start", dayEndIso),
+      .in("status", ["running", "scheduled"]),
     supabase
       .from("bookings")
       .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")

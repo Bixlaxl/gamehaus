@@ -332,6 +332,7 @@ function PanelSession({
   const removeOrderExtra  = usePOSStore((s) => s.removeOrderExtra);
   const patchOrderExtra   = usePOSStore((s) => s.patchOrderExtra);
   const setExtendModal    = usePOSStore((s) => s.setExtendModalItem);
+  const setStopConfirmItem = usePOSStore((s) => s.setStopConfirmItem);
   const setPointsToRedeem = usePOSStore((s) => s.setPointsToRedeem);
   const setFinalizeId     = usePOSStore((s) => s.setFinalizeOrderId);
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
@@ -382,22 +383,6 @@ function PanelSession({
     setRedeemInput(val);
     const n = Math.max(0, parseInt(val) || 0);
     setPointsToRedeem(order.id, Math.min(n, maxRedeem));
-  }
-
-  async function stopSession(item: OrderItem) {
-    const nowISO = new Date().toISOString();
-    patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
-    const res = await fetch("/api/sessions/stop", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ order_item_id: item.id }),
-    });
-    if (!res.ok) {
-      patchOrderItem(item.id, { status: "running", actual_end: null });
-      toast.error("Failed to stop session");
-    } else {
-      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    }
   }
 
   async function addExtraItem(opts: {
@@ -703,6 +688,29 @@ function PanelSession({
                 </div>
               </div>
 
+              {/* Bill-ready: show full session timings (Started → Ended) */}
+              {item.status === "finished" && (
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-200 dark:border-[#222]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-gray-600 dark:text-[#aaa] uppercase tracking-wide">
+                      Started
+                    </span>
+                    <span className="text-sm font-mono font-bold tabular-nums text-gray-900 dark:text-white">
+                      {item.actual_start ? fmtTime(item.actual_start) : "—"}
+                    </span>
+                  </div>
+                  <span className="text-gray-400 dark:text-[#666] text-xs">→</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-gray-600 dark:text-[#aaa] uppercase tracking-wide">
+                      Ended
+                    </span>
+                    <span className="text-sm font-mono font-bold tabular-nums text-gray-900 dark:text-white">
+                      {item.actual_end ? fmtTime(item.actual_end) : item.expected_end ? fmtTime(item.expected_end) : "—"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Start time + countdown / overtime */}
               {isRunning && (
                 <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-200 dark:border-[#222]">
@@ -748,7 +756,7 @@ function PanelSession({
               {isRunning && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => stopSession(item)}
+                    onClick={() => setStopConfirmItem(item)}
                     className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold transition-colors hover:bg-red-500"
                     style={{ background: "#ef4444" }}
                   >

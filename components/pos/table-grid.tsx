@@ -51,24 +51,24 @@ function IdleCard({ table, isSelected, onClick, upcomingBooking }: {
             Idle
           </span>
         </div>
-        <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight mb-1">
+        <p className="font-bold text-gray-900 dark:text-white text-base leading-tight mb-1">
           {fmtName(table.name)}
         </p>
-        <p className="text-xs text-gray-400 dark:text-[#555] flex-1">
+        <p className="text-sm font-semibold text-gray-600 dark:text-[#bbb] flex-1">
           {formatCurrency(table.hourly_rate)}/hr
         </p>
         {upcomingBooking ? (
           <div className="mt-3 flex items-center justify-between gap-1">
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full truncate"
-              style={{ background: "rgba(245,158,11,0.12)", color: "#d97706" }}
+              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full truncate"
+              style={{ background: "rgba(245,158,11,0.18)", color: "#f59e0b" }}
             >
               Next {fmtTime(upcomingBooking.scheduled_start)}
             </span>
-            <span className="text-[10px] text-gray-300 dark:text-[#333] shrink-0">Tap →</span>
+            <span className="text-xs font-semibold text-gray-500 dark:text-[#888] shrink-0">Tap →</span>
           </div>
         ) : (
-          <p className="text-[10px] text-gray-300 dark:text-[#333] mt-3 text-right">
+          <p className="text-xs font-semibold mt-3 text-right" style={{ color: "#D4541A" }}>
             Tap to start →
           </p>
         )}
@@ -90,7 +90,6 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
   const now            = usePOSStore((s) => s.now);
   const patchOrderItem = usePOSStore((s) => s.patchOrderItem);
   const qc             = useQueryClient();
-  const [stopping,  setStopping]  = useState(false);
   const [extending, setExtending] = useState<number | null>(null);
 
   const liveBill = calculateBill([item], [], now).subtotal;
@@ -133,23 +132,10 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
     ? "bg-amber-50 dark:bg-[rgba(245,158,11,0.07)]"
     : "bg-emerald-50 dark:bg-[rgba(16,185,129,0.06)]";
 
-  async function stopSession(e: React.MouseEvent) {
+  const setStopConfirmItem = usePOSStore.getState().setStopConfirmItem;
+  function stopSession(e: React.MouseEvent) {
     e.stopPropagation();
-    setStopping(true);
-    const nowISO = new Date().toISOString();
-    patchOrderItem(item.id, { status: "finished", actual_end: nowISO });
-    const res = await fetch("/api/sessions/stop", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ order_item_id: item.id }),
-    });
-    if (!res.ok) {
-      patchOrderItem(item.id, { status: "running", actual_end: null });
-      toast.error("Failed to stop session");
-    } else {
-      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    }
-    setStopping(false);
+    setStopConfirmItem(item);
   }
 
   async function quickExtend(e: React.MouseEvent, mins: number) {
@@ -255,7 +241,7 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
           {canExtend15 && (
             <button
               onClick={(e) => quickExtend(e, 15)}
-              disabled={!!extending || stopping}
+              disabled={!!extending}
               className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
               style={{
                 background: "rgba(16,185,129,0.1)",
@@ -269,7 +255,7 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
           {canExtend30 && (
             <button
               onClick={(e) => quickExtend(e, 30)}
-              disabled={!!extending || stopping}
+              disabled={!!extending}
               className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
               style={{
                 background: "rgba(16,185,129,0.1)",
@@ -282,11 +268,11 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
           )}
           <button
             onClick={stopSession}
-            disabled={stopping || !!extending}
+            disabled={!!extending}
             className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40 hover:brightness-110"
             style={{ background: "#ef4444" }}
           >
-            {stopping ? "…" : "■ Stop"}
+            ■ Stop
           </button>
         </div>
       </div>
@@ -488,11 +474,11 @@ function BillReadyCard({ table, order, isSelected, onClick }: {
         <p className="font-bold text-gray-900 dark:text-white text-base leading-tight">
           {order.customer_name}
         </p>
-        <p className="text-xs text-gray-400 dark:text-[#555]">Session ended</p>
+        <p className="text-xs font-semibold text-gray-600 dark:text-[#aaa]">Session ended</p>
 
         {/* Amount */}
         <p
-          className="font-bold tabular-nums flex-1"
+          className="font-extrabold tabular-nums flex-1"
           style={{ fontSize: 28, color: "#D4541A", lineHeight: 1.1 }}
         >
           {formatCurrency(billDue)}
@@ -501,7 +487,7 @@ function BillReadyCard({ table, order, isSelected, onClick }: {
         {/* Quick collect — goes straight to finalize modal */}
         <button
           onClick={(e) => { e.stopPropagation(); setFinalizeOrderId(order.id); }}
-          className="w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
+          className="w-full py-2 rounded-lg text-sm font-bold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
           style={{ background: "#D4541A" }}
         >
           Collect Bill
@@ -550,8 +536,8 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
   return (
     <div className="shrink-0 border-t border-gray-200 dark:border-[#1f1f1f] bg-white dark:bg-[#111]">
       <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-        <CalendarClock className="h-3.5 w-3.5 text-gray-400 dark:text-[#555]" />
-        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+        <CalendarClock className="h-4 w-4 text-gray-500 dark:text-[#aaa]" />
+        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
           Upcoming Today
         </span>
         <span
@@ -646,7 +632,7 @@ function TableGridInner({ locationId }: TableGridProps) {
 
   if (tables.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-[#444]">
+      <div className="flex items-center justify-center h-full text-base font-medium text-gray-500 dark:text-[#aaa]">
         No tables configured
       </div>
     );
