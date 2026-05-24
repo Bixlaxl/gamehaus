@@ -76,6 +76,9 @@ function PanelWalkIn({
   table: TableWithStatus;
 }) {
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
+  const now         = usePOSStore((s) => s.now);
+  const openingTime = usePOSStore((s) => s.openingTime);
+  const closingTime = usePOSStore((s) => s.closingTime);
   const qc    = useQueryClient();
 
   const [customerName,  setCustomerName]  = useState("");
@@ -88,11 +91,49 @@ function PanelWalkIn({
   const [lookingUp,     setLookingUp]     = useState(false);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const maxMins = table.upcomingBooking
-    ? Math.max(15, Math.floor(
-        (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
-      ) - 5)
+  // ── Operating hours window for the current shop-day ───────────────────────
+  // closing < opening → shop crosses midnight (e.g. 10:00 → 02:00 next day).
+  // We need to figure out which shop-day "now" belongs to, then derive
+  // opens/closes for that day so the comparisons are unambiguous.
+  const [oh, om] = openingTime.split(":").map(Number);
+  const [ch, cm] = closingTime.split(":").map(Number);
+  const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
+
+  const opensToday = new Date(now); opensToday.setHours(oh, om, 0, 0);
+  const closesToday = new Date(now); closesToday.setHours(ch, cm, 0, 0);
+
+  let opensMs: number;
+  let closesMs: number;
+  if (!crossesMidnight) {
+    opensMs  = opensToday.getTime();
+    closesMs = closesToday.getTime();
+  } else {
+    // Midnight-cross: are we in the post-midnight overnight portion?
+    const nowMinsOfDay = now.getHours() * 60 + now.getMinutes();
+    const closeMinsOfDay = ch * 60 + cm;
+    if (nowMinsOfDay < closeMinsOfDay) {
+      // Overnight portion: shop opened yesterday, closes today.
+      opensMs  = opensToday.getTime() - 24 * 60 * 60 * 1000;
+      closesMs = closesToday.getTime();
+    } else {
+      // Daytime portion: shop opens today, closes tomorrow.
+      opensMs  = opensToday.getTime();
+      closesMs = closesToday.getTime() + 24 * 60 * 60 * 1000;
+    }
+  }
+
+  const beforeOpen = now.getTime() < opensMs;
+  const afterClose = now.getTime() >= closesMs;
+  const outsideHours = beforeOpen || afterClose;
+
+  // Mins until shop closes (cap walk-in duration so it can't run past closing)
+  const minsUntilClose = Math.max(0, Math.floor((closesMs - now.getTime()) / 60000));
+
+  // Effective ceiling: min of (next booking gap − 5 min buffer) AND (shop close)
+  const bookingCeiling = table.upcomingBooking
+    ? Math.max(0, Math.floor((new Date(table.upcomingBooking.scheduled_start).getTime() - now.getTime()) / 60000) - 5)
     : 240;
+  const maxMins = Math.max(15, Math.min(bookingCeiling, minsUntilClose || 0));
 
   const availablePresets = DURATION_PRESETS.filter((p) => p.mins <= maxMins);
 
@@ -124,8 +165,16 @@ function PanelWalkIn({
   }
 
   async function startWalkIn() {
+    if (outsideHours) {
+      setError(beforeOpen ? "Shop hasn't opened yet" : "Shop has closed for the day");
+      return;
+    }
     if (!customerName.trim() || customerName.trim().length < 2) { setError("Customer name is required"); return; }
     if (customerPhone && customerPhone.length !== 10) { setError("Phone must be exactly 10 digits"); return; }
+    if (duration > minsUntilClose) {
+      setError(`Only ${minsUntilClose} min until shop closes`);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -298,12 +347,29 @@ function PanelWalkIn({
         )}
       </div>
 
-      <div className="shrink-0 px-5 py-4 border-t border-gray-200 dark:border-[#222]">
+      <div className="shrink-0 px-5 py-4 border-t border-gray-200 dark:border-[#222] space-y-2">
+        {outsideHours && (
+          <div
+            className="px-3 py-2 rounded-lg text-xs font-semibold text-center"
+            style={{
+              background: "rgba(239,68,68,0.1)",
+              border:     "1px solid rgba(239,68,68,0.25)",
+              color:      "#ef4444",
+            }}
+          >
+            {beforeOpen
+              ? `Shop opens at ${openingTime} — walk-ins disabled`
+              : `Shop closed for the day — walk-ins disabled`}
+          </div>
+        )}
         <button
           onClick={startWalkIn}
-          disabled={loading}
+          disabled={loading || outsideHours}
           className="w-full py-3.5 rounded-xl font-bold text-white text-base transition-opacity hover:opacity-90 disabled:opacity-40 shadow-lg"
-          style={{ background: "#D4541A", boxShadow: "0 6px 20px rgba(212,84,26,0.35)" }}
+          style={{
+            background: outsideHours ? "#9ca3af" : "#D4541A",
+            boxShadow: outsideHours ? "none" : "0 6px 20px rgba(212,84,26,0.35)",
+          }}
         >
           {loading ? "Starting…" : "Start Walk-in"}
         </button>

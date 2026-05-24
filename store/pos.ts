@@ -34,10 +34,12 @@ interface POSStore {
   selectedTableId: string | null;
 
   // Location config (set once at mount)
-  closingTime: string; // "HH:MM" — shop close used to cap extensions
+  openingTime: string; // "HH:MM" — shop open used to gate walk-in start
+  closingTime: string; // "HH:MM" — shop close used to cap extensions + walk-ins
 
   // Actions
   setNow: (now: Date) => void;
+  setOpeningTime: (openingTime: string) => void;
   setClosingTime: (closingTime: string) => void;
   setTables: (tables: TableWithStatus[]) => void;
   setOpenOrders: (orders: POSOrder[]) => void;
@@ -80,9 +82,11 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   pointsToRedeem: {},
   tableSessionsTableId: null,
   selectedTableId: null,
+  openingTime: "10:00",
   closingTime: "23:00",
 
   setNow: (now) => set({ now }),
+  setOpeningTime: (openingTime) => set({ openingTime }),
   setClosingTime: (closingTime) => set({ closingTime }),
   setTables: (tables) => set({ tables }),
   setOpenOrders: (openOrders) => set({ openOrders }),

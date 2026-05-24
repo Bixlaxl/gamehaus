@@ -32,6 +32,59 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const now   = new Date();
 
+  // ── Enforce operating hours ────────────────────────────────────────────
+  const { data: loc } = await admin
+    .from("locations")
+    .select("opening_time, closing_time")
+    .eq("id", location_id)
+    .single();
+
+  if (loc?.opening_time && loc?.closing_time) {
+    const [oh, om] = loc.opening_time.split(":").map(Number);
+    const [ch, cm] = loc.closing_time.split(":").map(Number);
+    const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
+    const opens  = new Date(now); opens.setHours(oh, om, 0, 0);
+    const closes = new Date(now); closes.setHours(ch, cm, 0, 0);
+    let opensMs:  number;
+    let closesMs: number;
+    if (!crossesMidnight) {
+      opensMs  = opens.getTime();
+      closesMs = closes.getTime();
+    } else {
+      const nowMins   = now.getHours() * 60 + now.getMinutes();
+      const closeMins = ch * 60 + cm;
+      if (nowMins < closeMins) {
+        opensMs  = opens.getTime()  - 24 * 60 * 60 * 1000;
+        closesMs = closes.getTime();
+      } else {
+        opensMs  = opens.getTime();
+        closesMs = closes.getTime() + 24 * 60 * 60 * 1000;
+      }
+    }
+
+    if (now.getTime() < opensMs) {
+      return NextResponse.json(
+        err(`Shop opens at ${loc.opening_time} — walk-ins not allowed yet`, "OUTSIDE_HOURS"),
+        { status: 409 }
+      );
+    }
+    if (now.getTime() >= closesMs) {
+      return NextResponse.json(
+        err("Shop has closed for the day — walk-ins not allowed", "OUTSIDE_HOURS"),
+        { status: 409 }
+      );
+    }
+    // Cap each item's duration so the session can't run past closing
+    const minsUntilClose = Math.floor((closesMs - now.getTime()) / 60000);
+    const overflow = items.find((i) => i.duration_mins > minsUntilClose);
+    if (overflow) {
+      return NextResponse.json(
+        err(`Walk-in duration exceeds shop closing — only ${minsUntilClose} min available`, "PAST_CLOSING"),
+        { status: 409 }
+      );
+    }
+  }
+
   const { data: order, error: orderError } = await admin
     .from("orders")
     .insert({

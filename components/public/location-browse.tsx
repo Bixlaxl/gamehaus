@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import type { Location, Table } from "@/lib/supabase/types";
 import { ShoppingCart, ArrowLeft, X, ChevronRight, Check } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -117,21 +118,53 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
   const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
   const [slotsLoading,  setSlotsLoading] = useState(false);
+  // Bump this whenever a realtime DB event invalidates the slot data.
+  // Used as a dependency on the slot-loading effect so the next fetch is forced.
+  const [slotsTick, setSlotsTick]     = useState(0);
+  const tableIdsKey = useMemo(() => tables.map((t) => t.id).sort().join(","), [tables]);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { cart.setLocation(location.id); }, [location.id]);
 
-  // Re-fetch blocked ranges when date changes while booking sheet is open
+  // ── Realtime: keep slot data in lockstep with the staff side ───────────────
+  // The moment a walk-in is started or a booking is created/changed for any of
+  // this location's tables, increment slotsTick. The slot-loading effect below
+  // depends on slotsTick, so the currently-open sheet will refetch immediately
+  // and any subsequently-opened sheet bypasses the stale initialSlots cache.
+  useEffect(() => {
+    if (!tables.length) return;
+    const supabase = createClient();
+    const tableIdSet = new Set(tables.map((t) => t.id));
+
+    const channel = supabase
+      .channel(`public-slots-${location.id}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "order_items" },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as { table_id?: string } | null;
+          if (row?.table_id && tableIdSet.has(row.table_id)) setSlotsTick((t) => t + 1);
+        })
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "bookings" },
+        // bookings don't carry table_id directly — refresh on any change since
+        // affected rows are small per-location and the cost is one extra fetch.
+        () => setSlotsTick((t) => t + 1))
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [location.id, tableIdsKey]);
+
+  // Re-fetch blocked ranges when date changes, sheet opens, or realtime fires
   useEffect(() => {
     if (!booking) return;
 
-    // Use server-prefetched data for today — no loading state, instant slots
-    if (initialSlots && initialDate && date === initialDate && booking.id in initialSlots) {
+    // First load (slotsTick === 0): use server-prefetched data when possible.
+    // After any realtime event invalidates the cache, always fetch fresh.
+    if (slotsTick === 0 && initialSlots && initialDate && date === initialDate && booking.id in initialSlots) {
       setBlocked(initialSlots[booking.id]);
       return;
     }
 
-    setBlocked([]);
     setSlotsLoading(true);
     fetch(`/api/tables/${booking.id}/slots?date=${date}`)
       .then((r) => r.json())
@@ -141,7 +174,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       .catch(() => {})
       .finally(() => setSlotsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, booking?.id]);
+  }, [date, booking?.id, slotsTick]);
 
   const dark      = !mounted ? false : resolvedTheme === "dark";
   const open      = isOpen(location.opening_time, location.closing_time);

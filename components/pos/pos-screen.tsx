@@ -31,10 +31,13 @@ interface POSScreenProps {
 
 const supabase = createClient();
 
-export function POSScreen({ locationId, locationName, closingTime, staffName }: POSScreenProps) {
-  // Sync location config into the store so global modals (ExtendModal) can read it
+export function POSScreen({ locationId, locationName, openingTime, closingTime, staffName }: POSScreenProps) {
+  // Sync location config into the store so global modals + panels can read it
   if (usePOSStore.getState().closingTime !== closingTime) {
     usePOSStore.setState({ closingTime });
+  }
+  if (usePOSStore.getState().openingTime !== openingTime) {
+    usePOSStore.setState({ openingTime });
   }
 
   const router = useRouter();
