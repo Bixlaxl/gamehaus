@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +37,8 @@ export function OwnerNav({ userName }: OwnerNavProps) {
   const router     = useRouter();
   const supabase   = createClient();
   const [signingOut, setSigningOut] = useState(false);
+  // Track first render to skip the initial refresh (server data is already fresh on mount)
+  const hasMountedRef = useRef(false);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -64,6 +66,30 @@ export function OwnerNav({ userName }: OwnerNavProps) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Bust the Next.js router cache on every owner-route visit ──────────────
+  // Without this, returning to /owner/bookings (or any other page) after
+  // changes elsewhere (POS, customer side, another staff member) shows the
+  // stale RSC payload from the previous visit. Refreshing here re-runs the
+  // server component so client TanStack-Query queries get fresh initialData.
+  useEffect(() => {
+    // Skip the very first mount — server already rendered fresh data
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    router.refresh();
+  }, [pathname, router]);
+
+  // Also refresh whenever the user comes back to the tab — covers the
+  // "left this tab open, went to POS in another tab, came back" case.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [router]);
 
   return (
     <>
