@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { usePOSStore } from "@/store/pos";
 import { LogOut, UserPlus, QrCode } from "lucide-react";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
-import { useAutoStop } from "@/hooks/use-auto-stop";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
 import { OrderPanel } from "./order-panel";
@@ -43,7 +42,6 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   const router = useRouter();
 
   const qc                    = useQueryClient();
-  const now                   = usePOSStore((s) => s.now);
   const setTables             = usePOSStore((s) => s.setTables);
   const setOpenOrders         = usePOSStore((s) => s.setOpenOrders);
   const handleOrderItemChange = usePOSStore((s) => s.handleOrderItemChange);
@@ -102,7 +100,9 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       const body = await res.json() as { success: boolean; data: Table[] };
       return body.success ? body.data : [];
     },
-    refetchInterval: 60000,
+    // Realtime keeps data current; this is a safety-net poll, not the primary mechanism.
+    // 60s was producing ~60 unnecessary requests/hour per staff session.
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const { data: rawOrders } = useQuery({
@@ -112,7 +112,9 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       const body = await res.json() as { success: boolean; data: POSOrder[] };
       return body.success ? body.data : [];
     },
-    refetchInterval: 60000,
+    // Realtime keeps data current; this is a safety-net poll, not the primary mechanism.
+    // 60s was producing ~60 unnecessary requests/hour per staff session.
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const { data: rawBookings } = useQuery({
@@ -128,7 +130,9 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       };
       return body.success ? body.data : [];
     },
-    refetchInterval: 60000,
+    // Realtime keeps data current; this is a safety-net poll, not the primary mechanism.
+    // 60s was producing ~60 unnecessary requests/hour per staff session.
+    refetchInterval: 5 * 60 * 1000,
   });
 
   // Realtime
@@ -178,10 +182,18 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   useEffect(() => { buildTableStatus(); }, [buildTableStatus]);
   useEffect(() => { if (rawOrders) setOpenOrders(rawOrders); }, [rawOrders, setOpenOrders]);
 
-  useAutoStop(now, openOrders);
+  // NOTE: useAutoStop intentionally removed — per the agreed spec, staff
+  // manually stops sessions. Overtime is shown in red on the card so it's
+  // visible. Auto-stopping silently was producing surprise behaviour.
 
   // Right panel only opens for idle (walk-in form) or running/bill-ready (session detail).
   // Booked tables: check-in/no-show live on the card — no panel needed.
+  // We use Date.now() here instead of subscribing to the per-second `now` —
+  // POSScreen sits at the top of the tree and a 1s subscription would
+  // re-render the entire POS every tick. The threshold (30 min) is coarse
+  // enough that not having per-second precision is fine — the table's own
+  // card still ticks, and any state change (tables update, selection) will
+  // re-render this naturally.
   const showContextPanel = (() => {
     if (!selectedTableId) return false;
     const table = tables.find((t) => t.id === selectedTableId);
@@ -194,7 +206,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
              !live.some((i) => i.status === "running");
     });
     const minsUntilBooking = table.upcomingBooking
-      ? (new Date(table.upcomingBooking.scheduled_start).getTime() - now.getTime()) / 60000
+      ? (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
       : Infinity;
     const isBooked = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking <= 30;
     return !isBooked;

@@ -11,8 +11,18 @@ interface Props {
   locationId: string;
 }
 
+// Outer gate — when no item is set the modal does nothing. This prevents the
+// `tables` subscription from triggering a re-render of an invisible modal on
+// every realtime tick.
 export function StopConfirmModal({ locationId }: Props) {
-  const item               = usePOSStore((s) => s.stopConfirmItem);
+  const item = usePOSStore((s) => s.stopConfirmItem);
+  if (!item) return null;
+  return <StopConfirmModalInner locationId={locationId} item={item} />;
+}
+
+function StopConfirmModalInner({
+  locationId, item,
+}: Props & { item: NonNullable<ReturnType<typeof usePOSStore.getState>["stopConfirmItem"]> }) {
   const setStopConfirmItem = usePOSStore((s) => s.setStopConfirmItem);
   const patchOrderItem     = usePOSStore((s) => s.patchOrderItem);
   const tables             = usePOSStore((s) => s.tables);

@@ -9,8 +9,16 @@ import { toast } from "sonner";
 
 const EXTEND_BUFFER_MINS = 0;
 
+// Outer gate — until the modal should actually open, this component does
+// nothing. Crucially it does NOT subscribe to `now` or `tables`, so when
+// closed it costs zero re-renders even during realtime ticks or the 1s clock.
 export function ExtendModal() {
-  const extendModalItem    = usePOSStore((s) => s.extendModalItem);
+  const extendModalItem = usePOSStore((s) => s.extendModalItem);
+  if (!extendModalItem) return null;
+  return <ExtendModalInner item={extendModalItem} />;
+}
+
+function ExtendModalInner({ item }: { item: NonNullable<ReturnType<typeof usePOSStore.getState>["extendModalItem"]> }) {
   const setExtendModalItem = usePOSStore((s) => s.setExtendModalItem);
   const patchOrderItem     = usePOSStore((s) => s.patchOrderItem);
   const tables             = usePOSStore((s) => s.tables);
@@ -20,6 +28,9 @@ export function ExtendModal() {
   const [customMins, setCustomMins] = useState("");
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+
+  // Keep the rest of the component working with the existing local name.
+  const extendModalItem = item;
 
   function close() {
     setExtendModalItem(null);

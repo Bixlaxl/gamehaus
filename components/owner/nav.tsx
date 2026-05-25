@@ -38,7 +38,9 @@ export function OwnerNav({ userName }: OwnerNavProps) {
   const supabase   = createClient();
   const [signingOut, setSigningOut] = useState(false);
   // Track first render to skip the initial refresh (server data is already fresh on mount)
-  const hasMountedRef = useRef(false);
+  const hasMountedRef   = useRef(false);
+  // Throttle refresh calls so rapid path changes or tab focus events don't spam.
+  const lastRefreshRef  = useRef(0);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -76,16 +78,24 @@ export function OwnerNav({ userName }: OwnerNavProps) {
     // Skip the very first mount — server already rendered fresh data
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
+      lastRefreshRef.current = Date.now();
       return;
     }
     router.refresh();
+    lastRefreshRef.current = Date.now();
   }, [pathname, router]);
 
   // Also refresh whenever the user comes back to the tab — covers the
   // "left this tab open, went to POS in another tab, came back" case.
+  // Throttled to at most one refresh per 5s so rapid alt-tabbing doesn't
+  // spam the server / re-render the world.
   useEffect(() => {
+    const MIN_REFRESH_INTERVAL_MS = 5000;
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) return;
+      router.refresh();
+      lastRefreshRef.current = Date.now();
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
