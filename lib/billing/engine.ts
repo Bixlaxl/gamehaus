@@ -1,8 +1,9 @@
 import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 
-// OT grace + block constants — used by billing engine and POS UI
-export const GRACE_MINS    = 5;
-export const OT_BLOCK_MINS = 15;
+// Legacy grace constant — only referenced by the secondary OrderPanel
+// (the primary ContextPanel uses signed-countdown overtime display now).
+// Kept for back-compat; safe to remove if OrderPanel is ever consolidated.
+export const GRACE_MINS = 5;
 
 export interface BillingLineItem {
   id: string;

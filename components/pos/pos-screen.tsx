@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
@@ -9,15 +10,20 @@ import { LogOut, UserPlus, QrCode } from "lucide-react";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
-import { OrderPanel } from "./order-panel";
-import { WalkInSlider } from "./walk-in-slider";
-import { CheckinSlider } from "./checkin-slider";
-import { ExtendModal } from "./extend-modal";
-import { StopConfirmModal } from "./stop-confirm-modal";
-import { FinalizeBillModal } from "./finalize-bill-modal";
 import { POSAlerts } from "./pos-alerts";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
 import type { Table, Order, OrderItem, Booking } from "@/lib/supabase/types";
+
+// Overlays — lazy-loaded. Each one is a Dialog/Sheet that the staff opens
+// occasionally; eagerly bundling them was adding ~70 KB to first paint of /pos.
+// They each already have an outer gate that returns null when their open-state
+// is unset, so the dynamic chunk only downloads when first triggered.
+const OrderPanel        = dynamic(() => import("./order-panel").then(m => m.OrderPanel),               { ssr: false });
+const WalkInSlider      = dynamic(() => import("./walk-in-slider").then(m => m.WalkInSlider),         { ssr: false });
+const CheckinSlider     = dynamic(() => import("./checkin-slider").then(m => m.CheckinSlider),       { ssr: false });
+const ExtendModal       = dynamic(() => import("./extend-modal").then(m => m.ExtendModal),           { ssr: false });
+const StopConfirmModal  = dynamic(() => import("./stop-confirm-modal").then(m => m.StopConfirmModal), { ssr: false });
+const FinalizeBillModal = dynamic(() => import("./finalize-bill-modal").then(m => m.FinalizeBillModal), { ssr: false });
 
 interface POSScreenProps {
   locationId: string;

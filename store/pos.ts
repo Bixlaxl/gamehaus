@@ -25,12 +25,10 @@ interface POSStore {
   walkInOpen: boolean;
   walkInPrefilledTableId: string | null;
   checkinOpen: boolean;
-  upcomingOpen: boolean;
   extendModalItem: OrderItem | null;
   stopConfirmItem: OrderItem | null;
   finalizeOrderId: string | null;
   pointsToRedeem: Record<string, number>; // orderId → points to redeem
-  tableSessionsTableId: string | null;
   selectedTableId: string | null;
 
   // Location config (set once at mount)
@@ -47,12 +45,10 @@ interface POSStore {
   setWalkInOpen: (open: boolean) => void;
   setWalkInWithTable: (tableId: string) => void;
   setCheckinOpen: (open: boolean) => void;
-  setUpcomingOpen: (open: boolean) => void;
   setExtendModalItem: (item: OrderItem | null) => void;
   setStopConfirmItem: (item: OrderItem | null) => void;
   setFinalizeOrderId: (id: string | null) => void;
   setPointsToRedeem: (orderId: string, points: number) => void;
-  setTableSessionsTableId: (id: string | null) => void;
   setSelectedTableId: (id: string | null) => void;
 
   // Optimistic patches — update store immediately, no server wait
@@ -75,12 +71,10 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   walkInOpen: false,
   walkInPrefilledTableId: null,
   checkinOpen: false,
-  upcomingOpen: false,
   extendModalItem: null,
   stopConfirmItem: null,
   finalizeOrderId: null,
   pointsToRedeem: {},
-  tableSessionsTableId: null,
   selectedTableId: null,
   openingTime: "10:00",
   closingTime: "23:00",
@@ -94,11 +88,9 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setWalkInOpen: (walkInOpen) => set({ walkInOpen, walkInPrefilledTableId: walkInOpen ? null : null }),
   setWalkInWithTable: (tableId) => set({ walkInOpen: true, walkInPrefilledTableId: tableId }),
   setCheckinOpen: (checkinOpen) => set({ checkinOpen }),
-  setUpcomingOpen: (upcomingOpen) => set({ upcomingOpen }),
   setExtendModalItem: (extendModalItem) => set({ extendModalItem }),
   setStopConfirmItem: (stopConfirmItem) => set({ stopConfirmItem }),
   setFinalizeOrderId: (finalizeOrderId) => set({ finalizeOrderId }),
-  setTableSessionsTableId: (tableSessionsTableId) => set({ tableSessionsTableId }),
   setSelectedTableId: (selectedTableId) => set({ selectedTableId }),
   setPointsToRedeem: (orderId, points) =>
     set((state) => ({ pointsToRedeem: { ...state.pointsToRedeem, [orderId]: points } })),
