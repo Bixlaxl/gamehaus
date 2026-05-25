@@ -147,8 +147,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       handleOrderItemChange,
       handleOrderChange,
       handleTableChange,
-      onInsert: () => {
-        qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      onBookingsChange: () => {
+        // No direct store handler for bookings — refetch only the bookings query.
+        // Crucially we do NOT invalidate pos-orders here; that produced a
+        // double render-cascade on every booking insert (handler + refetch).
         qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
       },
       onExtrasChange: () => {

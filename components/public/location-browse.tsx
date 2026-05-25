@@ -235,25 +235,39 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     ? formatCurrency((selMins / 60) * effectiveRate)
     : "";
 
+  // ── Hot-path memoization for the slot grid ─────────────────────────────────
+  // Before: each of ~40 slots called isServerBlocked + isCartOccupied, which
+  // each constructed Date objects on every iteration of blockedRanges/cart.items.
+  // ~640 Date allocations per render on mobile. Now we pre-parse once and the
+  // slot-loop math is pure number comparison.
+  const blockedRangesMs = useMemo(
+    () => blockedRanges.map(r => ({
+      start: new Date(r.start).getTime(),
+      end:   new Date(r.end).getTime(),
+    })),
+    [blockedRanges]
+  );
+  const cartItemsMs = useMemo(
+    () => cart.items.map(i => ({
+      tableId: i.tableId,
+      startMs: new Date(i.scheduledStart).getTime(),
+      endMs:   new Date(i.scheduledEnd).getTime(),
+    })),
+    [cart.items]
+  );
+
   /* Slot is in customer's own cart (show green occupied card) */
   function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
     const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
-    return cart.items.some(item => {
-      if (item.tableId !== tableId) return false;
-      const startMs = new Date(item.scheduledStart).getTime();
-      const endMs   = new Date(item.scheduledEnd).getTime();
-      return slotMs >= startMs && slotMs < endMs;
-    });
+    return cartItemsMs.some(item =>
+      item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs
+    );
   }
 
   /* Slot is blocked by a walk-in or confirmed booking on the server — hide it entirely */
   function isServerBlocked(slotDate: string, slotTime: string): boolean {
     const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
-    return blockedRanges.some(r => {
-      const startMs = new Date(r.start).getTime();
-      const endMs   = new Date(r.end).getTime();
-      return slotMs >= startMs && slotMs < endMs;
-    });
+    return blockedRangesMs.some(r => slotMs >= r.start && slotMs < r.end);
   }
 
   /* Combined — used for extend-stop logic */

@@ -29,7 +29,7 @@ function fmtTime(iso: string) {
 
 // ── Idle card ─────────────────────────────────────────────────────────────────
 
-function IdleCard({ table, isSelected, onClick, upcomingBooking }: {
+function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
   table: TableWithStatus;
   isSelected: boolean;
   onClick: () => void;
@@ -77,9 +77,26 @@ function IdleCard({ table, isSelected, onClick, upcomingBooking }: {
   );
 }
 
+// Card memoization rationale:
+//   buildTableStatus() in pos-screen.tsx rebuilds the entire TableWithStatus[]
+//   on every realtime event. Without memo, all N cards re-render even though
+//   typically only one table changed. The custom comparators below compare the
+//   handful of fields each card actually displays. `onClick` is intentionally
+//   excluded (it's a fresh arrow function every render but semantically stable).
+const IdleCard = memo(IdleCardImpl, (a, b) =>
+  a.isSelected === b.isSelected &&
+  a.table.id === b.table.id &&
+  a.table.image_url === b.table.image_url &&
+  a.table.name === b.table.name &&
+  a.table.type === b.table.type &&
+  a.table.hourly_rate === b.table.hourly_rate &&
+  a.upcomingBooking?.id === b.upcomingBooking?.id &&
+  a.upcomingBooking?.scheduled_start === b.upcomingBooking?.scheduled_start
+);
+
 // ── Running card ──────────────────────────────────────────────────────────────
 
-function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
+function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }: {
   table: TableWithStatus;
   item: OrderItem;
   order: POSOrder | undefined;
@@ -280,9 +297,23 @@ function RunningCard({ table, item, order, locationId, isSelected, onClick }: {
   );
 }
 
+const RunningCard = memo(RunningCardImpl, (a, b) =>
+  a.isSelected === b.isSelected &&
+  a.locationId === b.locationId &&
+  a.table.id === b.table.id &&
+  a.item.id === b.item.id &&
+  a.item.status === b.item.status &&
+  a.item.expected_end === b.item.expected_end &&
+  a.item.actual_start === b.item.actual_start &&
+  a.order?.customer_name === b.order?.customer_name &&
+  // Live bill depends on extras length + total; cheap to compare counts/sum
+  a.order?.extras?.length === b.order?.extras?.length &&
+  a.table.upcomingBooking?.scheduled_start === b.table.upcomingBooking?.scheduled_start
+);
+
 // ── Booked card ───────────────────────────────────────────────────────────────
 
-function BookedCard({ table, locationId, isSelected, onClick }: {
+function BookedCardImpl({ table, locationId, isSelected, onClick }: {
   table: TableWithStatus;
   locationId: string;
   isSelected: boolean;
@@ -427,9 +458,18 @@ function BookedCard({ table, locationId, isSelected, onClick }: {
   );
 }
 
+const BookedCard = memo(BookedCardImpl, (a, b) =>
+  a.isSelected === b.isSelected &&
+  a.locationId === b.locationId &&
+  a.table.id === b.table.id &&
+  a.table.upcomingBooking?.id === b.table.upcomingBooking?.id &&
+  a.table.upcomingBooking?.scheduled_start === b.table.upcomingBooking?.scheduled_start &&
+  a.table.upcomingBooking?.order?.customer_name === b.table.upcomingBooking?.order?.customer_name
+);
+
 // ── Bill-ready card ───────────────────────────────────────────────────────────
 
-function BillReadyCard({ table, order, isSelected, onClick }: {
+function BillReadyCardImpl({ table, order, isSelected, onClick }: {
   table: TableWithStatus;
   order: POSOrder;
   isSelected: boolean;
@@ -496,6 +536,15 @@ function BillReadyCard({ table, order, isSelected, onClick }: {
     </div>
   );
 }
+
+const BillReadyCard = memo(BillReadyCardImpl, (a, b) =>
+  a.isSelected === b.isSelected &&
+  a.table.id === b.table.id &&
+  a.order.id === b.order.id &&
+  a.order.customer_name === b.order.customer_name &&
+  a.order.items.length === b.order.items.length &&
+  a.order.extras.length === b.order.extras.length
+);
 
 // ── Upcoming strip ────────────────────────────────────────────────────────────
 
