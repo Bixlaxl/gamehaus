@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { location_id, type, customer_name, customer_phone, items, points_redeemed } = parsed.data;
+  const { location_id, type, customer_name, customer_phone, items, points_redeemed, coupon_code } = parsed.data;
 
   // Online orders: public customers aren't logged in, use admin client
   // Walk-in orders: require staff authentication
@@ -90,6 +90,37 @@ export async function POST(request: Request) {
     }
   }
 
+  // ── Validate coupon (if provided) and resolve coupon_id to attach ────────
+  // Server is the source of truth — UI may have validated, but we re-check
+  // every rule here so a tampered request can't sneak through.
+  let resolvedCouponId: string | null = null;
+  if (coupon_code) {
+    const normalized = coupon_code.trim().toUpperCase();
+    const { data: coupon } = await admin
+      .from("coupons")
+      .select("*")
+      .eq("code", normalized)
+      .maybeSingle();
+
+    if (!coupon || !coupon.is_active) {
+      return NextResponse.json(err("Coupon code is not valid", "INVALID_COUPON"), { status: 400 });
+    }
+    const nowMs = Date.now();
+    if (coupon.valid_from && new Date(coupon.valid_from).getTime() > nowMs) {
+      return NextResponse.json(err("Coupon is not active yet", "INVALID_COUPON"), { status: 400 });
+    }
+    if (coupon.valid_until && new Date(coupon.valid_until).getTime() < nowMs) {
+      return NextResponse.json(err("Coupon has expired", "INVALID_COUPON"), { status: 400 });
+    }
+    if (coupon.max_uses !== null && coupon.used_count >= coupon.max_uses) {
+      return NextResponse.json(err("Coupon has reached its usage limit", "INVALID_COUPON"), { status: 400 });
+    }
+    if (coupon.location_id && coupon.location_id !== location_id) {
+      return NextResponse.json(err("Coupon is not valid at this location", "INVALID_COUPON"), { status: 400 });
+    }
+    resolvedCouponId = coupon.id;
+  }
+
   // Create order
   const { data: order, error: orderError } = await admin
     .from("orders")
@@ -99,6 +130,7 @@ export async function POST(request: Request) {
       customer_name,
       customer_phone:  customer_phone ?? null,
       points_redeemed: points_redeemed ?? 0,
+      coupon_id:       resolvedCouponId,
       created_by:      createdBy,
     })
     .select()

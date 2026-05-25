@@ -18,6 +18,12 @@ interface CustomerLookup {
   visit_count: number;
 }
 
+type CouponState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "valid"; code: string; discount_amount: number; discount_type: "percent" | "flat"; discount_value: number }
+  | { status: "invalid"; reason: string };
+
 declare global {
   interface Window {
     Razorpay: new (options: RazorpayOptions) => { open: () => void };
@@ -97,7 +103,9 @@ export default function CheckoutPage() {
   const [lookingUp, setLookingUp]     = useState(false);
   const [redeemInput, setRedeemInput] = useState("0");
   const [now, setNow]                 = useState(() => new Date());
+  const [couponState, setCouponState] = useState<CouponState>({ status: "idle" });
   const lookupTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const couponTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitting   = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -111,6 +119,55 @@ export default function CheckoutPage() {
   // Any cart item whose start time has already passed by the time the user reaches checkout
   const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
   const hasExpired   = expiredItems.length > 0;
+
+  const subtotalForCoupon = cart.items.reduce((s, i) => s + i.amount, 0);
+
+  // Debounced live coupon validation — fires whenever the customer changes the
+  // code OR the cart subtotal changes (so the displayed discount stays accurate).
+  useEffect(() => {
+    if (couponTimer.current) clearTimeout(couponTimer.current);
+    const trimmed = coupon.trim();
+    if (!trimmed) {
+      setCouponState({ status: "idle" });
+      return;
+    }
+    if (paymentMode !== "full") {
+      // Coupons only apply to full-payment orders
+      setCouponState({ status: "idle" });
+      return;
+    }
+    setCouponState({ status: "checking" });
+    couponTimer.current = setTimeout(async () => {
+      const url = `/api/coupons/validate?code=${encodeURIComponent(trimmed)}&location_id=${encodeURIComponent(cart.locationId ?? "")}&amount=${subtotalForCoupon}`;
+      try {
+        const res = await fetch(url);
+        const body = await res.json() as
+          | { success: true; data: { valid: true; code: string; discount_amount: number; discount_type: "percent" | "flat"; discount_value: number } }
+          | { success: true; data: { valid: false; reason: string } }
+          | { success: false; error: string };
+        if (!body.success) {
+          setCouponState({ status: "invalid", reason: body.error });
+          return;
+        }
+        if (body.data.valid) {
+          setCouponState({
+            status:          "valid",
+            code:            body.data.code,
+            discount_amount: body.data.discount_amount,
+            discount_type:   body.data.discount_type,
+            discount_value:  body.data.discount_value,
+          });
+        } else {
+          setCouponState({ status: "invalid", reason: body.data.reason });
+        }
+      } catch {
+        setCouponState({ status: "invalid", reason: "Couldn't check this code right now" });
+      }
+    }, 400);
+    return () => { if (couponTimer.current) clearTimeout(couponTimer.current); };
+  }, [coupon, cart.locationId, subtotalForCoupon, paymentMode]);
+
+  const couponDiscount = couponState.status === "valid" ? couponState.discount_amount : 0;
 
   const dark    = !mounted ? false : resolvedTheme === "dark";
   const bg      = dark ? "#0A0A0A" : "#F7F5F2";
@@ -126,10 +183,13 @@ export default function CheckoutPage() {
 
   const subtotal      = cart.items.reduce((s, i) => s + i.amount, 0);
   const baseAmount    = paymentMode === "advance" ? 100 * cart.items.length : subtotal;
+  // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
+  const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
+  const baseAfterCoupon   = Math.max(0, baseAmount - effectiveDiscount);
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
-  const maxRedeem     = Math.min(customer?.points_balance ?? 0, Math.floor(baseAmount));
+  const maxRedeem     = Math.min(customer?.points_balance ?? 0, Math.floor(baseAfterCoupon));
   const clampedRedeem = Math.min(redeemPoints, maxRedeem);
-  const amountToPay   = Math.max(0, baseAmount - clampedRedeem);
+  const amountToPay   = Math.max(0, baseAfterCoupon - clampedRedeem);
 
   function triggerLookup(currentPhone: string, currentName: string) {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
@@ -188,6 +248,10 @@ export default function CheckoutPage() {
       setError("Cart is empty");
       return;
     }
+    if (coupon.trim() && couponState.status !== "valid" && paymentMode === "full") {
+      setError(couponState.status === "invalid" ? couponState.reason : "Please wait — checking your coupon");
+      return;
+    }
     submitting.current = true;
     setLoading(true);
     setError(null);
@@ -208,7 +272,7 @@ export default function CheckoutPage() {
           scheduled_duration_mins: i.durationMins,
           rate_per_hour:          i.ratePerHour,
         })),
-        coupon_code: coupon.trim() || undefined,
+        coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
       }),
     });
 
@@ -274,6 +338,10 @@ export default function CheckoutPage() {
     if (!name.trim() || name.trim().length < 2) { setError("Please enter a valid name"); return; }
     if (phone.length !== 10) { setError("Phone must be exactly 10 digits"); return; }
     if (cart.items.length === 0) { setError("Cart is empty"); return; }
+    if (coupon.trim() && couponState.status !== "valid" && paymentMode === "full") {
+      setError(couponState.status === "invalid" ? couponState.reason : "Please wait — checking your coupon");
+      return;
+    }
     submitting.current = true;
     setLoading(true);
     setError(null);
@@ -287,6 +355,7 @@ export default function CheckoutPage() {
         customer_name:   name.trim(),
         customer_phone:  phone.trim(),
         points_redeemed: clampedRedeem,
+        coupon_code:     (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
         items: cart.items.map(i => ({
           table_id:                i.tableId,
           scheduled_start:         i.scheduledStart,
@@ -579,12 +648,40 @@ export default function CheckoutPage() {
                     className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none tracking-widest"
                     style={{
                       background: inputBg,
-                      border: `1.5px solid ${inputBdr}`,
+                      border: `1.5px solid ${
+                        couponState.status === "valid"   ? "#10B981" :
+                        couponState.status === "invalid" ? "#EF4444" :
+                        inputBdr
+                      }`,
                       color: textPri,
                     }}
-                    onFocus={e => (e.currentTarget.style.borderColor = "#D4541A")}
-                    onBlur={e => (e.currentTarget.style.borderColor = inputBdr)}
+                    onFocus={e => {
+                      if (couponState.status === "idle" || couponState.status === "checking") {
+                        e.currentTarget.style.borderColor = "#D4541A";
+                      }
+                    }}
+                    onBlur={e => {
+                      if (couponState.status === "idle" || couponState.status === "checking") {
+                        e.currentTarget.style.borderColor = inputBdr;
+                      }
+                    }}
                   />
+                  {couponState.status === "checking" && (
+                    <p className="text-xs mt-1.5" style={{ color: textMut }}>Checking…</p>
+                  )}
+                  {couponState.status === "valid" && (
+                    <p className="text-xs font-semibold mt-1.5" style={{ color: "#10B981" }}>
+                      ✓ Applied — {couponState.discount_type === "percent"
+                        ? `${couponState.discount_value}% off`
+                        : `${formatCurrency(couponState.discount_value)} off`}
+                      {" "}({formatCurrency(couponState.discount_amount)} saved)
+                    </p>
+                  )}
+                  {couponState.status === "invalid" && (
+                    <p className="text-xs font-semibold mt-1.5" style={{ color: "#EF4444" }}>
+                      ✗ {couponState.reason}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -602,6 +699,12 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-sm" style={{ color: textSec }}>
                   <span>Pay at venue</span>
                   <span>{formatCurrency(subtotal - baseAmount)}</span>
+                </div>
+              )}
+              {effectiveDiscount > 0 && couponState.status === "valid" && (
+                <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
+                  <span>Coupon ({couponState.code})</span>
+                  <span>-{formatCurrency(effectiveDiscount)}</span>
                 </div>
               )}
               {clampedRedeem > 0 && (

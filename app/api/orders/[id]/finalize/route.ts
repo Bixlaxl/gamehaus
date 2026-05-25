@@ -67,13 +67,27 @@ export async function POST(
   // Run optional coupon lookup and phone override save in parallel
   const [couponLookup] = await Promise.all([
     (!coupon && coupon_code)
-      ? admin.from("coupons").select("*").eq("code", coupon_code.toUpperCase()).eq("is_active", true).single()
+      ? admin.from("coupons").select("*").eq("code", coupon_code.toUpperCase()).single()
       : Promise.resolve({ data: null, error: null }),
     (phoneOverride && !order.customer_phone)
       ? admin.from("orders").update({ customer_phone: phoneOverride }).eq("id", orderId)
       : Promise.resolve(null),
   ]);
   if (!coupon && coupon_code) coupon = couponLookup.data as Coupon | null;
+
+  // Re-validate the coupon against ALL rules (active, dates, max_uses, location).
+  // If invalid here we silently drop it — the customer isn't present to fix it
+  // at this point and the staff shouldn't lose the bill over a stale coupon.
+  if (coupon) {
+    const nowMs        = Date.now();
+    const expired      = coupon.valid_until && new Date(coupon.valid_until).getTime() < nowMs;
+    const notYetActive = coupon.valid_from  && new Date(coupon.valid_from).getTime()  > nowMs;
+    const overCap      = coupon.max_uses !== null && coupon.used_count >= coupon.max_uses;
+    const wrongLoc     = coupon.location_id && coupon.location_id !== order.location_id;
+    if (!coupon.is_active || expired || notYetActive || overCap || wrongLoc) {
+      coupon = null;
+    }
+  }
 
   const now = new Date();
   const bill = calculateBill(

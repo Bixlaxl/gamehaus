@@ -50,6 +50,7 @@ export const createOrderSchema = z.object({
   customer_name: z.string().min(1),
   customer_phone: z.string().optional(),
   points_redeemed: z.number().int().min(0).optional().default(0),
+  coupon_code: z.string().optional(),
   items: z.array(
     z.object({
       table_id: z.string().uuid(),
