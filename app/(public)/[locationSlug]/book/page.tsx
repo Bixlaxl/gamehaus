@@ -219,6 +219,7 @@ export default function CheckoutPage() {
     if (!orderBody.success) {
       setError(orderBody.error);
       setLoading(false);
+      submitting.current = false;
       return;
     }
 

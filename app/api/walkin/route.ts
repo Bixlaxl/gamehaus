@@ -85,6 +85,59 @@ export async function POST(request: Request) {
     }
   }
 
+  // ── Conflict check ────────────────────────────────────────────────────────
+  // Walk-in occupies [now, now + duration_mins]. Reject if any other running/
+  // scheduled session or confirmed booking on the same table overlaps that
+  // window. Handles the race where a customer's online booking lands between
+  // PanelWalkIn rendering and Start being pressed.
+  const tableIds = [...new Set(items.map((i) => i.table_id))];
+  const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
+    admin
+      .from("order_items")
+      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
+      .in("table_id", tableIds)
+      .eq("is_deleted", false)
+      .in("status", ["running", "scheduled"]),
+    admin
+      .from("bookings")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+      .eq("status", "confirmed")
+      .in("order_items.table_id", tableIds),
+  ]);
+
+  const overlaps = (aS: string, aE: string, bS: string, bE: string) =>
+    new Date(aS).getTime() < new Date(bE).getTime() &&
+    new Date(aE).getTime() > new Date(bS).getTime();
+
+  for (const req of items) {
+    const reqS = now.toISOString();
+    const reqE = new Date(now.getTime() + req.duration_mins * 60 * 1000).toISOString();
+
+    const itemConflict = (existingItems ?? []).find((ex) => {
+      if (ex.table_id !== req.table_id) return false;
+      const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
+      const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
+      return exS && exE && overlaps(reqS, reqE, exS, exE);
+    });
+    if (itemConflict) {
+      return NextResponse.json(
+        err("This table was just booked — pick a different table or shorter duration.", "TABLE_TAKEN"),
+        { status: 409 }
+      );
+    }
+
+    const bookingConflict = (existingBookings ?? []).find((b) => {
+      const tableId = (b.order_item as unknown as { table_id: string } | null)?.table_id;
+      return tableId === req.table_id && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end);
+    });
+    if (bookingConflict) {
+      return NextResponse.json(
+        err("This table was just booked — pick a different table or shorter duration.", "TABLE_TAKEN"),
+        { status: 409 }
+      );
+    }
+  }
+
   const { data: order, error: orderError } = await admin
     .from("orders")
     .insert({

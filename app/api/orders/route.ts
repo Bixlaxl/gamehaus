@@ -27,6 +27,69 @@ export async function POST(request: Request) {
     createdBy = session.user.id;
   }
 
+  // ── Conflict check ────────────────────────────────────────────────────────
+  // Re-verify every requested slot is still free at the moment of booking.
+  // The cart-side "expired-slot" guard only checks past-time; this catches
+  // the race where a walk-in or another booking grabbed the same slot
+  // between cart-add and checkout-submit.
+  const scheduledItems = items.filter((i) => i.scheduled_start && i.scheduled_end);
+  if (scheduledItems.length > 0) {
+    const tableIds = [...new Set(scheduledItems.map((i) => i.table_id))];
+
+    const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
+      admin
+        .from("order_items")
+        .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
+        .in("table_id", tableIds)
+        .eq("is_deleted", false)
+        .in("status", ["running", "scheduled"]),
+      admin
+        .from("bookings")
+        .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+        .eq("status", "confirmed")
+        .in("order_items.table_id", tableIds),
+    ]);
+
+    const overlaps = (aS: string, aE: string, bS: string, bE: string) =>
+      new Date(aS).getTime() < new Date(bE).getTime() &&
+      new Date(aE).getTime() > new Date(bS).getTime();
+
+    for (const req of scheduledItems) {
+      const reqS = req.scheduled_start!;
+      const reqE = req.scheduled_end!;
+
+      const itemConflict = (existingItems ?? []).find((ex) => {
+        if (ex.table_id !== req.table_id) return false;
+        const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
+        const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
+        return exS && exE && overlaps(reqS, reqE, exS, exE);
+      });
+      if (itemConflict) {
+        return NextResponse.json(
+          err(
+            "One of your selected slots was just taken. Please remove it and pick a different time.",
+            "SLOT_TAKEN"
+          ),
+          { status: 409 }
+        );
+      }
+
+      const bookingConflict = (existingBookings ?? []).find((b) => {
+        const tableId = (b.order_item as unknown as { table_id: string } | null)?.table_id;
+        return tableId === req.table_id && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end);
+      });
+      if (bookingConflict) {
+        return NextResponse.json(
+          err(
+            "One of your selected slots was just taken. Please remove it and pick a different time.",
+            "SLOT_TAKEN"
+          ),
+          { status: 409 }
+        );
+      }
+    }
+  }
+
   // Create order
   const { data: order, error: orderError } = await admin
     .from("orders")
