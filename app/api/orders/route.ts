@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       if (itemConflict) {
         return NextResponse.json(
           err(
-            "One of your selected slots was just taken. Please remove it and pick a different time.",
+            "Looks like that slot was just booked by someone else. Please go back and pick a different time.",
             "SLOT_TAKEN"
           ),
           { status: 409 }
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       if (bookingConflict) {
         return NextResponse.json(
           err(
-            "One of your selected slots was just taken. Please remove it and pick a different time.",
+            "Looks like that slot was just booked by someone else. Please go back and pick a different time.",
             "SLOT_TAKEN"
           ),
           { status: 409 }

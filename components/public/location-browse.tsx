@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
@@ -108,6 +109,7 @@ interface Props {
 
 export function LocationBrowse({ location, tables, initialSlots, initialDate }: Props) {
   const cart = useCartStore();
+  const router = useRouter();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted]         = useState(false);
   const [filter, setFilter]           = useState("all");
@@ -125,6 +127,27 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { cart.setLocation(location.id); }, [location.id]);
+
+  // Bust Next.js router cache on mount and whenever the user comes back to the tab.
+  // Without this, navigating back to this page after a walk-in/booking shows the
+  // old initialSlots prop from the cached RSC payload — slots appear free until
+  // a hard refresh. router.refresh() re-runs the server component and merges
+  // fresh props in. Bumping slotsTick also makes the slot effect bypass the
+  // stale cache shortcut while waiting for the new props.
+  useEffect(() => {
+    router.refresh();
+    setSlotsTick((t) => t + 1);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+        setSlotsTick((t) => t + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Realtime: keep slot data in lockstep with the staff side ───────────────
   // The moment a walk-in is started or a booking is created/changed for any of

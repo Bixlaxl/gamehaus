@@ -9,7 +9,7 @@ import { useTheme } from "next-themes";
 import Script from "next/script";
 import {
   ArrowLeft, Trash2, ShoppingCart, User, Phone,
-  CreditCard, Tag, ChevronRight, Clock, Calendar, Star,
+  CreditCard, Tag, ChevronRight, Clock, Calendar, Star, CalendarX,
 } from "lucide-react";
 
 interface CustomerLookup {
@@ -622,11 +622,51 @@ export default function CheckoutPage() {
             </div>
           </Section>
 
-          {error && (
-            <div className="px-4 py-3 rounded-xl text-sm font-medium" style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1.5px solid rgba(239,68,68,0.3)" }}>
-              {error}
-            </div>
-          )}
+          {error && (() => {
+            // The "slot just got taken" error isn't the customer's fault — show
+            // it as a warm warning with an explicit way back to the slot picker,
+            // not a harsh validation error.
+            const isSlotTaken = /just booked|just got booked|just taken/i.test(error);
+            if (isSlotTaken) {
+              return (
+                <div
+                  className="rounded-2xl p-4 flex items-start gap-3"
+                  style={{
+                    background: "rgba(245,158,11,0.1)",
+                    border:     "1.5px solid rgba(245,158,11,0.35)",
+                    color:      textPri,
+                  }}
+                >
+                  <div
+                    className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(245,158,11,0.2)" }}
+                  >
+                    <CalendarX className="h-5 w-5" style={{ color: "#f59e0b" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold leading-snug" style={{ color: textPri }}>
+                      Sorry, that slot just got booked
+                    </p>
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: textSec }}>
+                      Someone grabbed it a moment ago. Head back, remove it from your cart, and pick a fresh time slot.
+                    </p>
+                    <Link
+                      href={`/${slug}`}
+                      className="inline-flex items-center gap-1 text-xs font-bold mt-2.5 transition-opacity hover:opacity-80"
+                      style={{ color: "#f59e0b" }}
+                    >
+                      ← Back to time slots
+                    </Link>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="px-4 py-3 rounded-xl text-sm font-medium" style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1.5px solid rgba(239,68,68,0.3)" }}>
+                {error}
+              </div>
+            );
+          })()}
 
           <button
             onClick={checkout}

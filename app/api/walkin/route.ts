@@ -121,7 +121,7 @@ export async function POST(request: Request) {
     });
     if (itemConflict) {
       return NextResponse.json(
-        err("This table was just booked — pick a different table or shorter duration.", "TABLE_TAKEN"),
+        err("This table was just booked online. Pick a different table or a shorter duration.", "TABLE_TAKEN"),
         { status: 409 }
       );
     }
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     });
     if (bookingConflict) {
       return NextResponse.json(
-        err("This table was just booked — pick a different table or shorter duration.", "TABLE_TAKEN"),
+        err("This table was just booked online. Pick a different table or a shorter duration.", "TABLE_TAKEN"),
         { status: 409 }
       );
     }
