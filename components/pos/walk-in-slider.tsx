@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { X, Star } from "lucide-react";
+import { getShopWindow } from "@/lib/utils";
 import type { Table } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 
@@ -35,6 +36,9 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   const setWalkInOpen          = usePOSStore((s) => s.setWalkInOpen);
   const tables                 = usePOSStore((s) => s.tables);
   const now                    = usePOSStore((s) => s.now);
+  const openingTime            = usePOSStore((s) => s.openingTime);
+  const closingTime            = usePOSStore((s) => s.closingTime);
+  const { beforeOpen, outsideHours } = getShopWindow(now, openingTime, closingTime);
   const qc = useQueryClient();
 
   const [customerName,     setCustomerName]     = useState("");
@@ -303,12 +307,26 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-200 dark:border-[#1F1F1F]">
+        <div className="px-5 py-4 border-t border-gray-200 dark:border-[#1F1F1F] space-y-2">
+          {outsideHours && (
+            <div
+              className="px-3 py-2 rounded-lg text-xs font-semibold text-center"
+              style={{
+                background: "rgba(239,68,68,0.1)",
+                border:     "1px solid rgba(239,68,68,0.25)",
+                color:      "#ef4444",
+              }}
+            >
+              {beforeOpen
+                ? `Shop opens at ${openingTime} — walk-ins disabled`
+                : `Shop closed for the day — walk-ins disabled`}
+            </div>
+          )}
           <button
             onClick={createOrder}
-            disabled={loading}
+            disabled={loading || outsideHours}
             className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-            style={{ background: "#D4541A" }}
+            style={{ background: outsideHours ? "#9ca3af" : "#D4541A" }}
           >
             {loading ? "Starting..." : "Start Walk-in"}
           </button>

@@ -7,7 +7,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { usePOSStore } from "@/store/pos";
 import { LogOut, UserPlus, QrCode } from "lucide-react";
+import { toast } from "sonner";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
+import { getShopWindow } from "@/lib/utils";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
 import { POSAlerts } from "./pos-alerts";
@@ -275,7 +277,19 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
               Check-in
             </button>
             <button
-              onClick={() => setWalkInOpen(true)}
+              onClick={() => {
+                // Compute on click — no per-second subscription needed in the
+                // header. Worst case the button looks enabled for one minute
+                // after closing; the toast catches it. Server enforces it too.
+                const win = getShopWindow(new Date(), openingTime, closingTime);
+                if (win.outsideHours) {
+                  toast.error(win.beforeOpen
+                    ? `Shop opens at ${openingTime} — walk-ins disabled`
+                    : "Shop closed for the day — walk-ins disabled");
+                  return;
+                }
+                setWalkInOpen(true);
+              }}
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-90 active:opacity-75"
               style={{ background: "#D4541A" }}
             >

@@ -65,3 +65,10 @@ CREATE INDEX IF NOT EXISTS idx_order_extras_order_id ON order_extras(order_id);
 -- Inventory picker in POS sorts active items by category — index speeds the active-only filter
 CREATE INDEX IF NOT EXISTS idx_inventory_items_location_active
   ON inventory_items(location_id, is_active) WHERE is_active = TRUE;
+
+-- Customer name autocomplete on the POS walk-in panel.
+-- Without this index, every keystroke triggers a full table scan over
+-- customer_profiles. text_pattern_ops makes LIKE 'prefix%' a fast B-tree seek.
+CREATE INDEX IF NOT EXISTS idx_customer_profiles_lower_name
+  ON customer_profiles (lower(name) text_pattern_ops)
+  WHERE name IS NOT NULL;

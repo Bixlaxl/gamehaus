@@ -5,6 +5,51 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Compute the active shop-day window from "HH:MM" opening + closing times.
+ * Handles midnight-crossing locations (e.g. opens 10:00, closes 02:00 next day).
+ *
+ * Used by both PanelWalkIn (in-panel form) and the POS header walk-in button
+ * to gate walk-ins outside operating hours. Server-side /api/walkin replays
+ * the same logic as the final guard.
+ */
+export function getShopWindow(now: Date, openingTime: string, closingTime: string) {
+  const [oh, om] = openingTime.split(":").map(Number);
+  const [ch, cm] = closingTime.split(":").map(Number);
+  const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
+
+  const opensToday  = new Date(now); opensToday.setHours(oh, om, 0, 0);
+  const closesToday = new Date(now); closesToday.setHours(ch, cm, 0, 0);
+
+  let opensMs:  number;
+  let closesMs: number;
+  if (!crossesMidnight) {
+    opensMs  = opensToday.getTime();
+    closesMs = closesToday.getTime();
+  } else {
+    // Midnight-cross: are we in the post-midnight overnight portion?
+    const nowMinsOfDay   = now.getHours() * 60 + now.getMinutes();
+    const closeMinsOfDay = ch * 60 + cm;
+    if (nowMinsOfDay < closeMinsOfDay) {
+      // Overnight portion: shop opened yesterday, closes today.
+      opensMs  = opensToday.getTime() - 24 * 60 * 60 * 1000;
+      closesMs = closesToday.getTime();
+    } else {
+      // Daytime portion: shop opens today, closes tomorrow.
+      opensMs  = opensToday.getTime();
+      closesMs = closesToday.getTime() + 24 * 60 * 60 * 1000;
+    }
+  }
+
+  const nowMs        = now.getTime();
+  const beforeOpen   = nowMs < opensMs;
+  const afterClose   = nowMs >= closesMs;
+  const outsideHours = beforeOpen || afterClose;
+  const minsUntilClose = Math.max(0, Math.floor((closesMs - nowMs) / 60000));
+
+  return { opensMs, closesMs, beforeOpen, afterClose, outsideHours, minsUntilClose };
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",

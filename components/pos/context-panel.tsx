@@ -6,7 +6,7 @@ import { usePOSStore } from "@/store/pos";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
-import { formatCurrency, formatSignedCountdown } from "@/lib/utils";
+import { formatCurrency, formatSignedCountdown, getShopWindow } from "@/lib/utils";
 import { X, Plus, Trash2, Square, Timer, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
@@ -90,44 +90,16 @@ function PanelWalkIn({
   const [customer,      setCustomer]      = useState<CustomerLookup | null>(null);
   const [lookingUp,     setLookingUp]     = useState(false);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Name autocomplete state — only populated when staff types ≥2 chars in name
+  const [nameSuggestions, setNameSuggestions] = useState<
+    { phone: string; name: string | null; visit_count: number; points_balance: number }[]
+  >([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const nameSearchTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nameSearchAbort  = useRef<AbortController | null>(null);
 
-  // ── Operating hours window for the current shop-day ───────────────────────
-  // closing < opening → shop crosses midnight (e.g. 10:00 → 02:00 next day).
-  // We need to figure out which shop-day "now" belongs to, then derive
-  // opens/closes for that day so the comparisons are unambiguous.
-  const [oh, om] = openingTime.split(":").map(Number);
-  const [ch, cm] = closingTime.split(":").map(Number);
-  const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
-
-  const opensToday = new Date(now); opensToday.setHours(oh, om, 0, 0);
-  const closesToday = new Date(now); closesToday.setHours(ch, cm, 0, 0);
-
-  let opensMs: number;
-  let closesMs: number;
-  if (!crossesMidnight) {
-    opensMs  = opensToday.getTime();
-    closesMs = closesToday.getTime();
-  } else {
-    // Midnight-cross: are we in the post-midnight overnight portion?
-    const nowMinsOfDay = now.getHours() * 60 + now.getMinutes();
-    const closeMinsOfDay = ch * 60 + cm;
-    if (nowMinsOfDay < closeMinsOfDay) {
-      // Overnight portion: shop opened yesterday, closes today.
-      opensMs  = opensToday.getTime() - 24 * 60 * 60 * 1000;
-      closesMs = closesToday.getTime();
-    } else {
-      // Daytime portion: shop opens today, closes tomorrow.
-      opensMs  = opensToday.getTime();
-      closesMs = closesToday.getTime() + 24 * 60 * 60 * 1000;
-    }
-  }
-
-  const beforeOpen = now.getTime() < opensMs;
-  const afterClose = now.getTime() >= closesMs;
-  const outsideHours = beforeOpen || afterClose;
-
-  // Mins until shop closes (cap walk-in duration so it can't run past closing)
-  const minsUntilClose = Math.max(0, Math.floor((closesMs - now.getTime()) / 60000));
+  // Operating hours — shared helper handles midnight-crossing locations
+  const { beforeOpen, outsideHours, minsUntilClose } = getShopWindow(now, openingTime, closingTime);
 
   // Effective ceiling: min of (next booking gap − 5 min buffer) AND (shop close)
   const bookingCeiling = table.upcomingBooking
@@ -161,7 +133,46 @@ function PanelWalkIn({
 
   function handleNameChange(val: string) {
     // Letters and spaces only
-    setCustomerName(val.replace(/[^a-zA-Z\s]/g, ""));
+    const cleaned = val.replace(/[^a-zA-Z\s]/g, "");
+    setCustomerName(cleaned);
+
+    // Cancel any in-flight name-search request + pending debounce
+    if (nameSearchTimer.current) clearTimeout(nameSearchTimer.current);
+    if (nameSearchAbort.current) nameSearchAbort.current.abort();
+
+    const q = cleaned.trim();
+    if (q.length < 2) {
+      setNameSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // 300ms debounce — matches existing handlePhoneChange pattern
+    nameSearchTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      nameSearchAbort.current = controller;
+      try {
+        const res  = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const body = await res.json() as
+          | { success: true; data: { phone: string; name: string | null; visit_count: number; points_balance: number }[] }
+          | { success: false; error: string };
+        if (body.success) {
+          setNameSuggestions(body.data);
+          setShowSuggestions(body.data.length > 0);
+        }
+      } catch {
+        // Aborted or network — silent. User can still type the name manually.
+      }
+    }, 300);
+  }
+
+  function pickSuggestion(s: { phone: string; name: string | null; visit_count: number; points_balance: number }) {
+    setCustomerName(s.name ?? "");
+    setCustomerPhone(s.phone);
+    // Mirror the existing phone-lookup behaviour so the "X pts" badge shows
+    setCustomer({ name: s.name, points_balance: s.points_balance, visit_count: s.visit_count });
+    setShowSuggestions(false);
+    setNameSuggestions([]);
   }
 
   async function startWalkIn() {
@@ -230,17 +241,51 @@ function PanelWalkIn({
           <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
             Customer
           </p>
-          <input
-            value={customerName}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Customer name *"
-            autoFocus
-            autoComplete="name"
-            className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
-              bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-              text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
-              focus:border-[#D4541A]"
-          />
+          <div className="relative">
+            <input
+              value={customerName}
+              onChange={(e) => handleNameChange(e.target.value)}
+              onFocus={() => { if (nameSuggestions.length > 0) setShowSuggestions(true); }}
+              onBlur={() => {
+                // Delay so a click on a suggestion (which is a mousedown) registers
+                // before the dropdown disappears.
+                setTimeout(() => setShowSuggestions(false), 150);
+              }}
+              placeholder="Customer name *"
+              autoFocus
+              autoComplete="off"
+              className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
+                bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
+                focus:border-[#D4541A]"
+            />
+            {showSuggestions && nameSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-lg overflow-hidden shadow-lg
+                bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]"
+              >
+                {nameSuggestions.map((s) => (
+                  <button
+                    key={s.phone}
+                    onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left transition-colors
+                      hover:bg-gray-100 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                        {s.name ?? "(no name)"}
+                      </p>
+                      <p className="text-xs font-mono text-gray-600 dark:text-[#aaa]">{s.phone}</p>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                      style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}
+                    >
+                      {s.visit_count}× · {s.points_balance} pts
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <input
             type="tel"
             inputMode="numeric"
