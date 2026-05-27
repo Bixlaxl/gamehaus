@@ -72,3 +72,25 @@ CREATE INDEX IF NOT EXISTS idx_inventory_items_location_active
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_lower_name
   ON customer_profiles (lower(name) text_pattern_ops)
   WHERE name IS NOT NULL;
+
+-- ============================================================
+-- REALTIME PUBLICATION (run once per environment)
+-- ============================================================
+--
+-- The POS staff side subscribes to Supabase Realtime so that bookings,
+-- walk-ins, session changes, and extras propagate without polling.
+-- Run this to (re-)add the required tables to the supabase_realtime
+-- publication. Safe to re-run — it's idempotent via DO NOTHING semantics.
+--
+-- After running, verify in the Supabase dashboard:
+--   Database → Replication → supabase_realtime publication
+-- Should list: orders, order_items, order_extras, bookings, tables
+--
+-- Symptom of missing realtime: upcoming bookings or session changes only
+-- appear after a manual page reload (or after the 5-min safety-net poll).
+
+ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
+ALTER PUBLICATION supabase_realtime ADD TABLE order_extras;
+ALTER PUBLICATION supabase_realtime ADD TABLE bookings;
+ALTER PUBLICATION supabase_realtime ADD TABLE tables;

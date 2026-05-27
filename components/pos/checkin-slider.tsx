@@ -1,17 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { X, Search, QrCode } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import type { Booking, Order } from "@/lib/supabase/types";
 
 interface CheckinSliderProps {
   locationId: string;
 }
 
-const supabase = createClient();
 type BookingWithOrder = Booking & { order: Pick<Order, "customer_name" | "customer_phone"> };
 
 export function CheckinSlider({ locationId }: CheckinSliderProps) {
@@ -26,6 +24,15 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [error,      setError]      = useState<string | null>(null);
 
+  // Defense in depth: when staff opens the slider, force-refresh the upcoming
+  // bookings cache. Realtime should keep this current, but if a booking
+  // realtime event was missed (publication off, transient disconnect), this
+  // ensures the table grid shows new bookings on the very next interaction.
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function close() {
     setSearch(""); setResults([]); setError(null); setCheckinOpen(false);
   }
@@ -34,28 +41,17 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
     if (!search.trim()) return;
     setSearching(true); setError(null);
 
-    const today    = new Date(); today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    // Server-side admin query — bypasses RLS, scoped to this location,
+    // covers today + tomorrow so post-midnight bookings still appear.
+    const res = await fetch(
+      `/api/pos/search-bookings?locationId=${encodeURIComponent(locationId)}&q=${encodeURIComponent(search.trim())}`
+    );
+    const body = await res.json() as
+      | { success: true;  data: BookingWithOrder[] }
+      | { success: false; error: string };
 
-    const { data, error: dbError } = await supabase
-      .from("bookings")
-      .select("*, order:orders(customer_name, customer_phone, location_id)")
-      .eq("status", "confirmed")
-      .gte("scheduled_start", today.toISOString())
-      .lt("scheduled_start", tomorrow.toISOString());
-
-    if (dbError) { setError(dbError.message); setSearching(false); return; }
-
-    const term     = search.toLowerCase();
-    const filtered = (data ?? []).filter((b) => {
-      const o = b.order as { customer_name: string; customer_phone: string | null; location_id: string };
-      return (
-        o.location_id === locationId &&
-        (o.customer_name.toLowerCase().includes(term) || (o.customer_phone ?? "").includes(term))
-      );
-    }) as BookingWithOrder[];
-
-    setResults(filtered);
+    if (!body.success) { setError(body.error); setSearching(false); return; }
+    setResults(body.data);
     setSearching(false);
   }
 
