@@ -128,21 +128,16 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { cart.setLocation(location.id); }, [location.id]);
 
-  // Bust Next.js router cache on mount and whenever the user comes back to the tab.
-  // Without this, navigating back to this page after a walk-in/booking shows the
-  // old initialSlots prop from the cached RSC payload — slots appear free until
-  // a hard refresh. router.refresh() re-runs the server component and merges
-  // fresh props in. Bumping slotsTick also makes the slot effect bypass the
-  // stale cache shortcut while waiting for the new props.
+  // Bust Next.js router cache on mount and whenever the user comes back to the
+  // tab. router.refresh() re-runs the server component so initialSlots gets
+  // fresh props. We do NOT bump slotsTick here — the slot-loading effect uses
+  // SWR (show cached instantly, refetch in background), so even if initialSlots
+  // is briefly stale from the router cache, the user sees something immediately
+  // and gets the fresh data on the next tick.
   useEffect(() => {
     router.refresh();
-    setSlotsTick((t) => t + 1);
-
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        router.refresh();
-        setSlotsTick((t) => t + 1);
-      }
+      if (document.visibilityState === "visible") router.refresh();
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
@@ -177,25 +172,37 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     return () => { void supabase.removeChannel(channel); };
   }, [location.id, tableIdsKey]);
 
-  // Re-fetch blocked ranges when date changes, sheet opens, or realtime fires
+  // Stale-while-revalidate: show cached slots INSTANTLY (zero perceived
+  // latency on table tap), then fetch fresh in the background to catch any
+  // changes that happened since the page was rendered. Loading skeleton only
+  // appears when we genuinely have no cached data.
   useEffect(() => {
     if (!booking) return;
 
-    // First load (slotsTick === 0): use server-prefetched data when possible.
-    // After any realtime event invalidates the cache, always fetch fresh.
-    if (slotsTick === 0 && initialSlots && initialDate && date === initialDate && booking.id in initialSlots) {
-      setBlocked(initialSlots[booking.id]);
-      return;
+    const cached = initialSlots && initialDate && date === initialDate && booking.id in initialSlots
+      ? initialSlots[booking.id]
+      : null;
+
+    if (cached !== null) {
+      setBlocked(cached);
+    } else {
+      setBlocked([]);
+      setSlotsLoading(true);
     }
 
-    setSlotsLoading(true);
+    // Background revalidation. Cancellable so a fast newer fetch isn't
+    // overwritten by a slow older one when the user changes date/table quickly.
+    let cancelled = false;
     fetch(`/api/tables/${booking.id}/slots?date=${date}`)
       .then((r) => r.json())
       .then((body: { success: boolean; data: { start: string; end: string }[] }) => {
-        if (body.success) setBlocked(body.data);
+        if (cancelled || !body.success) return;
+        setBlocked(body.data);
       })
       .catch(() => {})
-      .finally(() => setSlotsLoading(false));
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, booking?.id, slotsTick]);
 
@@ -281,13 +288,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     // Default people selection to smallest group size if pricing exists
     const keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
     setNumPeople(keys[0] ?? null);
-    // Set blocked ranges immediately from pre-fetched data so slots render
-    // correctly on the first paint — no flash of "all available" before useEffect fires
-    if (initialSlots && initialDate && date === initialDate && table.id in initialSlots) {
-      setBlocked(initialSlots[table.id]);
-    } else {
-      setBlocked([]);
-    }
+    // blockedRanges hydration is owned by the slot-loading effect — it runs
+    // synchronously after this setBooking() and pulls from initialSlots if
+    // available, then revalidates in the background.
   }
 
   function closeSheet() {
