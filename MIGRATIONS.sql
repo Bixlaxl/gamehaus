@@ -79,8 +79,8 @@ CREATE INDEX IF NOT EXISTS idx_customer_profiles_lower_name
 --
 -- The POS staff side subscribes to Supabase Realtime so that bookings,
 -- walk-ins, session changes, and extras propagate without polling.
--- Run this to (re-)add the required tables to the supabase_realtime
--- publication. Safe to re-run — it's idempotent via DO NOTHING semantics.
+-- This block adds the required tables to the supabase_realtime publication
+-- only if they're not already members — safe to re-run.
 --
 -- After running, verify in the Supabase dashboard:
 --   Database → Replication → supabase_realtime publication
@@ -89,8 +89,20 @@ CREATE INDEX IF NOT EXISTS idx_customer_profiles_lower_name
 -- Symptom of missing realtime: upcoming bookings or session changes only
 -- appear after a manual page reload (or after the 5-min safety-net poll).
 
-ALTER PUBLICATION supabase_realtime ADD TABLE orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE order_extras;
-ALTER PUBLICATION supabase_realtime ADD TABLE bookings;
-ALTER PUBLICATION supabase_realtime ADD TABLE tables;
+DO $$
+DECLARE
+  t TEXT;
+  tables_to_publish TEXT[] := ARRAY['orders', 'order_items', 'order_extras', 'bookings', 'tables'];
+BEGIN
+  FOREACH t IN ARRAY tables_to_publish LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I', t);
+      RAISE NOTICE 'Added % to supabase_realtime publication', t;
+    ELSE
+      RAISE NOTICE 'Skipped % (already in publication)', t;
+    END IF;
+  END LOOP;
+END $$;

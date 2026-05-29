@@ -144,10 +144,17 @@ export function StaffContent({
   });
 
   // ── Toggle active ────────────────────────────────────────────────────────
+  // Goes through the API (admin client) — browser-client writes were RLS-blocked
+  // for the anon role and silently failed.
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      const { error } = await supabase.from("users").update({ is_active: active }).eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/staff/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: active }),
+      });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error ?? "Failed to update");
     },
     onMutate: async ({ id, active }) => {
       await qc.cancelQueries({ queryKey: ["staff"] });

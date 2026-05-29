@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { updateTableSchema, ok, err } from "@/lib/validators/schemas";
+import { updateTableSchema, ok, err, friendlyDbError } from "@/lib/validators/schemas";
 
 export const runtime = 'edge';
 
@@ -41,7 +41,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   if (permanent) {
     const { error } = await admin.from("tables").delete().eq("id", id);
-    if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+    if (error) {
+      const f = friendlyDbError(error, { entity: "table" });
+      const status = f.code === "FK_CONSTRAINT" ? 409 : 500;
+      return NextResponse.json(err(f.message, f.code), { status });
+    }
   } else {
     const { error } = await admin.from("tables").update({ is_active: false }).eq("id", id);
     if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });

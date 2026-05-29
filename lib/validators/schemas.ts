@@ -13,6 +13,37 @@ export function err(error: string, code: string): ApiResponse<never> {
   return { success: false, error, code };
 }
 
+/**
+ * Translate a Supabase/Postgres error into a friendlier message for the owner UI.
+ * Currently handles foreign-key violations (SQLSTATE 23503) which is what the
+ * owner panel hits when trying to permanently delete a record that has child rows.
+ *
+ * Falls back to the original message for anything else.
+ */
+export function friendlyDbError(
+  dbError: { message: string; code?: string } | null | undefined,
+  context: { entity: "location" | "table" | "staff" | "inventory item" }
+): { message: string; code: string } {
+  if (!dbError) return { message: "Database error", code: "DB_ERROR" };
+
+  // 23503 = foreign_key_violation — the target row has children that reference it
+  if (dbError.code === "23503") {
+    const friendly: Record<typeof context.entity, string> = {
+      "location":
+        "Cannot permanently delete — this location still has tables, staff, or past orders. Deactivate it instead.",
+      "table":
+        "Cannot permanently delete — this table has past sessions or orders attached. Deactivate it instead.",
+      "staff":
+        "Cannot permanently delete — this staff member has past orders attributed to them. Deactivate them instead.",
+      "inventory item":
+        "Cannot permanently delete — this item has been sold before. Deactivate it instead.",
+    };
+    return { message: friendly[context.entity], code: "FK_CONSTRAINT" };
+  }
+
+  return { message: dbError.message, code: "DB_ERROR" };
+}
+
 // Location
 export const locationSchema = z.object({
   name: z.string().min(1),
