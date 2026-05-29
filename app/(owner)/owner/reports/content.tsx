@@ -128,8 +128,11 @@ export function ReportsContent({
 
       return { orders: (orders ?? []) as ReportOrder[], locations: (locations ?? []) as ReportLocation[] };
     },
-    initialData: initialReportData,
-    initialDataUpdatedAt: Date.now(),
+    // Only apply the SSR-rendered data when the visible window matches.
+    // Changing the preset / from / to gives the new queryKey a fresh fetch
+    // instead of TanStack treating the stale initialData as still-fresh.
+    initialData: from === initialFrom && to === initialTo ? initialReportData : undefined,
+    initialDataUpdatedAt: from === initialFrom && to === initialTo ? Date.now() : undefined,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });

@@ -4,6 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
 export const runtime = "edge";
+// Force dynamic — this is a date-windowed query that changes constantly.
+// Without this, Next.js may cache the response per URL and serve stale
+// data on a revisit to the same date.
+export const dynamic = "force-dynamic";
 
 /**
  * Owner-side bookings list for /owner/bookings.

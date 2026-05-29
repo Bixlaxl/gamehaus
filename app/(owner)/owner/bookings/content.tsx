@@ -56,6 +56,12 @@ export function BookingsContent({
   initialBookings: BookingRow[];
 }) {
   const [date, setDate]           = useState(new Date().toISOString().split("T")[0]);
+  // The date this component was first mounted on. Used to decide whether the
+  // SSR-passed initialBookings actually applies to the date the user is now
+  // viewing. Without this gate, TanStack treats initialData as fresh for
+  // every new queryKey, so switching to a previous date showed today's data
+  // and never ran the fetch at all.
+  const [initialDate]             = useState(date);
   const [locationFilter, setLoc]  = useState("all");
   const [typeFilter, setType]     = useState("all");
   const [statusFilter, setStatus] = useState("all");
@@ -107,15 +113,19 @@ export function BookingsContent({
       // when RLS denied SELECT to the anon role, making it look like the
       // page needed a reload to update.
       const res = await fetch(
-        `/api/owner/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+        `/api/owner/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { cache: "no-store" }
       );
       const body = await res.json() as
         | { success: true;  data: BookingRow[] }
         | { success: false; error: string };
       return body.success ? body.data : [];
     },
-    initialData: initialBookings,
-    initialDataUpdatedAt: Date.now(),
+    // Only apply the SSR-passed initialBookings when the visible date actually
+    // matches the date the SSR rendered. Otherwise TanStack treats this static
+    // value as fresh data for the new queryKey too and skips the fetch.
+    initialData: date === initialDate ? initialBookings : undefined,
+    initialDataUpdatedAt: date === initialDate ? Date.now() : undefined,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
     // Owner has no realtime sub for /owner/bookings the way staff POS does.
