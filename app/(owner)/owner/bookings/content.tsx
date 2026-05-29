@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -117,7 +117,26 @@ export function BookingsContent({
     initialDataUpdatedAt: Date.now(),
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
+    // Owner has no realtime sub for /owner/bookings the way staff POS does.
+    // 30s safety-net + on-focus refetch keeps the list fresh enough that a
+    // new customer booking shows up almost instantly even if realtime is off.
+    refetchInterval: 30 * 1000,
+    refetchOnWindowFocus: true,
   });
+
+  // Realtime: any change to the bookings table triggers an immediate refetch.
+  // Belt-and-suspenders alongside the 30s poll — when the Supabase publication
+  // is configured correctly this gives sub-second update; when it isn't, the
+  // poll still catches it within 30s.
+  useEffect(() => {
+    const channel = supabase
+      .channel("owner-bookings")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
+        void refetch();
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [refetch]);
 
   const filtered = useMemo(() => (bookings ?? []).filter((b) => {
     const table = b.order_item?.table as TableRef | null;

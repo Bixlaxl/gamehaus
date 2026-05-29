@@ -289,6 +289,13 @@ export default function CheckoutPage() {
 
     const { order_id } = orderBody.data;
 
+    // Warm up the confirmation page while Razorpay does its thing. By the
+    // time the customer actually completes payment (anywhere from 5 to
+    // 30+ seconds), both the JS chunk and the RSC payload for the
+    // /booking/[id] route are already cached — so the post-payment
+    // navigation feels instant instead of triggering a fresh server fetch.
+    router.prefetch(`/booking/${order_id}`);
+
     const rpRes = await fetch("/api/payments/create-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -373,6 +380,9 @@ export default function CheckoutPage() {
     if (!orderBody.success) { setError(orderBody.error); setLoading(false); submitting.current = false; return; }
 
     const { order_id } = orderBody.data;
+
+    // Warm the confirmation route while the demo-confirm round-trip runs
+    router.prefetch(`/booking/${order_id}`);
 
     const confirmRes = await fetch("/api/payments/demo-confirm", {
       method: "POST",

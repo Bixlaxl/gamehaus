@@ -138,9 +138,14 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       };
       return body.success ? body.data : [];
     },
-    // Realtime keeps data current; this is a safety-net poll, not the primary mechanism.
-    // 60s was producing ~60 unnecessary requests/hour per staff session.
-    refetchInterval: 5 * 60 * 1000,
+    // Bookings have a tighter SLA than tables/orders because a customer
+    // expects their booking to appear on the staff side as soon as payment
+    // clears. Realtime is still the primary path, but we don't trust it to
+    // be perfectly available (publication setup, transient socket drops,
+    // RLS gotchas). 30s safety-net + on-focus refetch guarantees the UI
+    // catches up fast in any failure mode.
+    refetchInterval: 30 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   // Realtime
