@@ -25,6 +25,7 @@ interface POSStore {
   walkInOpen: boolean;
   walkInPrefilledTableId: string | null;
   checkinOpen: boolean;
+  upcomingDrawerOpen: boolean;
   extendModalItem: OrderItem | null;
   stopConfirmItem: OrderItem | null;
   finalizeOrderId: string | null;
@@ -45,6 +46,7 @@ interface POSStore {
   setWalkInOpen: (open: boolean) => void;
   setWalkInWithTable: (tableId: string) => void;
   setCheckinOpen: (open: boolean) => void;
+  setUpcomingDrawerOpen: (open: boolean) => void;
   setExtendModalItem: (item: OrderItem | null) => void;
   setStopConfirmItem: (item: OrderItem | null) => void;
   setFinalizeOrderId: (id: string | null) => void;
@@ -71,6 +73,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   walkInOpen: false,
   walkInPrefilledTableId: null,
   checkinOpen: false,
+  upcomingDrawerOpen: false,
   extendModalItem: null,
   stopConfirmItem: null,
   finalizeOrderId: null,
@@ -88,6 +91,7 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setWalkInOpen: (walkInOpen) => set({ walkInOpen, walkInPrefilledTableId: walkInOpen ? null : null }),
   setWalkInWithTable: (tableId) => set({ walkInOpen: true, walkInPrefilledTableId: tableId }),
   setCheckinOpen: (checkinOpen) => set({ checkinOpen }),
+  setUpcomingDrawerOpen: (upcomingDrawerOpen) => set({ upcomingDrawerOpen }),
   setExtendModalItem: (extendModalItem) => set({ extendModalItem }),
   setStopConfirmItem: (stopConfirmItem) => set({ stopConfirmItem }),
   setFinalizeOrderId: (finalizeOrderId) => set({ finalizeOrderId }),

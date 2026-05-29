@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { usePOSStore } from "@/store/pos";
-import { LogOut, UserPlus, QrCode } from "lucide-react";
+import { LogOut, UserPlus, QrCode, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
 import { getShopWindow } from "@/lib/utils";
@@ -25,6 +25,7 @@ const WalkInSlider      = dynamic(() => import("./walk-in-slider").then(m => m.W
 const CheckinSlider     = dynamic(() => import("./checkin-slider").then(m => m.CheckinSlider),       { ssr: false });
 const ExtendModal       = dynamic(() => import("./extend-modal").then(m => m.ExtendModal),           { ssr: false });
 const StopConfirmModal  = dynamic(() => import("./stop-confirm-modal").then(m => m.StopConfirmModal), { ssr: false });
+const UpcomingDrawer    = dynamic(() => import("./upcoming-drawer").then(m => m.UpcomingDrawer),     { ssr: false });
 const FinalizeBillModal = dynamic(() => import("./finalize-bill-modal").then(m => m.FinalizeBillModal), { ssr: false });
 
 interface POSScreenProps {
@@ -57,6 +58,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   const handleTableChange     = usePOSStore((s) => s.handleTableChange);
   const setWalkInOpen         = usePOSStore((s) => s.setWalkInOpen);
   const setCheckinOpen        = usePOSStore((s) => s.setCheckinOpen);
+  const setUpcomingDrawerOpen = usePOSStore((s) => s.setUpcomingDrawerOpen);
   const openOrders            = usePOSStore((s) => s.openOrders);
   const tables                = usePOSStore((s) => s.tables);
   const selectedTableId       = usePOSStore((s) => s.selectedTableId);
@@ -197,6 +199,27 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   useEffect(() => { buildTableStatus(); }, [buildTableStatus]);
   useEffect(() => { if (rawOrders) setOpenOrders(rawOrders); }, [rawOrders, setOpenOrders]);
 
+  // Upcoming bookings header badge — uses Date.now() inline since POSScreen
+  // doesn't subscribe to the 1s clock. The thresholds (30 min) are coarse
+  // enough that exact second precision doesn't matter; the count updates
+  // whenever rawBookings refetches (every 30s or on realtime).
+  const { upcomingTotal, soonCount } = (() => {
+    if (!rawBookings) return { upcomingTotal: 0, soonCount: 0 };
+    const nowMs = Date.now();
+    const thirtyMinFromNow = nowMs + 30 * 60 * 1000;
+    let total = 0;
+    let soon  = 0;
+    for (const b of rawBookings) {
+      const oi = b.order_item as { status?: string } | null;
+      if (oi?.status !== "scheduled") continue;
+      const startMs = new Date(b.scheduled_start).getTime();
+      // Count only future bookings; if start has passed and not checked in, it's late but still relevant
+      if (startMs >= nowMs - 30 * 60 * 1000) total++;
+      if (startMs >= nowMs && startMs <= thirtyMinFromNow) soon++;
+    }
+    return { upcomingTotal: total, soonCount: soon };
+  })();
+
   // NOTE: useAutoStop intentionally removed — per the agreed spec, staff
   // manually stops sessions. Overtime is shown in red on the card so it's
   // visible. Auto-stopping silently was producing surprise behaviour.
@@ -282,6 +305,22 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
               Check-in
             </button>
             <button
+              onClick={() => setUpcomingDrawerOpen(true)}
+              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all border border-[#333] hover:border-[#555] hover:bg-[#1e1e1e]"
+              title="Today's upcoming bookings"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+              {upcomingTotal > 0 ? `${upcomingTotal} upcoming` : "Upcoming"}
+              {soonCount > 0 && (
+                <span
+                  className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold tabular-nums"
+                  style={{ background: "#f59e0b", color: "#000" }}
+                >
+                  {soonCount} soon
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => {
                 // Compute on click — no per-second subscription needed in the
                 // header. Worst case the button looks enabled for one minute
@@ -336,6 +375,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       <ExtendModal />
       <StopConfirmModal locationId={locationId} />
       <FinalizeBillModal locationId={locationId} />
+      <UpcomingDrawer locationId={locationId} />
     </div>
   );
 }
