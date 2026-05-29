@@ -101,17 +101,18 @@ export function BookingsContent({
         ? (() => { const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
         : date;
       const to = new Date(`${closeDate}T${closing}+05:30`).toISOString();
-      const { data } = await supabase
-        .from("bookings")
-        .select(`
-          *,
-          order:orders(customer_name, customer_phone, advance_paid),
-          order_item:order_items(table:tables(name, type, location:locations(name, id)))
-        `)
-        .gte("scheduled_start", from)
-        .lte("scheduled_start", to)
-        .order("scheduled_start");
-      return (data ?? []) as BookingRow[];
+
+      // Server-side admin query — bypasses RLS. Previously this used the
+      // browser Supabase client which silently returned [] on date change
+      // when RLS denied SELECT to the anon role, making it look like the
+      // page needed a reload to update.
+      const res = await fetch(
+        `/api/owner/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      );
+      const body = await res.json() as
+        | { success: true;  data: BookingRow[] }
+        | { success: false; error: string };
+      return body.success ? body.data : [];
     },
     initialData: initialBookings,
     initialDataUpdatedAt: Date.now(),
