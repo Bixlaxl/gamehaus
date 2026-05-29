@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -228,8 +229,15 @@ export function StaffContent({
             {staff?.map((s) => {
               const revealed = revealedIds.has(s.id);
               return (
-                <tr key={s.id}>
-                  <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
+                <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-4 py-3 font-medium">
+                    <Link
+                      href={`/owner/staff/${s.id}`}
+                      className="text-gray-900 hover:text-[#D4541A] transition-colors"
+                    >
+                      {s.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{s.email}</td>
                   <td className="px-4 py-3">
                     {s.login_password ? (
