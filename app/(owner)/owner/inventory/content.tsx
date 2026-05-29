@@ -15,7 +15,7 @@ import {
 import type { InventoryItem } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 import NextImage from "next/image";
-import { Plus, Pencil, Package, Image } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Image } from "lucide-react";
 
 type LocationLite = { id: string; name: string };
 
@@ -54,6 +54,7 @@ export function InventoryContent({
   const [form,            setForm]            = useState<ItemForm>(defaultForm);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [searchQuery,     setSearchQuery]     = useState("");
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<InventoryItem | null>(null);
 
   const { data: items } = useQuery<InventoryItem[]>({
     queryKey: ["inventory", selectedLocation],
@@ -209,6 +210,30 @@ export function InventoryContent({
     onSettled: () => qc.invalidateQueries({ queryKey: ["inventory"] }),
   });
 
+  // Permanent delete — only offered once item is already deactivated.
+  // API will block this with a friendly FK error if the item has been sold.
+  const permanentDeleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/inventory/${id}?permanent=true`, { method: "DELETE" });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error);
+    },
+    onMutate: async (id) => {
+      setPermanentDeleteConfirm(null);
+      await qc.cancelQueries({ queryKey: ["inventory"] });
+      const prev = qc.getQueryData<InventoryItem[]>(["inventory", selectedLocation]);
+      qc.setQueryData<InventoryItem[]>(["inventory", selectedLocation], (old) =>
+        (old ?? []).filter((i) => i.id !== id)
+      );
+      return { prev };
+    },
+    onError: (err, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["inventory", selectedLocation], ctx.prev);
+      alert((err as Error).message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["inventory"] }),
+  });
+
   function openAdd() {
     setEditing(null);
     setForm({ ...defaultForm, location_id: initialLocations[0]?.id ?? "" });
@@ -342,6 +367,17 @@ export function InventoryContent({
                       >
                         {item.is_active ? "Deactivate" : "Activate"}
                       </Button>
+                      {!item.is_active && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setPermanentDeleteConfirm(item)}
+                          title="Permanently delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -448,6 +484,31 @@ export function InventoryContent({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanent delete confirmation */}
+      <Dialog open={!!permanentDeleteConfirm} onOpenChange={() => setPermanentDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Permanently Delete Item?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            <strong>{permanentDeleteConfirm?.name}</strong> will be permanently deleted and cannot be recovered.
+            If it has ever been sold, deletion will be blocked — deactivate is the safe choice for that case.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermanentDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => permanentDeleteConfirm && permanentDeleteMutation.mutate(permanentDeleteConfirm.id)}
+              disabled={permanentDeleteMutation.isPending}
+            >
+              {permanentDeleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

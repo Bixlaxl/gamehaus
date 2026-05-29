@@ -64,6 +64,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
   const [editing, setEditing] = useState<Location | null>(null);
   const [form, setForm] = useState<LocationForm>(defaultForm);
   const [deleteConfirm, setDeleteConfirm] = useState<Location | null>(null);
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<Location | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const upsertMutation = useMutation({
@@ -163,6 +164,32 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
     onSettled: () => qc.invalidateQueries({ queryKey: ["locations"] }),
   });
 
+  // Permanent delete — only offered once the location is already deactivated.
+  // API will block with a friendly FK error if any tables/staff/orders still
+  // reference it (which is almost always the case).
+  const permanentDeleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/locations/${id}?permanent=true`, { method: "DELETE" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+    },
+    onMutate: async (id) => {
+      setPermanentDeleteConfirm(null);
+      await qc.cancelQueries({ queryKey: ["locations"] });
+      const prev = qc.getQueryData<Location[]>(["locations"]);
+      qc.setQueryData<Location[]>(["locations"], (old) =>
+        (old ?? []).filter((l) => l.id !== id)
+      );
+      return { prev };
+    },
+    onSuccess: () => toast.success("Location permanently deleted"),
+    onError: (err, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["locations"], ctx.prev);
+      toast.error((err as Error).message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["locations"] }),
+  });
+
   function openAdd() {
     setEditing(null);
     setForm(defaultForm);
@@ -236,13 +263,23 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
               <Button variant="outline" size="icon" onClick={() => openEdit(loc)}>
                 <Pencil className="h-4 w-4" />
               </Button>
-              {loc.is_active && (
+              {loc.is_active ? (
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => setDeleteConfirm(loc)}
+                  title="Deactivate"
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              ) : (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setPermanentDeleteConfirm(loc)}
+                  title="Permanently delete"
+                >
+                  Delete permanently
                 </Button>
               )}
             </div>
@@ -390,6 +427,36 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
               disabled={softDeleteMutation.isPending}
             >
               Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanent delete confirmation */}
+      <Dialog
+        open={!!permanentDeleteConfirm}
+        onOpenChange={() => setPermanentDeleteConfirm(null)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Permanently Delete Location?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            <strong>{permanentDeleteConfirm?.name}</strong> will be permanently deleted and cannot be recovered.
+            If it still has tables, staff, or past orders, deletion will be blocked — you&apos;ll need to clear those first.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermanentDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                permanentDeleteConfirm && permanentDeleteMutation.mutate(permanentDeleteConfirm.id)
+              }
+              disabled={permanentDeleteMutation.isPending}
+            >
+              {permanentDeleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>
