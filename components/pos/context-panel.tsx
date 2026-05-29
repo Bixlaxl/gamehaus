@@ -90,13 +90,18 @@ function PanelWalkIn({
   const [customer,      setCustomer]      = useState<CustomerLookup | null>(null);
   const [lookingUp,     setLookingUp]     = useState(false);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Name autocomplete state — only populated when staff types ≥2 chars in name
-  const [nameSuggestions, setNameSuggestions] = useState<
-    { phone: string; name: string | null; visit_count: number; points_balance: number }[]
-  >([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const nameSearchTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const nameSearchAbort  = useRef<AbortController | null>(null);
+  // Autocomplete state — name and phone each have their own dropdown.
+  // Both fetch from /api/customers/search which routes digit-only queries
+  // to phone prefix and everything else to name prefix.
+  type CustomerSuggestion = { phone: string; name: string | null; visit_count: number; points_balance: number };
+  const [nameSuggestions,      setNameSuggestions]      = useState<CustomerSuggestion[]>([]);
+  const [phoneSuggestions,     setPhoneSuggestions]     = useState<CustomerSuggestion[]>([]);
+  const [showNameSuggestions,  setShowNameSuggestions]  = useState(false);
+  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
+  const nameSearchTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nameSearchAbort   = useRef<AbortController | null>(null);
+  const phoneSearchTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const phoneSearchAbort  = useRef<AbortController | null>(null);
 
   // Operating hours — shared helper handles midnight-crossing locations
   const { beforeOpen, outsideHours, minsUntilClose } = getShopWindow(now, openingTime, closingTime);
@@ -114,8 +119,17 @@ function PanelWalkIn({
     const cleaned = val.replace(/\D/g, "").slice(0, 10);
     setCustomerPhone(cleaned);
     setCustomer(null);
+
+    // Cancel in-flight phone search + debounce timer
+    if (phoneSearchTimer.current) clearTimeout(phoneSearchTimer.current);
+    if (phoneSearchAbort.current) phoneSearchAbort.current.abort();
+
+    // Exact-match path: 10 digits = canonical lookup that drives the points badge
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
     if (cleaned.length === 10) {
+      // Full number entered — hide the prefix dropdown, run the exact lookup
+      setPhoneSuggestions([]);
+      setShowPhoneSuggestions(false);
       setLookingUp(true);
       lookupTimer.current = setTimeout(async () => {
         const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(cleaned)}`);
@@ -126,9 +140,33 @@ function PanelWalkIn({
         }
         setLookingUp(false);
       }, 600);
-    } else {
-      setLookingUp(false);
+      return;
     }
+
+    setLookingUp(false);
+
+    // Prefix-match path: 3–9 digits, fire the same search endpoint we use for name
+    if (cleaned.length < 3) {
+      setPhoneSuggestions([]);
+      setShowPhoneSuggestions(false);
+      return;
+    }
+    phoneSearchTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      phoneSearchAbort.current = controller;
+      try {
+        const res  = await fetch(`/api/customers/search?q=${encodeURIComponent(cleaned)}`, { signal: controller.signal });
+        const body = await res.json() as
+          | { success: true;  data: CustomerSuggestion[] }
+          | { success: false; error: string };
+        if (body.success) {
+          setPhoneSuggestions(body.data);
+          setShowPhoneSuggestions(body.data.length > 0);
+        }
+      } catch {
+        // Aborted or network — silent. Staff can still type the full number.
+      }
+    }, 300);
   }
 
   function handleNameChange(val: string) {
@@ -143,7 +181,7 @@ function PanelWalkIn({
     const q = cleaned.trim();
     if (q.length < 2) {
       setNameSuggestions([]);
-      setShowSuggestions(false);
+      setShowNameSuggestions(false);
       return;
     }
 
@@ -158,7 +196,7 @@ function PanelWalkIn({
           | { success: false; error: string };
         if (body.success) {
           setNameSuggestions(body.data);
-          setShowSuggestions(body.data.length > 0);
+          setShowNameSuggestions(body.data.length > 0);
         }
       } catch {
         // Aborted or network — silent. User can still type the name manually.
@@ -166,13 +204,20 @@ function PanelWalkIn({
     }, 300);
   }
 
-  function pickSuggestion(s: { phone: string; name: string | null; visit_count: number; points_balance: number }) {
+  function pickSuggestion(s: CustomerSuggestion) {
     setCustomerName(s.name ?? "");
     setCustomerPhone(s.phone);
     // Mirror the existing phone-lookup behaviour so the "X pts" badge shows
     setCustomer({ name: s.name, points_balance: s.points_balance, visit_count: s.visit_count });
-    setShowSuggestions(false);
+    // Dismiss both dropdowns and cancel any pending searches in either field
+    setShowNameSuggestions(false);
+    setShowPhoneSuggestions(false);
     setNameSuggestions([]);
+    setPhoneSuggestions([]);
+    if (nameSearchTimer.current)  clearTimeout(nameSearchTimer.current);
+    if (phoneSearchTimer.current) clearTimeout(phoneSearchTimer.current);
+    if (nameSearchAbort.current)  nameSearchAbort.current.abort();
+    if (phoneSearchAbort.current) phoneSearchAbort.current.abort();
   }
 
   async function startWalkIn() {
@@ -245,11 +290,11 @@ function PanelWalkIn({
             <input
               value={customerName}
               onChange={(e) => handleNameChange(e.target.value)}
-              onFocus={() => { if (nameSuggestions.length > 0) setShowSuggestions(true); }}
+              onFocus={() => { if (nameSuggestions.length > 0) setShowNameSuggestions(true); }}
               onBlur={() => {
                 // Delay so a click on a suggestion (which is a mousedown) registers
                 // before the dropdown disappears.
-                setTimeout(() => setShowSuggestions(false), 150);
+                setTimeout(() => setShowNameSuggestions(false), 150);
               }}
               placeholder="Customer name *"
               autoFocus
@@ -259,7 +304,7 @@ function PanelWalkIn({
                 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
                 focus:border-[#D4541A]"
             />
-            {showSuggestions && nameSuggestions.length > 0 && (
+            {showNameSuggestions && nameSuggestions.length > 0 && (
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-lg overflow-hidden shadow-lg
                 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]"
               >
@@ -286,20 +331,55 @@ function PanelWalkIn({
               </div>
             )}
           </div>
-          <input
-            type="tel"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={10}
-            value={customerPhone}
-            onChange={(e) => handlePhoneChange(e.target.value)}
-            placeholder="10-digit phone (optional)"
-            autoComplete="tel"
-            className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
-              bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-              text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
-              focus:border-[#D4541A]"
-          />
+          <div className="relative">
+            <input
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={10}
+              value={customerPhone}
+              onChange={(e) => handlePhoneChange(e.target.value)}
+              onFocus={() => { if (phoneSuggestions.length > 0) setShowPhoneSuggestions(true); }}
+              onBlur={() => {
+                // Delay so a click on a suggestion (mousedown) registers before close
+                setTimeout(() => setShowPhoneSuggestions(false), 150);
+              }}
+              placeholder="10-digit phone (optional)"
+              autoComplete="off"
+              className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
+                bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
+                focus:border-[#D4541A]"
+            />
+            {showPhoneSuggestions && phoneSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-lg overflow-hidden shadow-lg
+                bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]"
+              >
+                {phoneSuggestions.map((s) => (
+                  <button
+                    key={s.phone}
+                    onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left transition-colors
+                      hover:bg-gray-100 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
+                        {s.phone}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-[#aaa] truncate">
+                        {s.name ?? "(no name)"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                      style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}
+                    >
+                      {s.visit_count}× · {s.points_balance} pts
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {lookingUp && (
             <p className="text-xs text-gray-500 dark:text-[#999]">Looking up…</p>
           )}

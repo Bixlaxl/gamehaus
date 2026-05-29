@@ -73,6 +73,13 @@ CREATE INDEX IF NOT EXISTS idx_customer_profiles_lower_name
   ON customer_profiles (lower(name) text_pattern_ops)
   WHERE name IS NOT NULL;
 
+-- Customer phone autocomplete on the POS walk-in panel (same pattern as name).
+-- The unique constraint on phone gives us a B-tree index already, but with the
+-- default operator class — which Postgres won't use for LIKE 'prefix%'. The
+-- text_pattern_ops variant is what makes prefix search a fast seek.
+CREATE INDEX IF NOT EXISTS idx_customer_profiles_phone_prefix
+  ON customer_profiles (phone text_pattern_ops);
+
 -- ============================================================
 -- REALTIME PUBLICATION (run once per environment)
 -- ============================================================
