@@ -621,52 +621,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                   <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
                   <p className="text-sm mt-0.5" style={{ color: textSec }}>
                     {formatCurrency(effectiveRate)}/hr
-                    {numPeople && pricingOptions.length > 0 && (
-                      <span className="ml-1.5" style={{ color: textMut }}>
-                        · {numPeople} {booking.type === "ps5" ? `controller${numPeople === "1" ? "" : "s"}` : "players"}
-                      </span>
-                    )}
                   </p>
                 </div>
                 <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
-
-              {/* People / Controller selector */}
-              {pricingOptions.length > 0 && (
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
-                    {booking.type === "ps5" ? "Controllers" : "Players"}
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {pricingOptions.map((n) => {
-                      const active = numPeople === n;
-                      const rate   = booking.people_pricing?.[n] ?? 0;
-                      return (
-                        <button
-                          key={n}
-                          onClick={() => setNumPeople(n)}
-                          className="flex flex-col items-center justify-center py-2.5 rounded-xl transition-all"
-                          style={{
-                            background: active ? sheetType.accent : inputBg,
-                            color:      active ? "#FFF" : textPri,
-                            border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
-                            boxShadow:  active ? `0 4px 14px ${sheetType.accent}40` : "none",
-                          }}
-                        >
-                          <span className="text-sm font-bold leading-none">
-                            {n} {booking.type === "ps5" ? (n === "1" ? "ctrl" : "ctrls") : "ppl"}
-                          </span>
-                          <span className="text-[10px] font-semibold mt-0.5 opacity-80">
-                            ₹{rate}/hr
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               {/* Date + live selection summary */}
               <div
@@ -786,6 +746,43 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                   </div>
                 )}
               </div>
+
+              {/* People / Controller selector — revealed only after a slot is picked
+                  so the initial sheet stays clean. Default count is already set on
+                  openSheet() to the smallest tier, so the total below is accurate. */}
+              {selectedSlots.length > 0 && pricingOptions.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
+                    {booking.type === "ps5" ? "Controllers" : "Players"}
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {pricingOptions.map((n) => {
+                      const active = numPeople === n;
+                      const rate   = booking.people_pricing?.[n] ?? 0;
+                      return (
+                        <button
+                          key={n}
+                          onClick={() => setNumPeople(n)}
+                          className="flex flex-col items-center justify-center py-2.5 rounded-xl transition-all"
+                          style={{
+                            background: active ? sheetType.accent : inputBg,
+                            color:      active ? "#FFF" : textPri,
+                            border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
+                            boxShadow:  active ? `0 4px 14px ${sheetType.accent}40` : "none",
+                          }}
+                        >
+                          <span className="text-sm font-bold leading-none">
+                            {n} {booking.type === "ps5" ? (n === "1" ? "ctrl" : "ctrls") : "ppl"}
+                          </span>
+                          <span className="text-[10px] font-semibold mt-0.5 opacity-80">
+                            ₹{rate}/hr
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Duration + total — only when slots selected */}
               {selectedSlots.length > 0 && (
