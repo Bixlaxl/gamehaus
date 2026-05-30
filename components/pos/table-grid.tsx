@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatSignedCountdown, formatCurrency } from "@/lib/utils";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, Phone } from "lucide-react";
 import { toast } from "sonner";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
 import type { Order, OrderItem, Booking } from "@/lib/supabase/types";
@@ -63,7 +63,7 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
               className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full truncate"
               style={{ background: "rgba(245,158,11,0.18)", color: "#f59e0b" }}
             >
-              Next {fmtTime(upcomingBooking.scheduled_start)}
+              Next {fmtTime(upcomingBooking.scheduled_start)} → {fmtTime(upcomingBooking.scheduled_end)}
             </span>
             <span className="text-xs font-semibold text-gray-500 dark:text-[#888] shrink-0">Tap →</span>
           </div>
@@ -241,15 +241,33 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
           </span>
         </div>
 
-        {/* Upcoming booking pill */}
+        {/* Upcoming booking — name + slot + click-to-copy phone */}
         {table.upcomingBooking && (
-          <div>
+          <div className="flex flex-wrap items-center gap-1">
             <span
               className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
               style={{ background: "rgba(245,158,11,0.15)", color: "#d97706" }}
             >
-              → {table.upcomingBooking.order?.customer_name ?? "Booking"} next
+              → {table.upcomingBooking.order?.customer_name ?? "Booking"} · {fmtTime(table.upcomingBooking.scheduled_start)}
             </span>
+            {table.upcomingBooking.order?.customer_phone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const ph = table.upcomingBooking!.order!.customer_phone!;
+                  navigator.clipboard.writeText(ph).then(
+                    () => toast.success(`Copied ${ph}`),
+                    () => toast.error("Copy failed"),
+                  );
+                }}
+                className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded
+                  bg-gray-100 dark:bg-[#1f1f1f] hover:bg-[#f59e0b]/15 text-gray-700 dark:text-[#ddd] hover:text-[#f59e0b] transition"
+                title="Click to copy number"
+              >
+                <Phone className="h-2.5 w-2.5" />
+                {table.upcomingBooking.order.customer_phone}
+              </button>
+            )}
           </div>
         )}
 
@@ -391,6 +409,23 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
         <p className="font-bold text-gray-900 dark:text-white text-base leading-tight truncate">
           {booking.order?.customer_name}
         </p>
+        {booking.order?.customer_phone && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const ph = booking.order!.customer_phone!;
+              navigator.clipboard.writeText(ph).then(
+                () => toast.success(`Copied ${ph}`),
+                () => toast.error("Copy failed"),
+              );
+            }}
+            className="inline-flex items-center gap-1 -mt-1 self-start text-[11px] font-mono font-semibold text-gray-500 dark:text-[#aaa] hover:text-[#f59e0b] dark:hover:text-[#f59e0b] truncate"
+            title="Click to copy number"
+          >
+            <Phone className="h-3 w-3" />
+            {booking.order.customer_phone}
+          </button>
+        )}
 
         {/* Time + countdown */}
         <div>

@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
-import { CalendarClock, X, Clock } from "lucide-react";
+import { CalendarClock, X, Phone } from "lucide-react";
+import { toast } from "sonner";
 import type { Booking, Order, OrderItem } from "@/lib/supabase/types";
 
 interface UpcomingDrawerProps {
@@ -197,18 +198,23 @@ function Row({
   const tableId = oi?.table_id ?? null;
 
   return (
-    <li>
+    <li
+      className="flex items-stretch gap-2 p-3 rounded-xl transition-colors
+        bg-white dark:bg-[#161616] border hover:bg-gray-50 dark:hover:bg-[#1c1c1c]"
+      style={{ borderColor: urgent ? "rgba(245,158,11,0.35)" : "rgba(0,0,0,0.06)" }}
+    >
       <button
         onClick={() => tableId && onJump(tableId)}
         disabled={!tableId}
-        className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors
-          bg-white dark:bg-[#161616] border hover:bg-gray-50 dark:hover:bg-[#1c1c1c] disabled:opacity-40"
-        style={{ borderColor: urgent ? "rgba(245,158,11,0.35)" : "rgba(0,0,0,0.06)" }}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:opacity-40"
       >
-        {/* Time block */}
-        <div className="shrink-0 text-center w-14">
-          <p className="font-mono text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+        {/* Time block — full slot range */}
+        <div className="shrink-0 w-[68px]">
+          <p className="font-mono text-sm font-bold tabular-nums text-gray-900 dark:text-white leading-tight">
             {fmtTime(booking.scheduled_start)}
+          </p>
+          <p className="font-mono text-[11px] tabular-nums text-gray-500 dark:text-[#888] leading-tight">
+            → {fmtTime(booking.scheduled_end)}
           </p>
           <p
             className="text-[10px] font-bold mt-0.5 tabular-nums"
@@ -223,25 +229,37 @@ function Row({
           <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
             {customer}
           </p>
-          <div className="flex items-center gap-2 mt-0.5">
-            {table && (
-              <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
-              >
-                {table.name}
-              </span>
-            )}
-            {phone && (
-              <span className="text-[10px] text-gray-400 dark:text-[#666] font-mono truncate">
-                {phone}
-              </span>
-            )}
-          </div>
+          {table && (
+            <span
+              className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+              style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
+            >
+              {table.name}
+            </span>
+          )}
         </div>
-
-        <Clock className="h-3.5 w-3.5 text-gray-300 dark:text-[#555] shrink-0" />
       </button>
+
+      {/* Click-to-copy phone — staff is on PC, copies number to dial */}
+      {phone ? (
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(phone).then(
+              () => toast.success(`Copied ${phone}`),
+              () => toast.error("Copy failed"),
+            );
+          }}
+          className="shrink-0 self-center flex items-center gap-1.5 px-3 py-2 rounded-lg
+            bg-gray-100 dark:bg-[#1f1f1f] hover:bg-[#f59e0b]/15 dark:hover:bg-[#f59e0b]/15 transition-colors
+            text-gray-700 dark:text-[#ddd] hover:text-[#f59e0b] dark:hover:text-[#f59e0b]"
+          title="Click to copy number"
+        >
+          <Phone className="h-3.5 w-3.5" />
+          <span className="text-[11px] font-mono font-semibold tabular-nums leading-none whitespace-nowrap">
+            {phone}
+          </span>
+        </button>
+      ) : null}
     </li>
   );
 }

@@ -1,0 +1,18 @@
+{
+  "name": "Gamehaus — Snooker & Gaming Café",
+  "short_name": "Gamehaus",
+  "description": "Book snooker tables and gaming stations online",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#D4541A",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/image.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
