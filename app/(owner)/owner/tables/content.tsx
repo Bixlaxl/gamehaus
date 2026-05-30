@@ -544,8 +544,8 @@ export function TablesContent({
               <div className="space-y-2">
                 <Label>Per-Controller Hourly Rate (₹/hr) — optional</Label>
                 <p className="text-xs text-gray-400">Override the flat hourly rate based on controller count. Leave blank to use the flat rate above.</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {["1", "2"].map((n) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {["1", "2", "3", "4"].map((n) => (
                     <div key={n} className="space-y-1">
                       <p className="text-xs text-gray-500 font-medium">{n} controller{n === "2" ? "s" : ""}</p>
                       <Input
