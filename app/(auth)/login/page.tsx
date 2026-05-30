@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,22 @@ import {
 } from "@/components/ui/card";
 
 export default function LoginPage() {
+  // useSearchParams must be inside a Suspense boundary in App Router
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Only honor next= if it's a same-origin relative path (no open-redirects)
+  const nextParam = searchParams.get("next");
+  const safeNext  = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+    ? nextParam
+    : null;
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,7 +80,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace(profile.role === "owner" ? "/owner" : "/pos");
+    router.replace(safeNext ?? (profile.role === "owner" ? "/owner" : "/pos"));
   }
 
   return (

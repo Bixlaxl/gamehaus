@@ -10,6 +10,7 @@ import { LogOut, UserPlus, QrCode, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
 import { getShopWindow } from "@/lib/utils";
+import { installPOSAuthGuard } from "@/lib/pos-fetch";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
 import { POSAlerts } from "./pos-alerts";
@@ -71,6 +72,12 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     await supabase.auth.signOut();
     router.replace("/login");
   }
+
+  // Global 401 guard — Supabase refresh tokens rotate, and a long-open POS
+  // tab will eventually hit "Invalid Refresh Token" on its next mutation.
+  // Without this, staff sees a generic "Failed to stop session" with no way
+  // out. Patches window.fetch once; any /api/* 401 → toast + bounce to /login.
+  useEffect(() => { installPOSAuthGuard(); }, []);
 
   // Back-button protection
   useEffect(() => {
