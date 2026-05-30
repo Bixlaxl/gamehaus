@@ -49,9 +49,9 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
       body:    JSON.stringify({ order_item_id: item.id }),
     });
     if (!res.ok) {
-      const body = await res.json() as { error?: string };
+      const body = await res.json().catch(() => ({})) as { error?: string };
       store.patchOrderItem(item.id, { status: "running", actual_end: null });
-      toast.error(body.error ?? "Failed to stop session");
+      toast.error(body.error ?? `Failed to stop session (${res.status})`);
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     }

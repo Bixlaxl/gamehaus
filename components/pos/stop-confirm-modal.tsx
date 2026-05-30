@@ -46,7 +46,8 @@ function StopConfirmModalInner({
     });
     if (!res.ok) {
       patchOrderItem(item.id, { status: "running", actual_end: null });
-      toast.error("Failed to stop session");
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      toast.error(body.error ?? `Failed to stop session (${res.status})`);
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
     }
