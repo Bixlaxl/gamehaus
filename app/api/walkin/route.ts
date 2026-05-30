@@ -43,22 +43,33 @@ export async function POST(request: Request) {
     const [oh, om] = loc.opening_time.split(":").map(Number);
     const [ch, cm] = loc.closing_time.split(":").map(Number);
     const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
-    const opens  = new Date(now); opens.setHours(oh, om, 0, 0);
-    const closes = new Date(now); closes.setHours(ch, cm, 0, 0);
+
+    // Shop hours are stored as local IST times. Edge runtime is UTC, so we
+    // must explicitly shift into IST (UTC+5:30) before resolving today's
+    // open/close window — otherwise setHours() picks UTC midnight and the
+    // window slides by 5.5h, falsely flagging midday traffic as "before open".
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const nowIst = new Date(now.getTime() + IST_OFFSET_MS);
+    const y  = nowIst.getUTCFullYear();
+    const mo = nowIst.getUTCMonth();
+    const d  = nowIst.getUTCDate();
+    const opensUtc  = Date.UTC(y, mo, d, oh, om) - IST_OFFSET_MS;
+    const closesUtc = Date.UTC(y, mo, d, ch, cm) - IST_OFFSET_MS;
+
     let opensMs:  number;
     let closesMs: number;
     if (!crossesMidnight) {
-      opensMs  = opens.getTime();
-      closesMs = closes.getTime();
+      opensMs  = opensUtc;
+      closesMs = closesUtc;
     } else {
-      const nowMins   = now.getHours() * 60 + now.getMinutes();
-      const closeMins = ch * 60 + cm;
-      if (nowMins < closeMins) {
-        opensMs  = opens.getTime()  - 24 * 60 * 60 * 1000;
-        closesMs = closes.getTime();
+      const nowMinsIst = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+      const closeMins  = ch * 60 + cm;
+      if (nowMinsIst < closeMins) {
+        opensMs  = opensUtc  - 24 * 60 * 60 * 1000;
+        closesMs = closesUtc;
       } else {
-        opensMs  = opens.getTime();
-        closesMs = closes.getTime() + 24 * 60 * 60 * 1000;
+        opensMs  = opensUtc;
+        closesMs = closesUtc + 24 * 60 * 60 * 1000;
       }
     }
 
