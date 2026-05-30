@@ -14,6 +14,7 @@ const schema = z.object({
     table_id:      z.string().uuid(),
     duration_mins: z.number().int().min(15).max(480),
     rate_per_hour: z.number().positive(),
+    num_people:    z.number().int().positive().max(20).optional(),
   })).min(1),
 });
 
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
       order_id:                order.id,
       table_id:                item.table_id,
       rate_per_hour:           item.rate_per_hour,
+      num_people:              item.num_people ?? null,
       scheduled_duration_mins: item.duration_mins,
       status:                  "running" as const,
       actual_start:            now.toISOString(),

@@ -89,6 +89,7 @@ export const createOrderSchema = z.object({
       scheduled_end: z.string().datetime().optional(),
       scheduled_duration_mins: z.number().int().positive().optional(),
       rate_per_hour: z.number().positive(),
+      num_people: z.number().int().positive().max(20).optional(),
     })
   ),
 });
@@ -107,6 +108,13 @@ export const stopSessionSchema = z.object({
 export const extendSessionSchema = z.object({
   order_item_id: z.string().uuid(),
   extend_mins: z.number().int().positive().max(240),
+});
+
+// Change player / controller count mid-session — rate_per_hour is re-resolved
+// from the table's people_pricing JSON on the server.
+export const setPeopleSchema = z.object({
+  order_item_id: z.string().uuid(),
+  num_people:    z.number().int().positive().max(20),
 });
 
 // Add extra

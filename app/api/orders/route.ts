@@ -151,6 +151,7 @@ export async function POST(request: Request) {
         scheduled_end: item.scheduled_end ?? null,
         scheduled_duration_mins: item.scheduled_duration_mins ?? null,
         rate_per_hour: item.rate_per_hour,
+        num_people:    item.num_people ?? null,
       }))
     )
     .select("id, table_id, scheduled_start, scheduled_end");

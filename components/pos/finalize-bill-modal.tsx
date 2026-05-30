@@ -273,10 +273,16 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
             ) : (
               bill.tableLines.map((line) => {
                 const ti = activeItems.find((i) => i.id === line.id);
-                const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
+                const tableMeta = ti?.table as { name?: string; type?: string } | null;
+                const tn = tableMeta?.name ?? "Table";
+                const peopleLabel = ti?.num_people
+                  ? ` · ${ti.num_people} ${tableMeta?.type === "ps5"
+                      ? `controller${ti.num_people === 1 ? "" : "s"}`
+                      : `player${ti.num_people === 1 ? "" : "s"}`}`
+                  : "";
                 return (
                   <div key={line.id} className="flex justify-between">
-                    <span className="text-gray-500 dark:text-[#888]">{tn} ({line.durationMins}m)</span>
+                    <span className="text-gray-500 dark:text-[#888]">{tn} ({line.durationMins}m{peopleLabel})</span>
                     <span className="text-gray-900 dark:text-white">{formatCurrency(line.amount)}</span>
                   </div>
                 );

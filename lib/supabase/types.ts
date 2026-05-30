@@ -286,6 +286,7 @@ export interface Database {
           extended_mins: number;
           rate_per_hour: number;
           final_amount: number | null;
+          num_people: number | null;
           is_deleted: boolean;
           deleted_at: string | null;
           created_at: string;
@@ -304,6 +305,7 @@ export interface Database {
           extended_mins?: number;
           rate_per_hour: number;
           final_amount?: number | null;
+          num_people?: number | null;
           is_deleted?: boolean;
           deleted_at?: string | null;
           created_at?: string;
@@ -322,6 +324,7 @@ export interface Database {
           extended_mins?: number;
           rate_per_hour?: number;
           final_amount?: number | null;
+          num_people?: number | null;
           is_deleted?: boolean;
           deleted_at?: string | null;
           created_at?: string;

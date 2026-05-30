@@ -17,6 +17,7 @@ function makeItem(overrides: Partial<OrderItem> = {}): OrderItem {
     extended_mins: 0,
     rate_per_hour: 60,
     final_amount: null,
+    num_people: null,
     is_deleted: false,
     deleted_at: null,
     created_at: new Date().toISOString(),

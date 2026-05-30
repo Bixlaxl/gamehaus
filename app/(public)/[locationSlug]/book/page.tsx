@@ -271,6 +271,7 @@ export default function CheckoutPage() {
           scheduled_end:          i.scheduledEnd,
           scheduled_duration_mins: i.durationMins,
           rate_per_hour:          i.ratePerHour,
+          num_people:             i.numPeople,
         })),
         coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
       }),
@@ -369,6 +370,7 @@ export default function CheckoutPage() {
           scheduled_end:           i.scheduledEnd,
           scheduled_duration_mins: i.durationMins,
           rate_per_hour:           i.ratePerHour,
+          num_people:              i.numPeople,
         })),
       }),
     });

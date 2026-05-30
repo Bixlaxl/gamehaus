@@ -213,6 +213,16 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
           </span>
         </div>
 
+        {/* People / controller count badge (only when tier pricing applied) */}
+        {item.num_people != null && (
+          <span
+            className="inline-flex w-fit items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+            style={{ background: "rgba(212,84,26,0.12)", color: "#D4541A" }}
+          >
+            {item.num_people} {table.type === "ps5" ? "ctrl" : "ppl"}
+          </span>
+        )}
+
         {/* Progress bar */}
         <div
           className="h-1.5 rounded-full overflow-hidden"
@@ -323,6 +333,8 @@ const RunningCard = memo(RunningCardImpl, (a, b) =>
   a.item.status === b.item.status &&
   a.item.expected_end === b.item.expected_end &&
   a.item.actual_start === b.item.actual_start &&
+  a.item.num_people === b.item.num_people &&
+  a.item.rate_per_hour === b.item.rate_per_hour &&
   a.order?.customer_name === b.order?.customer_name &&
   // Live bill depends on extras length + total; cheap to compare counts/sum
   a.order?.extras?.length === b.order?.extras?.length &&

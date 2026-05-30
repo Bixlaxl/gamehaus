@@ -26,6 +26,12 @@ ALTER TABLE order_extras ADD COLUMN IF NOT EXISTS cost_price NUMERIC NOT NULL DE
 -- foosball:     null (flat hourly_rate only)
 ALTER TABLE tables ADD COLUMN IF NOT EXISTS people_pricing JSONB;
 
+-- Phase 4b: Per-session player / controller count.
+-- Snapshot of how many people the rate_per_hour was set for, so staff can
+-- adjust mid-session ("customer brought an extra friend") and the bill
+-- recomputes by looking up the new rate from tables.people_pricing.
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS num_people INTEGER;
+
 -- Phase 5: Membership plans
 CREATE TABLE IF NOT EXISTS membership_plans (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
