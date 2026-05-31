@@ -131,37 +131,52 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
         </p>
       </section>
 
-      {/* ── Booking payment & cancellation ──────────────────────────────── */}
-      <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-        <div className="flex items-center gap-2">
-          <Wallet className="h-4 w-4 text-blue-600" />
-          <h2 className="font-semibold text-gray-900">Booking — Payment & Cancellation</h2>
+      {/* ── Booking — Reserve table block ─────────────────────────────── */}
+      <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        <div className="flex items-start gap-2">
+          <Wallet className="h-4 w-4 text-blue-600 mt-0.5" />
+          <div>
+            <h2 className="font-semibold text-gray-900">Reserve table</h2>
+            <p className="text-[12px] text-gray-500 mt-0.5">
+              Customer pays a fixed amount online to hold the slot; the rest is collected at the venue.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-1.5 max-w-xs">
-          <Label className="text-xs">Advance amount per table (₹)</Label>
+          <Label className="text-xs">Reserve amount per table (₹)</Label>
           <Input
             type="number" min={0}
             value={draft.booking.advance_amount_per_table}
             onChange={(e) => update("booking", { advance_amount_per_table: Math.max(0, parseInt(e.target.value) || 0) })}
           />
-          <p className="text-[11px] text-gray-400">
-            Charged upfront when the customer picks the &quot;Reserve&quot; option at checkout. Remainder collected at the venue.
-          </p>
         </div>
 
         <CancellationEditor
-          title="Cancellation policy — full payment"
-          subtitle="When the customer pays the entire amount online up front."
-          tiers={draft.booking.cancellation_full}
-          onChange={(t) => setTiers("cancellation_full", t)}
-        />
-
-        <CancellationEditor
-          title="Cancellation policy — advance only"
-          subtitle="When the customer only pre-paid the advance and will pay the rest at the venue."
+          title="Cancellation refund — Reserve"
+          subtitle="What the customer gets back from the reserve amount if they cancel."
           tiers={draft.booking.cancellation_advance}
           onChange={(t) => setTiers("cancellation_advance", t)}
+        />
+      </section>
+
+      {/* ── Booking — Full advance payment block ──────────────────────── */}
+      <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        <div className="flex items-start gap-2">
+          <Wallet className="h-4 w-4 text-emerald-600 mt-0.5" />
+          <div>
+            <h2 className="font-semibold text-gray-900">Full advance payment</h2>
+            <p className="text-[12px] text-gray-500 mt-0.5">
+              Customer pays the entire booking amount online up front (no balance due at the venue).
+            </p>
+          </div>
+        </div>
+
+        <CancellationEditor
+          title="Cancellation refund — Full payment"
+          subtitle="What the customer gets back from the full amount if they cancel."
+          tiers={draft.booking.cancellation_full}
+          onChange={(t) => setTiers("cancellation_full", t)}
         />
       </section>
 
