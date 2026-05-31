@@ -54,6 +54,18 @@ CREATE TABLE IF NOT EXISTS inventory_stock_logs (
 CREATE INDEX IF NOT EXISTS idx_inv_stock_logs_item    ON inventory_stock_logs(inventory_item_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_inv_stock_logs_loc     ON inventory_stock_logs(location_id, created_at DESC);
 
+-- Phase 7: Single-row app-wide settings (loyalty, stock, booking policy)
+-- Stored as one JSONB blob so we don't migrate the schema every time we add
+-- a new knob. id is CHECK-constrained to 1 so the table can only ever have
+-- one row.
+CREATE TABLE IF NOT EXISTS app_settings (
+  id          INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  data        JSONB   NOT NULL DEFAULT '{}'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by  UUID REFERENCES users(id)
+);
+INSERT INTO app_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
 -- Phase 5: Membership plans
 CREATE TABLE IF NOT EXISTS membership_plans (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -655,6 +655,27 @@ export interface Database {
           }
         ];
       };
+      app_settings: {
+        Row: {
+          id: number;
+          data: Record<string, unknown>;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: number;
+          data?: Record<string, unknown>;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: number;
+          data?: Record<string, unknown>;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       inventory_stock_logs: {
         Row: {
           id: string;
@@ -798,6 +819,10 @@ export type InventoryItem =
   Database["public"]["Tables"]["inventory_items"]["Row"];
 export type InventoryStockLog =
   Database["public"]["Tables"]["inventory_stock_logs"]["Row"];
+
+// app_settings is a single-row jsonb-blob table; the AppSettings shape lives
+// in lib/settings.ts. We expose the row type here so the supabase client knows
+// the table exists.
 export type MembershipPlan =
   Database["public"]["Tables"]["membership_plans"]["Row"];
 export type CustomerMembership =

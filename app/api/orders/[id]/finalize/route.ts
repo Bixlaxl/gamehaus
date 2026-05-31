@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { calculateBill } from "@/lib/billing/engine";
+import { getAppSettings } from "@/lib/settings";
 import { z } from "zod";
 import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 
@@ -124,18 +125,26 @@ export async function POST(
     : 0;
   const billAfterMembership   = Math.max(0, bill.totalDue - membershipDiscount);
 
-  // Validate points against remaining balance
+  // Load owner-configured loyalty rates (falls back to defaults if unset)
+  const settings = await getAppSettings(admin);
+  const earnRate   = settings.loyalty.earn_rupees_per_point;
+  const redeemRate = settings.loyalty.redeem_rupees_per_point;
+
+  // Validate points against remaining balance — cap so redemption can't push
+  // the bill below zero or exceed the customer's actual balance.
   let validatedPoints = points_redeemed;
   if (validatedPoints > 0 && effectivePhone) {
     const balance = (pointsProfileResult as { data: { points_balance: number } | null }).data?.points_balance ?? 0;
-    validatedPoints = Math.min(validatedPoints, balance, Math.floor(billAfterMembership));
+    const maxByBill = Math.floor(billAfterMembership / redeemRate);
+    validatedPoints = Math.min(validatedPoints, balance, maxByBill);
   } else {
     validatedPoints = 0;
   }
 
-  // Apply points discount on top of membership discount
-  const finalDue = Math.max(0, Math.round((billAfterMembership - validatedPoints) * 100) / 100);
-  const pointsEarned = Math.floor(finalDue / 100);
+  // Apply points discount: each point is worth `redeemRate` rupees off the bill.
+  const pointsDiscount = validatedPoints * redeemRate;
+  const finalDue = Math.max(0, Math.round((billAfterMembership - pointsDiscount) * 100) / 100);
+  const pointsEarned = Math.floor(finalDue / earnRate);
 
   // All four writes/reads are independent — run them in parallel (4 round trips → 1)
   const [

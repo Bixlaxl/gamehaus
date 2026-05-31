@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAppSettings } from "@/lib/settings";
 
 export const runtime = 'edge';
 
@@ -54,7 +55,8 @@ export async function POST(request: Request) {
 
   // Award / deduct loyalty points
   if (order.customer_phone) {
-    const pointsEarned = Math.floor(amount / 100);
+    const settings = await getAppSettings(admin);
+    const pointsEarned = Math.floor(amount / settings.loyalty.earn_rupees_per_point);
     const netPoints    = pointsEarned - points_redeemed;
 
     const { data: profile } = await admin

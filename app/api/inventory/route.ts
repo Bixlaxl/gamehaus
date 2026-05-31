@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err, inventoryItemSchema } from "@/lib/validators/schemas";
+import { getAppSettings } from "@/lib/settings";
 
 export const runtime = "edge";
 
@@ -37,9 +38,19 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  // Apply owner-configured default low-stock threshold when the create payload
+  // doesn't carry one. Owner can always override per-item later.
+  const settings = await getAppSettings(admin);
+  const insertPayload = {
+    ...parsed.data,
+    low_stock_threshold:
+      (parsed.data as { low_stock_threshold?: number }).low_stock_threshold
+        ?? settings.stock.default_low_threshold,
+  };
+
   const { data, error } = await admin
     .from("inventory_items")
-    .insert(parsed.data)
+    .insert(insertPayload)
     .select()
     .single();
 

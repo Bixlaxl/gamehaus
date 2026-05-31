@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAppSettings } from "@/lib/settings";
 
 export const runtime = 'edge';
 
@@ -60,7 +61,8 @@ export async function POST(request: Request) {
       ]);
 
       if (order?.customer_phone) {
-        const pointsEarned = Math.floor(paymentRow.amount / 100);
+        const settings = await getAppSettings(admin);
+        const pointsEarned = Math.floor(paymentRow.amount / settings.loyalty.earn_rupees_per_point);
         const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
 
         const { data: profile } = await admin

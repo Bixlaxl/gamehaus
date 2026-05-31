@@ -104,6 +104,35 @@ export default function CheckoutPage() {
   const [redeemInput, setRedeemInput] = useState("0");
   const [now, setNow]                 = useState(() => new Date());
   const [couponState, setCouponState] = useState<CouponState>({ status: "idle" });
+  // Owner-configurable booking knobs. Defaults match the pre-settings world
+  // (₹100/table advance, 3hr/1hr cancellation tiers) so the page renders
+  // sensibly even before /api/settings resolves.
+  const [advancePerTable, setAdvancePerTable] = useState(100);
+  const [cancellationTiers, setCancellationTiers] = useState<{
+    full:    { hours_before: number; refund_pct: number }[];
+    advance: { hours_before: number; refund_pct: number }[];
+  }>({
+    full:    [{ hours_before: 3, refund_pct: 100 }, { hours_before: 1, refund_pct: 50 }],
+    advance: [{ hours_before: 3, refund_pct: 100 }, { hours_before: 1, refund_pct: 0  }],
+  });
+  useEffect(() => {
+    let abort = false;
+    fetch("/api/settings")
+      .then((r) => r.json() as Promise<{ success: boolean; data?: { booking?: { advance_amount_per_table?: number; cancellation_full?: typeof cancellationTiers.full; cancellation_advance?: typeof cancellationTiers.advance } } }>)
+      .then((body) => {
+        if (abort || !body.success || !body.data?.booking) return;
+        if (typeof body.data.booking.advance_amount_per_table === "number") {
+          setAdvancePerTable(body.data.booking.advance_amount_per_table);
+        }
+        setCancellationTiers({
+          full:    body.data.booking.cancellation_full    ?? cancellationTiers.full,
+          advance: body.data.booking.cancellation_advance ?? cancellationTiers.advance,
+        });
+      })
+      .catch(() => {});
+    return () => { abort = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const lookupTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const couponTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitting   = useRef(false);
@@ -182,7 +211,7 @@ export default function CheckoutPage() {
   const chipBg  = dark ? "#1A1A1A" : "#EFEFEF";
 
   const subtotal      = cart.items.reduce((s, i) => s + i.amount, 0);
-  const baseAmount    = paymentMode === "advance" ? 100 * cart.items.length : subtotal;
+  const baseAmount    = paymentMode === "advance" ? advancePerTable * cart.items.length : subtotal;
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
   const baseAfterCoupon   = Math.max(0, baseAmount - effectiveDiscount);
@@ -633,13 +662,13 @@ export default function CheckoutPage() {
                       <CreditCard className="h-4 w-4 mb-2" style={{ color: active ? "#D4541A" : textMut }} />
                       <p className="font-semibold text-sm" style={{ color: textPri }}>
                         {mode === "advance"
-                          ? `Reserve — ₹${100 * cart.items.length}`
+                          ? `Reserve — ₹${advancePerTable * cart.items.length}`
                           : "Pay in full"}
                       </p>
                       <p className="text-xs mt-0.5" style={{ color: textSec }}>
                         {mode === "advance"
                           ? cart.items.length > 1
-                            ? `₹100/table · rest at venue`
+                            ? `₹${advancePerTable}/table · rest at venue`
                             : "Rest at venue"
                           : formatCurrency(subtotal)}
                       </p>
@@ -647,6 +676,38 @@ export default function CheckoutPage() {
                   );
                 })}
               </div>
+
+              {/* Cancellation policy — surfaces the refund tiers owner configured */}
+              {(() => {
+                const tiers = (paymentMode === "full" ? cancellationTiers.full : cancellationTiers.advance)
+                  .slice()
+                  .sort((a, b) => b.hours_before - a.hours_before);
+                if (tiers.length === 0) return null;
+                return (
+                  <div
+                    className="rounded-xl px-4 py-3"
+                    style={{ background: inputBg, border: `1px dashed ${inputBdr}` }}
+                  >
+                    <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMut }}>
+                      Cancellation refund
+                    </p>
+                    <ul className="space-y-1">
+                      {tiers.map((t, i) => (
+                        <li key={i} className="flex justify-between text-xs">
+                          <span style={{ color: textSec }}>
+                            {t.hours_before === 0
+                              ? "Less than 1 hour before"
+                              : `${t.hours_before}+ hours before`}
+                          </span>
+                          <span className="font-bold" style={{ color: t.refund_pct > 0 ? "#10B981" : textMut }}>
+                            {t.refund_pct}% refund
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {paymentMode === "full" && (
                 <div>
