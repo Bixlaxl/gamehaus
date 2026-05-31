@@ -116,6 +116,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const [date, setDate]               = useState(new Date().toISOString().split("T")[0]);
   const [booking, setBooking]         = useState<Table | null>(null);
   const [selectedSlots, setSelected]  = useState<string[]>([]);
+  const [step, setStep]               = useState<"when" | "players">("when");
   const [numPeople, setNumPeople]     = useState<string | null>(null); // key into people_pricing
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
   const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
@@ -285,6 +286,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function openSheet(table: Table) {
     setBooking(table);
     setSelected([]);
+    setStep("when");
     // Default people selection to smallest group size if pricing exists
     const keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
     setNumPeople(keys[0] ?? null);
@@ -299,6 +301,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     setNumPeople(null);
     setBlocked([]);
     setSlotsLoading(false);
+    setStep("when");
   }
 
   /*
@@ -610,208 +613,339 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
               <div className="w-10 h-1 rounded-full" style={{ background: inputBdr }} />
             </div>
 
-            <div className="px-4 sm:px-5 pt-2 pb-10 max-w-lg mx-auto space-y-5">
+            <div className="px-4 sm:px-5 pt-2 pb-28 max-w-lg mx-auto space-y-4">
 
-              {/* Header */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full text-white mb-2" style={{ background: sheetType.accent }}>
-                    {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
-                  </span>
-                  <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
-                  <p className="text-sm mt-0.5" style={{ color: textSec }}>
-                    {formatCurrency(effectiveRate)}/hr
-                  </p>
-                </div>
-                <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              {(() => {
+                const hasPricing = pricingOptions.length > 0;
+                const onWhen     = step === "when";
+                const stopLabel  = (() => {
+                  if (selectedSlots.length === 0) return "";
+                  const last = selectedSlots[selectedSlots.length - 1];
+                  return fmt(slotEndTime(last));
+                })();
+                const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("en-IN", {
+                  weekday: "short", day: "numeric", month: "short",
+                }).toUpperCase();
+                const isToday   = date === new Date().toISOString().split("T")[0];
 
-              {/* Date + live selection summary */}
-              <div
-                className="flex items-center justify-between px-4 py-3 rounded-xl"
-                style={{ background: inputBg, border: `1.5px solid ${inputBdr}` }}
-              >
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: textMut }}>Date</p>
-                  <p className="text-sm font-semibold" style={{ color: textPri }}>
-                    {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
-                  </p>
-                </div>
-                {selectedSlots.length > 0 && (
+                const startBg  = sheetType.accent;
+                const stopBg   = "#10B981";  // distinct green for the end slot, matches the legend
+                const middleBg = `${sheetType.accent}26`; // ~15% accent — soft outline for interior
+
+                return (
                   <>
-                    <div className="w-px h-8" style={{ background: inputBdr }} />
-                    <div className="text-right">
-                      <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: textMut }}>Selected</p>
-                      <p className="text-sm font-semibold" style={{ color: textPri }}>
-                        {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Slot grid — 3 cols, range format, selectable / occupied */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
-                  Select Time Slots
-                </label>
-
-                {slotsLoading ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
-                    {Array.from({ length: 9 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-11 rounded-xl animate-pulse"
-                        style={{ background: inputBg, opacity: 1 - i * 0.08 }}
-                      />
-                    ))}
-                  </div>
-                ) : allSlots.length === 0 ? (
-                  <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
-                ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 max-h-64 sm:max-h-72 overflow-y-auto scrollbar-hide pr-1">
-                    {allSlots.map(s => {
-                      const serverBlocked = isServerBlocked(date, s);
-                      const cartOccupied  = isCartOccupied(booking.id, date, s);
-                      const selected      = selectedSlots.includes(s);
-                      const hasStart      = selectedSlots.length > 0;
-                      const isStartSlot   = s === selectedSlots[0];
-                      // Once a start is chosen, all other slots show their END time
-                      const displayTime   = (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s);
-
-                      // Booked by someone else — show muted, non-interactive
-                      if (serverBlocked) {
-                        return (
-                          <div
-                            key={s}
-                            title="Already booked"
-                            className="flex flex-col items-center justify-center py-3 rounded-xl select-none pointer-events-none gap-0.5"
-                            style={{
-                              background: dark ? "rgba(239,68,68,0.06)" : "rgba(239,68,68,0.05)",
-                              border: `1.5px solid ${dark ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.15)"}`,
-                            }}
+                    {/* ── Header (chip + name + close, with optional Back arrow on step 2) ── */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        {!onWhen && (
+                          <button
+                            onClick={() => setStep("when")}
+                            className="p-1.5 mt-0.5 rounded-full shrink-0"
+                            style={{ background: inputBg, color: textSec }}
+                            aria-label="Back"
                           >
-                            <span className="text-[11px] font-bold leading-tight line-through" style={{ color: textMut }}>
-                              {displayTime}
+                            <ArrowLeft className="h-4 w-4" />
+                          </button>
+                        )}
+                        <div className="min-w-0">
+                          <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full text-white mb-2" style={{ background: sheetType.accent }}>
+                            {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
+                          </span>
+                          <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
+                        </div>
+                      </div>
+                      <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* ── Stepper (1·When ──── 2·Players) ── */}
+                    {hasPricing && (
+                      <div className="flex items-center gap-3 pt-1">
+                        <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textPri : textMut }}>
+                          1 · When
+                        </span>
+                        <div className="flex-1 h-px" style={{ background: onWhen ? sheetType.accent : inputBdr }} />
+                        <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textMut : textPri }}>
+                          2 · {booking.type === "ps5" ? "Controllers" : "Players"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* ╔═════════════════════════════ STEP 1 — WHEN ═════════════════════════════╗ */}
+                    {onWhen && (
+                      <>
+                        {/* Either an instructional hint OR a chosen-time recap */}
+                        {selectedSlots.length === 0 ? (
+                          <p className="text-sm" style={{ color: textSec }}>
+                            Tap a start time, then a finish time.
+                          </p>
+                        ) : (
+                          <p className="text-sm" style={{ color: textSec }}>
+                            Booked{" "}
+                            <span className="font-bold" style={{ color: textPri }}>
+                              {fmt(selectedSlots[0])} → {stopLabel}
                             </span>
-                            <span className="text-[9px] leading-tight font-medium" style={{ color: "rgba(239,68,68,0.5)" }}>
+                            . Tap again to change.
+                          </p>
+                        )}
+
+                        {/* Date + legend */}
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-bold tracking-widest" style={{ color: textMut }}>
+                            {dateLabel}{isToday ? " · TODAY" : ""}
+                          </p>
+                          <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: textMut }}>
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: startBg }} />
+                              Start
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: stopBg }} />
+                              Stop
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2.5 h-2.5 rounded-sm" style={{
+                                background: `repeating-linear-gradient(45deg, ${inputBdr}, ${inputBdr} 2px, transparent 2px, transparent 4px)`,
+                              }} />
                               Booked
                             </span>
                           </div>
-                        );
-                      }
+                        </div>
 
-                      // In customer's own cart
-                      if (cartOccupied) {
-                        return (
-                          <div
-                            key={s}
-                            title="Already in your cart"
-                            className="flex flex-col items-center justify-center py-3 rounded-xl select-none pointer-events-none gap-0.5"
-                            style={{ background: "#10B981", border: "1.5px solid #059669" }}
-                          >
-                            <Check className="h-3 w-3 text-white" />
-                            <span className="text-[10px] font-bold text-white leading-tight">{displayTime}</span>
+                        {/* Slot grid */}
+                        {slotsLoading ? (
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                            {Array.from({ length: 9 }).map((_, i) => (
+                              <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: inputBg, opacity: 1 - i * 0.08 }} />
+                            ))}
                           </div>
-                        );
-                      }
+                        ) : allSlots.length === 0 ? (
+                          <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
+                        ) : (
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                            {allSlots.map(s => {
+                              const serverBlocked = isServerBlocked(date, s);
+                              const cartOccupied  = isCartOccupied(booking.id, date, s);
+                              const selected      = selectedSlots.includes(s);
+                              const isStartSlot   = selectedSlots.length > 0 && s === selectedSlots[0];
+                              const isStopSlot    = selectedSlots.length > 1 && s === selectedSlots[selectedSlots.length - 1];
+                              const isInterior    = selected && !isStartSlot && !isStopSlot;
+                              const display       = fmt(s);
 
-                      return (
+                              // Booked elsewhere — hatched, non-interactive
+                              if (serverBlocked) {
+                                return (
+                                  <div
+                                    key={s}
+                                    title="Already booked"
+                                    className="relative flex items-center justify-center py-3 rounded-xl select-none pointer-events-none overflow-hidden"
+                                    style={{
+                                      background: inputBg,
+                                      border: `1.5px solid ${inputBdr}`,
+                                      backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 5px, ${dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)"} 5px, ${dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)"} 10px)`,
+                                    }}
+                                  >
+                                    <span className="text-[11px] font-bold leading-tight line-through" style={{ color: textMut }}>
+                                      {display}
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              // In customer's own cart — green check
+                              if (cartOccupied) {
+                                return (
+                                  <div
+                                    key={s}
+                                    title="Already in your cart"
+                                    className="flex flex-col items-center justify-center py-3 rounded-xl select-none pointer-events-none gap-0.5"
+                                    style={{ background: "#10B981", border: "1.5px solid #059669" }}
+                                  >
+                                    <Check className="h-3 w-3 text-white" />
+                                    <span className="text-[10px] font-bold text-white leading-tight">{display}</span>
+                                  </div>
+                                );
+                              }
+
+                              const bg = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? middleBg : inputBg;
+                              const borderColor = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? `${sheetType.accent}66` : inputBdr;
+                              const fg = (isStartSlot || isStopSlot) ? "#fff" : textPri;
+                              const labelText = isStartSlot ? "START" : isStopSlot ? "STOP" : "";
+
+                              return (
+                                <button
+                                  key={s}
+                                  onClick={() => handleSlotClick(s)}
+                                  className="relative flex flex-col items-center justify-center py-3 rounded-xl transition-all active:scale-95"
+                                  style={{
+                                    background: bg,
+                                    border: `1.5px solid ${borderColor}`,
+                                    boxShadow: (isStartSlot || isStopSlot) ? `0 4px 12px ${bg}55` : "none",
+                                  }}
+                                >
+                                  {labelText && (
+                                    <span className="text-[8px] font-bold tracking-wider leading-none mb-0.5" style={{ color: "rgba(255,255,255,0.92)" }}>
+                                      {labelText}
+                                    </span>
+                                  )}
+                                  <span className="text-[12px] font-bold tabular-nums leading-tight" style={{ color: fg }}>
+                                    {display}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* ╔═══════════════════════════ STEP 2 — PLAYERS ═══════════════════════════╗ */}
+                    {!onWhen && hasPricing && (
+                      <>
+                        {/* Time recap pill — taps back to step 1 to edit */}
                         <button
-                          key={s}
-                          onClick={() => handleSlotClick(s)}
-                          className="flex flex-col items-center justify-center py-3 rounded-xl transition-all active:scale-95 gap-0.5"
+                          onClick={() => setStep("when")}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-colors text-left"
                           style={{
-                            background: selected ? sheetType.accent : inputBg,
-                            border: `1.5px solid ${selected ? sheetType.accent : inputBdr}`,
-                            boxShadow: selected ? `0 4px 12px ${sheetType.accent}40` : "none",
+                            background: dark ? "rgba(16,185,129,0.10)" : "rgba(16,185,129,0.08)",
+                            border:     `1.5px solid ${dark ? "rgba(16,185,129,0.25)" : "rgba(16,185,129,0.30)"}`,
                           }}
                         >
-                          <span
-                            className="text-[11px] font-bold leading-tight"
-                            style={{ color: selected ? "#fff" : textPri }}
-                          >
-                            {displayTime}
-                          </span>
-                          {isStartSlot && (
-                            <span className="text-[8px] font-semibold uppercase tracking-wide leading-tight" style={{ color: "rgba(255,255,255,0.65)" }}>
-                              Start
-                            </span>
-                          )}
+                          <Check className="h-4 w-4 shrink-0" style={{ color: "#10B981" }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-base font-bold tabular-nums" style={{ color: textPri }}>
+                              {fmt(selectedSlots[0])} – {stopLabel}
+                            </p>
+                            <p className="text-xs" style={{ color: textSec }}>
+                              {selLabel} · tap to change
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold uppercase tracking-wide" style={{ color: "#10B981" }}>Edit</span>
                         </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
 
-              {/* People / Controller selector — revealed only after a slot is picked
-                  so the initial sheet stays clean. Default count is already set on
-                  openSheet() to the smallest tier, so the total below is accurate. */}
-              {selectedSlots.length > 0 && pricingOptions.length > 0 && (
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
-                    {booking.type === "ps5" ? "Controllers" : "Players"}
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {pricingOptions.map((n) => {
-                      const active = numPeople === n;
-                      const rate   = booking.people_pricing?.[n] ?? 0;
-                      return (
-                        <button
-                          key={n}
-                          onClick={() => setNumPeople(n)}
-                          className="flex flex-col items-center justify-center py-2.5 rounded-xl transition-all"
-                          style={{
-                            background: active ? sheetType.accent : inputBg,
-                            color:      active ? "#FFF" : textPri,
-                            border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
-                            boxShadow:  active ? `0 4px 14px ${sheetType.accent}40` : "none",
-                          }}
-                        >
-                          <span className="text-sm font-bold leading-none">
-                            {n} {booking.type === "ps5" ? (n === "1" ? "ctrl" : "ctrls") : "ppl"}
-                          </span>
-                          <span className="text-[10px] font-semibold mt-0.5 opacity-80">
-                            ₹{rate}/hr
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                        <div>
+                          <h4 className="text-2xl font-bold leading-tight" style={{ color: textPri }}>
+                            How many are playing?
+                          </h4>
+                          <p className="text-sm mt-1" style={{ color: textSec }}>
+                            Priced per head. We set the table for your group.
+                          </p>
+                        </div>
 
-              {/* Duration + total — only when slots selected */}
-              {selectedSlots.length > 0 && (
-                <div
-                  className="flex items-center justify-between px-4 py-3 rounded-xl"
-                  style={{ background: inputBg, border: `1.5px solid ${inputBdr}` }}
+                        <div className="space-y-2">
+                          {pricingOptions.map((n) => {
+                            const active = numPeople === n;
+                            const rate   = booking.people_pricing?.[n] ?? 0;
+                            const total  = formatCurrency((selMins / 60) * rate);
+                            const isPs5  = booking.type === "ps5";
+                            const noun   = isPs5
+                              ? (n === "1" ? "controller" : "controllers")
+                              : `${n} player${n === "1" ? "" : "s"}`;
+                            const heading = isPs5 ? `${n} ${noun}` : noun;
+                            const sub = isPs5
+                              ? `${n} controller${n === "1" ? "" : "s"} ready`
+                              : `${n} cues & full rack set out`;
+                            return (
+                              <button
+                                key={n}
+                                onClick={() => setNumPeople(n)}
+                                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-left"
+                                style={{
+                                  background: active ? sheetType.accent : inputBg,
+                                  border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
+                                  boxShadow:  active ? `0 6px 18px ${sheetType.accent}40` : "none",
+                                }}
+                              >
+                                <div
+                                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm"
+                                  style={{
+                                    background: active ? "rgba(255,255,255,0.20)" : surface,
+                                    color:      active ? "#fff" : textPri,
+                                    border:     active ? "none" : `1.5px solid ${inputBdr}`,
+                                  }}
+                                >
+                                  {n}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold leading-tight" style={{ color: active ? "#fff" : textPri }}>
+                                    {heading}
+                                  </p>
+                                  <p className="text-[11px] mt-0.5" style={{ color: active ? "rgba(255,255,255,0.85)" : textSec }}>
+                                    {sub}
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-base font-bold tabular-nums" style={{ color: active ? "#fff" : textPri }}>
+                                    {total}
+                                  </p>
+                                  <p className="text-[10px] tabular-nums" style={{ color: active ? "rgba(255,255,255,0.75)" : textMut }}>
+                                    ₹{rate}/hr
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* ── Sticky footer (changes per step) ── */}
+            <div
+              className="sticky bottom-0 left-0 right-0 px-4 sm:px-5 py-3 flex items-center gap-3"
+              style={{
+                background: surface,
+                borderTop: `1px solid ${inputBdr}`,
+                boxShadow: "0 -8px 24px rgba(0,0,0,0.04)",
+              }}
+            >
+              {step === "when" ? (
+                <>
+                  <div className="flex-1 min-w-0">
+                    {selectedSlots.length > 0 ? (
+                      <>
+                        <p className="text-sm font-bold tabular-nums" style={{ color: textPri }}>
+                          {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
+                        </p>
+                        <p className="text-[11px]" style={{ color: textMut }}>
+                          {selLabel} booked
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs" style={{ color: textMut }}>Pick start, then finish</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (pricingOptions.length > 0) setStep("players");
+                      else addToCart(booking);
+                    }}
+                    disabled={selectedSlots.length === 0}
+                    className="px-5 py-3 rounded-xl font-bold text-white text-sm transition-opacity disabled:opacity-40 flex items-center gap-1.5"
+                    style={{ background: "#111111" }}
+                  >
+                    {pricingOptions.length > 0 ? "Confirm time" : `Add to cart — ${selTotal}`}
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => addToCart(booking)}
+                  className="w-full py-3.5 rounded-xl font-bold text-white text-base transition-opacity active:scale-[0.98] flex items-center justify-center gap-2"
+                  style={{
+                    background: sheetType.accent,
+                    boxShadow:  `0 8px 24px ${sheetType.accent}55`,
+                  }}
                 >
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: textMut }}>Duration</p>
-                    <p className="text-sm font-semibold" style={{ color: textPri }}>{selLabel}</p>
-                  </div>
-                  <span className="text-2xl font-bold" style={{ color: sheetType.accent }}>{selTotal}</span>
-                </div>
+                  <ShoppingCart className="h-4 w-4" />
+                  Add to Cart
+                  <span className="ml-auto tabular-nums">{selTotal || formatCurrency(0)}</span>
+                </button>
               )}
-
-              {/* CTA */}
-              <button
-                className="w-full py-4 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98] disabled:opacity-40"
-                style={{
-                  background: "#111111",
-                  boxShadow: selectedSlots.length > 0 ? "0 8px 24px rgba(0,0,0,0.35)" : "none",
-                }}
-                disabled={selectedSlots.length === 0}
-                onClick={() => addToCart(booking)}
-              >
-                {selectedSlots.length > 0
-                  ? `Add to Cart — ${selTotal} · ${selLabel}`
-                  : "Tap slots above to select"}
-              </button>
             </div>
           </div>
         </>
