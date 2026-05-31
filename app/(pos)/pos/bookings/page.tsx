@@ -56,6 +56,7 @@ export default async function StaffBookingsPage() {
         activeRoute="bookings"
         staffName={profile.name}
         locationName={location?.name ?? ""}
+        locationId={profile.location_id}
       />
       <StaffBookingsContent
         locationId={profile.location_id}

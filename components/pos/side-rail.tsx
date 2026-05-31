@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, LayoutGrid, CalendarDays, Boxes } from "lucide-react";
+import { LowStockNavBadge } from "@/components/inventory/low-stock-nav-badge";
 
 type Route = "tables" | "bookings" | "inventory";
 
@@ -12,6 +13,8 @@ interface Props {
   activeRoute: Route;
   staffName?: string;
   locationName?: string;
+  /** Used to scope the low-stock badge to this staff's location. */
+  locationId?: string;
 }
 
 const NAV: { route: Route; label: string; href: string; Icon: React.ComponentType<{ className?: string }> }[] = [
@@ -20,7 +23,7 @@ const NAV: { route: Route; label: string; href: string; Icon: React.ComponentTyp
   { route: "inventory", label: "Inventory", href: "/pos/inventory", Icon: Boxes        },
 ];
 
-export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
+export function POSSideRail({ activeRoute, staffName, locationName, locationId }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [signingOut, setSigningOut] = useState(false);
@@ -66,6 +69,7 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {label}
+                {route === "inventory" && <LowStockNavBadge locationId={locationId} />}
               </Link>
             );
           })}

@@ -270,7 +270,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       )}
 
       {/* ── Side rail (shared across all /pos/* pages) ── */}
-      <POSSideRail activeRoute="tables" staffName={staffName} locationName={locationName} />
+      <POSSideRail activeRoute="tables" staffName={staffName} locationName={locationName} locationId={locationId} />
 
       {/* ── Main area ── */}
       <div className="flex-1 flex flex-col overflow-hidden">

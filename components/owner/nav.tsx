@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { LowStockNavBadge } from "@/components/inventory/low-stock-nav-badge";
 import {
   MapPin, Grid3X3, Users, BookOpen, BarChart2,
   Tag, Settings, LogOut, Home, UserRound, Package, CreditCard,
@@ -149,6 +150,7 @@ export function OwnerNav({ userName }: OwnerNavProps) {
                 style={isActive ? { color: "#D4541A" } : {}}
               />
               {item.label}
+              {item.href === "/owner/inventory" && <LowStockNavBadge />}
             </Link>
           );
         })}

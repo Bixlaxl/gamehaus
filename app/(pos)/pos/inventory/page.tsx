@@ -37,6 +37,7 @@ export default async function StaffInventoryPage() {
         activeRoute="inventory"
         staffName={profile.name}
         locationName={location?.name ?? ""}
+        locationId={profile.location_id}
       />
       <StaffInventoryContent
         locationId={profile.location_id}
