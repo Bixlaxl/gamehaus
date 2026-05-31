@@ -14,6 +14,7 @@ import { installPOSAuthGuard } from "@/lib/pos-fetch";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
 import { POSAlerts } from "./pos-alerts";
+import { POSSideRail } from "./side-rail";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
 import type { Table, Order, OrderItem, Booking } from "@/lib/supabase/types";
 
@@ -268,27 +269,8 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
         </div>
       )}
 
-      {/* ── Side rail ── */}
-      <nav className="w-44 shrink-0 flex flex-col bg-[#161616] border-r border-[#222]">
-        {/* Brand */}
-        <div className="h-14 flex items-center gap-2.5 px-4 border-b border-[#222] shrink-0">
-          <span className="font-black text-lg tracking-tight" style={{ color: "#D4541A" }}>Gamehaus</span>
-        </div>
-
-        <div className="flex-1" />
-
-        {/* Bottom controls */}
-        <div className="shrink-0 flex flex-col gap-0.5 px-2 py-3 border-t border-[#222]">
-          <button
-            onClick={() => void handleSignOut()}
-            disabled={signingOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-40"
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            Sign out
-          </button>
-        </div>
-      </nav>
+      {/* ── Side rail (shared across all /pos/* pages) ── */}
+      <POSSideRail activeRoute="tables" staffName={staffName} locationName={locationName} />
 
       {/* ── Main area ── */}
       <div className="flex-1 flex flex-col overflow-hidden">

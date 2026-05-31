@@ -16,6 +16,7 @@ import type { InventoryItem } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 import NextImage from "next/image";
 import { Plus, Pencil, Trash2, Package, Image } from "lucide-react";
+import { StockBadge, StockControls } from "@/components/inventory/stock-controls";
 
 type LocationLite = { id: string; name: string };
 
@@ -355,6 +356,10 @@ export function InventoryContent({
                     {item.cost_price > 0 && (
                       <p className="text-xs text-gray-400">Cost: {formatCurrency(item.cost_price)}</p>
                     )}
+                    <div className="flex items-center justify-between pt-1">
+                      <StockBadge item={item} size="sm" />
+                      <StockControls item={item} invalidateKeys={[["inventory", selectedLocation]]} />
+                    </div>
                     <div className="flex items-center gap-2 pt-1">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
                         <Pencil className="h-3.5 w-3.5" />

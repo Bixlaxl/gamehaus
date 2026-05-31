@@ -613,6 +613,8 @@ export interface Database {
           image_url: string | null;
           is_active: boolean;
           sort_order: number;
+          stock_count: number;
+          low_stock_threshold: number;
           created_at: string;
         };
         Insert: {
@@ -625,6 +627,8 @@ export interface Database {
           image_url?: string | null;
           is_active?: boolean;
           sort_order?: number;
+          stock_count?: number;
+          low_stock_threshold?: number;
           created_at?: string;
         };
         Update: {
@@ -637,6 +641,8 @@ export interface Database {
           image_url?: string | null;
           is_active?: boolean;
           sort_order?: number;
+          stock_count?: number;
+          low_stock_threshold?: number;
           created_at?: string;
         };
         Relationships: [
@@ -645,6 +651,50 @@ export interface Database {
             columns: ["location_id"];
             isOneToOne: false;
             referencedRelation: "locations";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      inventory_stock_logs: {
+        Row: {
+          id: string;
+          inventory_item_id: string;
+          location_id: string;
+          change: number;
+          reason: "restock" | "sale" | "adjustment" | "reverse";
+          order_extra_id: string | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          inventory_item_id: string;
+          location_id: string;
+          change: number;
+          reason: "restock" | "sale" | "adjustment" | "reverse";
+          order_extra_id?: string | null;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          inventory_item_id?: string;
+          location_id?: string;
+          change?: number;
+          reason?: "restock" | "sale" | "adjustment" | "reverse";
+          order_extra_id?: string | null;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_stock_logs_inventory_item_id_fkey";
+            columns: ["inventory_item_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
             referencedColumns: ["id"];
           }
         ];
@@ -746,6 +796,8 @@ export type CustomerProfile =
   Database["public"]["Tables"]["customer_profiles"]["Row"];
 export type InventoryItem =
   Database["public"]["Tables"]["inventory_items"]["Row"];
+export type InventoryStockLog =
+  Database["public"]["Tables"]["inventory_stock_logs"]["Row"];
 export type MembershipPlan =
   Database["public"]["Tables"]["membership_plans"]["Row"];
 export type CustomerMembership =

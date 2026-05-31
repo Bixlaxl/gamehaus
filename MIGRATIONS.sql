@@ -32,6 +32,28 @@ ALTER TABLE tables ADD COLUMN IF NOT EXISTS people_pricing JSONB;
 -- recomputes by looking up the new rate from tables.people_pricing.
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS num_people INTEGER;
 
+-- Phase 6: Inventory stock tracking + restock log
+-- stock_count is the source of truth ("how many units on hand right now").
+-- low_stock_threshold optionally triggers a warning badge in the UI.
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS stock_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS low_stock_threshold INTEGER NOT NULL DEFAULT 5;
+
+-- Every change to stock_count is logged here so owner can audit movement.
+-- change = positive for restock / adjustment-up, negative for sale / adjustment-down.
+CREATE TABLE IF NOT EXISTS inventory_stock_logs (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  inventory_item_id UUID NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  location_id       UUID NOT NULL REFERENCES locations(id),
+  change            INTEGER NOT NULL,
+  reason            TEXT NOT NULL,                 -- 'restock' | 'sale' | 'adjustment' | 'reverse'
+  order_extra_id    UUID REFERENCES order_extras(id) ON DELETE SET NULL,
+  note              TEXT,
+  created_by        UUID REFERENCES users(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_inv_stock_logs_item    ON inventory_stock_logs(inventory_item_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inv_stock_logs_loc     ON inventory_stock_logs(location_id, created_at DESC);
+
 -- Phase 5: Membership plans
 CREATE TABLE IF NOT EXISTS membership_plans (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
