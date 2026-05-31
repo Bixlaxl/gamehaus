@@ -84,10 +84,19 @@ export function StaffInventoryContent({ locationId, locationName, initialItems }
                 {category} <span className="text-[#555] font-mono ml-1">· {list.length}</span>
               </h2>
               <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {list.map((item) => (
+                {list.map((item) => {
+                  const isOut = item.stock_count <= 0;
+                  const isLow = !isOut && item.stock_count <= item.low_stock_threshold;
+                  const cardStyle = isOut
+                    ? { background: "rgba(239,68,68,0.07)", borderColor: "rgba(239,68,68,0.45)" }
+                    : isLow
+                    ? { background: "rgba(245,158,11,0.07)", borderColor: "rgba(245,158,11,0.45)" }
+                    : {};
+                  return (
                   <li
                     key={item.id}
-                    className="rounded-xl bg-[#111] border border-[#222] p-3 flex items-center gap-3"
+                    className="rounded-xl bg-[#111] border-2 border-[#222] p-3 flex items-center gap-3"
+                    style={cardStyle}
                   >
                     <div className="shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-[#1a1a1a] flex items-center justify-center">
                       {item.image_url ? (
@@ -111,7 +120,8 @@ export function StaffInventoryContent({ locationId, locationName, initialItems }
                       />
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </section>
           ))}

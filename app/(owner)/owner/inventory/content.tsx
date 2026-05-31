@@ -312,10 +312,20 @@ export function InventoryContent({
             {catItems.map((item) => {
               const loc = initialLocations.find((l) => l.id === item.location_id);
               const m   = margin(item);
+              // Low-stock items get tinted so the owner spots them at a glance,
+              // not just from the badge. Out-of-stock = red, low = amber.
+              const isOut = item.stock_count <= 0;
+              const isLow = !isOut && item.stock_count <= item.low_stock_threshold;
+              const cardStyle = isOut
+                ? { background: "rgba(239,68,68,0.04)", borderColor: "rgba(239,68,68,0.35)" }
+                : isLow
+                ? { background: "rgba(245,158,11,0.04)", borderColor: "rgba(245,158,11,0.40)" }
+                : {};
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+                  className="rounded-2xl border-2 shadow-sm overflow-hidden bg-white border-gray-100"
+                  style={cardStyle}
                 >
                   <div className="relative h-32 bg-gray-100 flex items-center justify-center">
                     {item.image_url ? (
