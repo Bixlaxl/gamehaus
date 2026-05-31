@@ -118,7 +118,7 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">Default low-stock threshold for new items</Label>
+            <Label className="text-xs">Low-stock threshold</Label>
             <Input
               type="number" min={0}
               value={draft.stock.default_low_threshold}
@@ -127,8 +127,11 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
           </div>
         </div>
         <p className="text-xs text-gray-400">
-          Used as the default when staff or owner creates a new inventory item. Existing items keep their own threshold; you can change per-item from the inventory page.
+          Items at or below this count show an alert badge on the Inventory nav (owner + staff).
+          Save changes above first, then click <b>Apply to all existing items</b> to push the new
+          threshold to every catalogue item (otherwise it only affects new items going forward).
         </p>
+        <ApplyDefaultThresholdButton />
       </section>
 
       {/* ── Booking — Reserve table block ─────────────────────────────── */}
@@ -237,6 +240,37 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
         </div>
       )}
     </div>
+  );
+}
+
+function ApplyDefaultThresholdButton() {
+  const qc = useQueryClient();
+  const apply = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/inventory/apply-default-threshold", { method: "POST" });
+      const body = await res.json() as { success: true; data: { updated: number; threshold: number } } | { success: false; error: string };
+      if (!body.success) throw new Error(body.error);
+      return body.data;
+    },
+    onSuccess: (d) => {
+      if (d.updated === 0) {
+        toast.success(`Already applied — every item is at ${d.threshold}.`);
+      } else {
+        toast.success(`Threshold ${d.threshold} applied to ${d.updated} item${d.updated === 1 ? "" : "s"}.`);
+      }
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  return (
+    <button
+      onClick={() => apply.mutate()}
+      disabled={apply.isPending}
+      className="text-xs font-bold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-40"
+    >
+      {apply.isPending ? "Applying…" : "Apply to all existing items"}
+    </button>
   );
 }
 

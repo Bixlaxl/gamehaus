@@ -72,9 +72,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
             shouldDehydrateQuery: (query) => {
               if (query.state.status !== "success") return false;
               const key = String(query.queryKey[0] ?? "");
-              if (key.startsWith("pos-"))     return false;
+              if (key.startsWith("pos-"))      return false;
               if (key.startsWith("customer-")) return false;
               if (key.startsWith("session"))   return false;
+              // Inventory + stock counts change too quickly to safely persist
+              // — a stale-on-reload count is the root of the "stocks don't
+              // match between owner and staff" bug.
+              if (key === "inventory")               return false;
+              if (key === "inventory-low-count")     return false;
+              if (key === "staff-bookings")          return false;
               return true;
             },
           },
