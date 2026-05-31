@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, LayoutGrid, CalendarDays, Boxes } from "lucide-react";
 import { LowStockNavBadge } from "@/components/inventory/low-stock-nav-badge";
+import { StockAlertsBell } from "@/components/inventory/stock-alerts-bell";
 
 type Route = "tables" | "bookings" | "inventory";
 
@@ -47,9 +48,19 @@ export function POSSideRail({ activeRoute, staffName, locationName, locationId }
       )}
 
       <nav className="w-44 shrink-0 flex flex-col bg-[#161616] border-r border-[#222]">
-        {/* Brand */}
-        <div className="h-14 flex items-center gap-2.5 px-4 border-b border-[#222] shrink-0">
-          <span className="font-black text-lg tracking-tight" style={{ color: "#D4541A" }}>Gamehaus</span>
+        {/* Brand + alerts bell */}
+        <div
+          className="h-14 flex items-center gap-2 px-3 border-b border-[#222] shrink-0"
+          style={{ ["--bell-ring" as string]: "#161616" } as React.CSSProperties}
+        >
+          <span className="flex-1 font-black text-lg tracking-tight" style={{ color: "#D4541A" }}>
+            Gamehaus
+          </span>
+          <StockAlertsBell
+            locationId={locationId}
+            variant="dark"
+            inventoryHref="/pos/inventory"
+          />
         </div>
 
         {/* Nav links */}

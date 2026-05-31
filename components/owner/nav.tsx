@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { LowStockNavBadge } from "@/components/inventory/low-stock-nav-badge";
+import { StockAlertsBell } from "@/components/inventory/stock-alerts-bell";
 import {
   MapPin, Grid3X3, Users, BookOpen, BarChart2,
   Tag, Settings, LogOut, Home, UserRound, Package, CreditCard,
@@ -112,14 +113,20 @@ export function OwnerNav({ userName }: OwnerNavProps) {
     )}
     <aside className="w-60 shrink-0 flex flex-col h-screen bg-[#0A0A0A] border-r border-[#1A1A1A]">
 
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-[#1A1A1A]">
-        <div className="flex items-center gap-2.5">
+      {/* Logo + alerts bell */}
+      <div
+        className="px-4 py-4 border-b border-[#1A1A1A]"
+        style={{ ["--bell-ring" as string]: "#0A0A0A" } as React.CSSProperties}
+      >
+        <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-[#D4541A]" />
           <span className="text-white font-bold text-base tracking-tight">Gamehaus</span>
-          <span className="ml-auto text-[9px] font-bold uppercase tracking-widest text-[#333] bg-[#111] px-1.5 py-0.5 rounded">
+          <span className="ml-1 text-[9px] font-bold uppercase tracking-widest text-[#333] bg-[#111] px-1.5 py-0.5 rounded">
             Owner
           </span>
+          <div className="ml-auto">
+            <StockAlertsBell variant="dark" inventoryHref="/owner/inventory" />
+          </div>
         </div>
       </div>
 
