@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, memo } from "react";
+import NextImage from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
@@ -24,6 +25,25 @@ function fmtName(name: string) {
   return name.replace(/\bps(\d)\b/gi, (_, n: string) => `PS${n}`);
 }
 
+// Small inline thumbnail used on Running / Booked / Upcoming card headers.
+// Falls back to the type emoji when no image is set so older tables still look
+// fine — staff can re-upload later.
+function TableThumb({ table, size = 28 }: { table: { image_url: string | null; name: string; type: string }; size?: number }) {
+  if (!table.image_url) {
+    return <span className="text-base shrink-0">{typeIcon[table.type] ?? "🎱"}</span>;
+  }
+  return (
+    <NextImage
+      src={table.image_url}
+      alt={table.name}
+      width={size}
+      height={size}
+      className="rounded shrink-0 object-cover"
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 }
@@ -45,13 +65,26 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
       style={{ border: isSelected ? undefined : "1px solid rgba(255,255,255,0.07)" }}
     >
       <div style={{ height: 4, background: accentTop, flexShrink: 0 }} />
+      {/* Image banner — full width, ~88px tall, so staff identify the table visually */}
+      <div className="relative w-full h-[88px] bg-gray-100 dark:bg-[#1a1a1a] overflow-hidden shrink-0">
+        {table.image_url ? (
+          <NextImage
+            src={table.image_url}
+            alt={table.name}
+            fill
+            sizes="(max-width: 768px) 50vw, 25vw"
+            className="object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-40">
+            {typeIcon[table.type] ?? "🎱"}
+          </div>
+        )}
+        <span className="absolute top-2 right-2 text-[10px] font-extrabold px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white uppercase tracking-wide">
+          Idle
+        </span>
+      </div>
       <div className="flex flex-col flex-1 p-4">
-        <div className="flex items-start justify-between mb-3">
-          <span className="text-3xl leading-none">{typeIcon[table.type] ?? "🎱"}</span>
-          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-gray-800 dark:bg-[#2a2a2a] text-white uppercase tracking-wide">
-            Idle
-          </span>
-        </div>
         <p className="font-bold text-gray-900 dark:text-white text-base leading-tight mb-1">
           {fmtName(table.name)}
         </p>
@@ -189,7 +222,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-base">{typeIcon[table.type] ?? "🎱"}</span>
+            <TableThumb table={table} />
             <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
@@ -330,6 +363,7 @@ const RunningCard = memo(RunningCardImpl, (a, b) =>
   a.isSelected === b.isSelected &&
   a.locationId === b.locationId &&
   a.table.id === b.table.id &&
+  a.table.image_url === b.table.image_url &&
   a.item.id === b.item.id &&
   a.item.status === b.item.status &&
   a.item.expected_end === b.item.expected_end &&
@@ -408,7 +442,7 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-base">{typeIcon[table.type] ?? "🎱"}</span>
+            <TableThumb table={table} />
             <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
@@ -513,6 +547,7 @@ const BookedCard = memo(BookedCardImpl, (a, b) =>
   a.isSelected === b.isSelected &&
   a.locationId === b.locationId &&
   a.table.id === b.table.id &&
+  a.table.image_url === b.table.image_url &&
   a.table.upcomingBooking?.id === b.table.upcomingBooking?.id &&
   a.table.upcomingBooking?.scheduled_start === b.table.upcomingBooking?.scheduled_start &&
   a.table.upcomingBooking?.order?.customer_name === b.table.upcomingBooking?.order?.customer_name
@@ -548,7 +583,7 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-base">{typeIcon[table.type] ?? "🎱"}</span>
+            <TableThumb table={table} />
             <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
