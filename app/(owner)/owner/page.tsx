@@ -234,10 +234,12 @@ export default async function OwnerDashboard({
       .eq("status", "finished")
       .gte("actual_start", thirtyDaysAgo.toISOString()),
 
-    // Sold extras → drives Best-selling items. Join order so we can scope
-    // by order.location_id.
+    // Sold extras → drives Best-selling items. Join order for location
+    // scoping AND inventory_item for the LIVE catalogue name (the row's
+    // own `name` column is a snapshot from sale time, so renaming a drink
+    // in inventory wouldn't otherwise reflect on the dashboard).
     admin.from("order_extras")
-      .select("name, price, quantity, order:orders!inner(location_id, status)")
+      .select("name, price, quantity, order:orders!inner(location_id, status), inventory_item:inventory_items(name)")
       .eq("is_deleted", false)
       .eq("order.status", "finalized")
       .gte("created_at", thirtyDaysAgo.toISOString()),
@@ -329,16 +331,32 @@ export default async function OwnerDashboard({
     ? [...sortedHours].reverse().slice(0, 3).filter((b) => b.count >= 0)
     : [];
 
-  // Best-selling items — group by name (same item name across locations rolls up)
-  const filteredInsightExtras = (insightExtras ?? []).filter(
-    (e) => !loc || (e.order as { location_id?: string } | null)?.location_id === loc
-  );
+  // Best-selling items — group by name (same item name across locations rolls up).
+  // The join shape confuses Supabase's inferred row type when !inner is in
+  // play; explicit shape here keeps the rest of the pipeline typed cleanly.
+  type ExtraRow = {
+    name: string;
+    price: number;
+    quantity: number;
+    order: { location_id: string | null; status: string } | { location_id: string | null; status: string }[] | null;
+    inventory_item: { name: string } | { name: string }[] | null;
+  };
+  const insightExtrasTyped = (insightExtras ?? []) as unknown as ExtraRow[];
+  const filteredInsightExtras = insightExtrasTyped.filter((e) => {
+    if (!loc) return true;
+    const o = Array.isArray(e.order) ? e.order[0] : e.order;
+    return o?.location_id === loc;
+  });
   const sellerMap: Record<string, { name: string; units: number; revenue: number }> = {};
   for (const e of filteredInsightExtras) {
-    const key = e.name;
-    if (!sellerMap[key]) sellerMap[key] = { name: e.name, units: 0, revenue: 0 };
-    sellerMap[key].units   += e.quantity;
-    sellerMap[key].revenue += e.price * e.quantity;
+    // Prefer the LIVE catalogue name so a rename in /owner/inventory
+    // reflects on the dashboard. Falls back to the row's snapshotted name
+    // for legacy custom extras or items that were permanently deleted.
+    const invItem = Array.isArray(e.inventory_item) ? e.inventory_item[0] : e.inventory_item;
+    const liveName = invItem?.name ?? e.name;
+    if (!sellerMap[liveName]) sellerMap[liveName] = { name: liveName, units: 0, revenue: 0 };
+    sellerMap[liveName].units   += e.quantity;
+    sellerMap[liveName].revenue += e.price * e.quantity;
   }
   const topSellers = Object.values(sellerMap)
     .sort((a, b) => b.revenue - a.revenue)
