@@ -654,9 +654,7 @@ function PanelSession({
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
   const qc                = useQueryClient();
 
-  const [addExtraOpen,    setAddExtraOpen]    = useState(false);
   const [catalogueOpen,   setCatalogueOpen]   = useState(false);
-  const [extraForm,       setExtraForm]       = useState({ name: "", price: "", quantity: "1" });
   const [redeemInput,    setRedeemInput]    = useState(String(pointsToRedeem[order.id] ?? 0));
 
   // Lazy — only fetch when staff opens the catalogue. Cached 5 min after first open.
@@ -732,7 +730,6 @@ function PanelSession({
       created_at:        new Date().toISOString(),
     };
     addOrderExtra(order.id, optimistic);
-    setAddExtraOpen(false);
 
     const addPromise: Promise<string> = (async () => {
       const res = await fetch(`/api/orders/${order.id}/extras`, {
@@ -770,16 +767,6 @@ function PanelSession({
     pendingExtras.current.set(tempId, addPromise);
     addPromise.finally(() => { pendingExtras.current.delete(tempId); });
     return addPromise;
-  }
-
-  async function addCustomExtra() {
-    if (!extraForm.name || !extraForm.price) return;
-    await addExtraItem({
-      name:     extraForm.name,
-      price:    parseFloat(extraForm.price),
-      quantity: parseInt(extraForm.quantity) || 1,
-    });
-    setExtraForm({ name: "", price: "", quantity: "1" });
   }
 
   async function deleteExtra(extraId: string) {
@@ -1182,12 +1169,6 @@ function PanelSession({
               >
                 <Plus className="h-3.5 w-3.5" /> {catalogueOpen ? "Hide items" : "Extra items"}
               </button>
-              <button
-                onClick={() => setAddExtraOpen((v) => !v)}
-                className="text-xs font-semibold text-gray-500 dark:text-[#999] hover:text-gray-900 dark:hover:text-white transition-colors"
-              >
-                {addExtraOpen ? "Hide custom" : "Custom"}
-              </button>
             </div>
           </div>
 
@@ -1307,49 +1288,6 @@ function PanelSession({
             </div>
           )}
 
-          {/* Custom item form — collapsed by default, only shows when toggled */}
-          {addExtraOpen && (
-            <div className="p-3 space-y-2">
-              <input
-                placeholder="Item name"
-                value={extraForm.name}
-                onChange={(e) => setExtraForm({ ...extraForm, name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                  bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
-                  text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
-                  focus:border-[#D4541A]"
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Price (₹)"
-                  value={extraForm.price}
-                  onChange={(e) => setExtraForm({ ...extraForm, price: e.target.value })}
-                  className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                    bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                    text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666] focus:border-[#D4541A]"
-                />
-                <input
-                  type="number"
-                  placeholder="Qty"
-                  value={extraForm.quantity}
-                  onChange={(e) => setExtraForm({ ...extraForm, quantity: e.target.value })}
-                  className="w-16 px-3 py-2 rounded-lg text-sm outline-none transition-colors
-                    bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                    text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666] focus:border-[#D4541A]"
-                />
-              </div>
-              <button
-                onClick={addCustomExtra}
-                disabled={!extraForm.name || !extraForm.price}
-                className="w-full py-2 rounded-lg text-white text-sm font-bold transition-opacity hover:opacity-85 disabled:opacity-40"
-                style={{ background: "#D4541A" }}
-              >
-                Add to order
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="h-2" />
