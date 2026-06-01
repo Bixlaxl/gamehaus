@@ -60,8 +60,11 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[300px] bg-white dark:bg-[#111] overflow-hidden cursor-pointer transition-all select-none
-        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      className={`group rounded-xl flex flex-col min-h-[300px] bg-white dark:bg-[#111] overflow-hidden cursor-pointer select-none
+        transition-[transform,box-shadow,border-color] duration-150 ease-out
+        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30 hover:border-[#D4541A]/60
+        active:translate-y-0 active:scale-[0.99]
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : "1px solid rgba(255,255,255,0.07)" }}
     >
       <div style={{ height: 4, background: accentTop, flexShrink: 0 }} />
@@ -218,8 +221,11 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[220px] ${bgClass} overflow-hidden cursor-pointer transition-all select-none
-        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      className={`rounded-xl flex flex-col min-h-[220px] ${bgClass} overflow-hidden cursor-pointer select-none
+        transition-[transform,box-shadow] duration-150 ease-out
+        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30
+        active:translate-y-0 active:scale-[0.99]
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : `1px solid ${accentColor}22` }}
     >
       <div style={{ height: 4, background: accentColor, flexShrink: 0 }} />
@@ -438,8 +444,11 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[200px] bg-amber-50 dark:bg-[rgba(245,158,11,0.05)] overflow-hidden cursor-pointer transition-all select-none
-        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
+      className={`rounded-xl flex flex-col min-h-[200px] bg-amber-50 dark:bg-[rgba(245,158,11,0.05)] overflow-hidden cursor-pointer select-none
+        transition-[transform,box-shadow] duration-150 ease-out
+        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-amber-900/30
+        active:translate-y-0 active:scale-[0.99]
+        ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : "1px solid rgba(245,158,11,0.22)" }}
     >
       <div style={{ height: 4, background: "#f59e0b", flexShrink: 0 }} />
