@@ -641,6 +641,7 @@ function PanelSession({
   const addOrderExtra     = usePOSStore((s) => s.addOrderExtra);
   const removeOrderExtra  = usePOSStore((s) => s.removeOrderExtra);
   const patchOrderExtra   = usePOSStore((s) => s.patchOrderExtra);
+  const replaceOrderExtraId = usePOSStore((s) => s.replaceOrderExtraId);
   const setExtendModal    = usePOSStore((s) => s.setExtendModalItem);
   const setStopConfirmItem = usePOSStore((s) => s.setStopConfirmItem);
   const setPointsToRedeem = usePOSStore((s) => s.setPointsToRedeem);
@@ -695,13 +696,22 @@ function PanelSession({
     setPointsToRedeem(order.id, Math.min(n, maxRedeem));
   }
 
+  // Tracks optimistic extras whose POST is still in flight: tempId → promise
+  // that resolves with the real DB id (or rejects if the add failed).
+  // PATCH/DELETE handlers await this so they can't 404 on a tempId.
+  const pendingExtras = useRef<Map<string, Promise<string>>>(new Map());
+  async function resolveRealExtraId(id: string): Promise<string> {
+    const pending = pendingExtras.current.get(id);
+    return pending ? await pending : id;
+  }
+
   async function addExtraItem(opts: {
     name: string;
     price: number;
     cost_price?: number;
     quantity: number;
     inventory_item_id?: string;
-  }) {
+  }): Promise<string> {
     const tempId     = crypto.randomUUID();
     const optimistic: OrderExtra = {
       id:                tempId,
@@ -718,23 +728,43 @@ function PanelSession({
     };
     addOrderExtra(order.id, optimistic);
     setAddExtraOpen(false);
-    const res = await fetch(`/api/orders/${order.id}/extras`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        name:              opts.name,
-        price:             opts.price,
-        cost_price:        opts.cost_price ?? 0,
-        quantity:          opts.quantity,
-        inventory_item_id: opts.inventory_item_id,
-      }),
-    });
-    if (!res.ok) {
-      removeOrderExtra(order.id, tempId);
-      toast.error("Failed to add extra");
-    } else {
+
+    const addPromise: Promise<string> = (async () => {
+      const res = await fetch(`/api/orders/${order.id}/extras`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          name:              opts.name,
+          price:             opts.price,
+          cost_price:        opts.cost_price ?? 0,
+          quantity:          opts.quantity,
+          inventory_item_id: opts.inventory_item_id,
+        }),
+      });
+      if (!res.ok) {
+        removeOrderExtra(order.id, tempId);
+        toast.error("Failed to add extra");
+        throw new Error("add extra failed");
+      }
+      const body = await res.json() as
+        | { success: true;  data: { id: string } }
+        | { success: false; error: string };
+      if (!body.success) {
+        removeOrderExtra(order.id, tempId);
+        toast.error(body.error || "Failed to add extra");
+        throw new Error(body.error);
+      }
+      // Swap the tempId for the real DB id so subsequent PATCH/DELETE works
+      replaceOrderExtraId(order.id, tempId, body.data.id);
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    }
+      return body.data.id;
+    })();
+
+    // Register the in-flight add so concurrent +/- clicks await it. Clean up
+    // either way so the map doesn't grow forever.
+    pendingExtras.current.set(tempId, addPromise);
+    addPromise.finally(() => { pendingExtras.current.delete(tempId); });
+    return addPromise;
   }
 
   async function addCustomExtra() {
@@ -748,21 +778,33 @@ function PanelSession({
   }
 
   async function deleteExtra(extraId: string) {
+    // Optimistic remove uses whichever id the UI knows about; the DELETE then
+    // waits for the add POST to resolve (if it was still in flight) so we
+    // never hit the DB with a tempId that doesn't exist yet.
     removeOrderExtra(order.id, extraId);
-    const res = await fetch(`/api/orders/${order.id}/extras/${extraId}`, { method: "DELETE" });
+    const realId = await resolveRealExtraId(extraId).catch(() => null);
+    if (!realId) return; // add itself failed → nothing to delete server-side
+    const res = await fetch(`/api/orders/${order.id}/extras/${realId}`, { method: "DELETE" });
     if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
   }
 
   // ─── Inventory quantity stepper helpers ───────────────────────────────────
   async function patchExtraQuantity(extraId: string, newQuantity: number, prevQuantity: number) {
     patchOrderExtra(order.id, extraId, { quantity: newQuantity });
-    const res = await fetch(`/api/orders/${order.id}/extras/${extraId}`, {
+    // Wait for any in-flight add so the PATCH hits the real DB id, not the
+    // optimistic tempId (which 404s and produced "Failed to update quantity").
+    const realId = await resolveRealExtraId(extraId).catch(() => null);
+    if (!realId) {
+      // The add itself failed and has already toasted + rolled back. No PATCH.
+      return;
+    }
+    const res = await fetch(`/api/orders/${order.id}/extras/${realId}`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ quantity: newQuantity }),
     });
     if (!res.ok) {
-      patchOrderExtra(order.id, extraId, { quantity: prevQuantity });
+      patchOrderExtra(order.id, realId, { quantity: prevQuantity });
       toast.error("Failed to update quantity");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });

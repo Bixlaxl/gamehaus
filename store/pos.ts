@@ -58,6 +58,10 @@ interface POSStore {
   addOrderExtra: (orderId: string, extra: OrderExtra) => void;
   removeOrderExtra: (orderId: string, extraId: string) => void;
   patchOrderExtra: (orderId: string, extraId: string, patch: Partial<OrderExtra>) => void;
+  // Swap the client-generated tempId of an optimistically-added extra with the
+  // real DB id once the POST returns. Prevents subsequent PATCH/DELETE calls
+  // from 404ing because the server doesn't know the tempId.
+  replaceOrderExtraId: (orderId: string, tempId: string, realId: string) => void;
 
   // Realtime handlers
   handleOrderItemChange: (payload: RealtimePostgresChangesPayload<OrderItem>) => void;
@@ -134,6 +138,18 @@ export const usePOSStore = create<POSStore>((set, get) => ({
           ? {
               ...order,
               extras: order.extras.map((e) => (e.id === extraId ? { ...e, ...patch } : e)),
+            }
+          : order
+      ),
+    })),
+
+  replaceOrderExtraId: (orderId, tempId, realId) =>
+    set((state) => ({
+      openOrders: state.openOrders.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              extras: order.extras.map((e) => (e.id === tempId ? { ...e, id: realId } : e)),
             }
           : order
       ),

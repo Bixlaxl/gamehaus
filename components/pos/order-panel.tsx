@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore, getSelectedOrder } from "@/store/pos";
 import { calculateBill, GRACE_MINS } from "@/lib/billing/engine";
@@ -31,6 +31,9 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
 
   const [addExtraOpen, setAddExtraOpen] = useState(false);
   const [extraForm,    setExtraForm]    = useState({ name: "", price: "", quantity: "1" });
+  // tempId → real DB id, kept around so a fast delete-after-add doesn't 404.
+  // Declared before the early return so React's hook order stays stable.
+  const pendingExtras = useRef<Map<string, Promise<string>>>(new Map());
 
   if (!selectedOrder) return null;
 
@@ -57,12 +60,19 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
     }
   }
 
+  async function resolveRealExtraId(id: string): Promise<string | null> {
+    const pending = pendingExtras.current.get(id);
+    if (!pending) return id;
+    try { return await pending; } catch { return null; }
+  }
+
   async function addExtra() {
     if (!extraForm.name || !extraForm.price || !selectedOrder) return;
+    const orderId = selectedOrder.id;
     const tempId  = crypto.randomUUID();
     const optimistic: OrderExtra = {
       id:                tempId,
-      order_id:          selectedOrder.id,
+      order_id:          orderId,
       name:              extraForm.name,
       price:             parseFloat(extraForm.price),
       cost_price:        0,
@@ -73,26 +83,44 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
       added_by:          null,
       created_at:        new Date().toISOString(),
     };
-    store.addOrderExtra(selectedOrder.id, optimistic);
+    store.addOrderExtra(orderId, optimistic);
     setExtraForm({ name: "", price: "", quantity: "1" });
     setAddExtraOpen(false);
-    const res = await fetch(`/api/orders/${selectedOrder.id}/extras`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ name: optimistic.name, price: optimistic.price, quantity: optimistic.quantity }),
-    });
-    if (!res.ok) {
-      store.removeOrderExtra(selectedOrder.id, tempId);
-      toast.error("Failed to add extra");
-    } else {
+
+    const addPromise: Promise<string> = (async () => {
+      const res = await fetch(`/api/orders/${orderId}/extras`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ name: optimistic.name, price: optimistic.price, quantity: optimistic.quantity }),
+      });
+      if (!res.ok) {
+        store.removeOrderExtra(orderId, tempId);
+        toast.error("Failed to add extra");
+        throw new Error("add failed");
+      }
+      const body = await res.json() as
+        | { success: true;  data: { id: string } }
+        | { success: false; error: string };
+      if (!body.success) {
+        store.removeOrderExtra(orderId, tempId);
+        toast.error(body.error || "Failed to add extra");
+        throw new Error(body.error);
+      }
+      store.replaceOrderExtraId(orderId, tempId, body.data.id);
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    }
+      return body.data.id;
+    })();
+    pendingExtras.current.set(tempId, addPromise);
+    addPromise.finally(() => { pendingExtras.current.delete(tempId); });
   }
 
   async function deleteExtra(extraId: string) {
     if (!selectedOrder) return;
-    store.removeOrderExtra(selectedOrder.id, extraId);
-    const res = await fetch(`/api/orders/${selectedOrder.id}/extras/${extraId}`, { method: "DELETE" });
+    const orderId = selectedOrder.id;
+    store.removeOrderExtra(orderId, extraId);
+    const realId = await resolveRealExtraId(extraId);
+    if (!realId) return; // add failed, nothing to delete server-side
+    const res = await fetch(`/api/orders/${orderId}/extras/${realId}`, { method: "DELETE" });
     if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
   }
 
