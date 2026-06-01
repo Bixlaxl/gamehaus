@@ -10,30 +10,24 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**
- * Owner-side bookings list for /owner/bookings.
- *
- * Why this exists as an admin-backed API instead of a browser-client Supabase
- * query: RLS on bookings (and the joined orders/order_items/tables/locations)
- * is restrictive for the anon role. The previous in-page browser query
- * silently returned [] when the date changed, which is what made it look like
- * "the bookings don't appear until I reload". The server-rendered initial
- * fetch worked because it uses the admin client; the client refetch didn't.
+ * Owner-side bookings list. Also reachable from the staff bookings page
+ * (`/pos/bookings`), in which case results are auto-scoped to the staff
+ * member's own location.
  *
  * Returns bookings whose scheduled_start falls between ?from and ?to,
- * with the same joined shape the page renders.
+ * with the joined shape used by both BookingsContent variants.
  */
 export async function GET(request: Request) {
-  // Owner-only — re-verify the session here so we can't be hit anonymously
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
   const { data: viewer } = await supabase
     .from("users")
-    .select("role")
+    .select("role, location_id")
     .eq("id", session.user.id)
     .single();
-  if (viewer?.role !== "owner") {
+  if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
   }
 
@@ -57,5 +51,17 @@ export async function GET(request: Request) {
     .order("scheduled_start");
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
-  return NextResponse.json(ok(data ?? []));
+
+  // Staff sees only their own location. Filter post-fetch since Supabase's
+  // PostgREST nested-eq() filter on table.location.id is awkward; the volume
+  // is small (<a few hundred bookings per day) so JS-side filtering is fine.
+  const rows = data ?? [];
+  const filtered = viewer.role === "staff" && viewer.location_id
+    ? rows.filter((b) => {
+        const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;
+        return t?.location?.id === viewer.location_id;
+      })
+    : rows;
+
+  return NextResponse.json(ok(filtered));
 }

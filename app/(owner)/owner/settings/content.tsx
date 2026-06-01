@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -84,10 +84,11 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
             <Label className="text-xs">Earn rate — customer spends ₹</Label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">₹</span>
-              <Input
-                type="number" min={1}
+              <NumberField
                 value={draft.loyalty.earn_rupees_per_point}
-                onChange={(e) => update("loyalty", { earn_rupees_per_point: Math.max(1, parseInt(e.target.value) || 1) })}
+                onChange={(n) => update("loyalty", { earn_rupees_per_point: n })}
+                min={1}
+                integer
               />
               <span className="text-sm text-gray-500 whitespace-nowrap">= 1 pt</span>
             </div>
@@ -96,10 +97,11 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
             <Label className="text-xs">Redeem rate — 1 pt is worth ₹</Label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">1 pt =</span>
-              <Input
-                type="number" min={0.01} step={0.5}
+              <NumberField
                 value={draft.loyalty.redeem_rupees_per_point}
-                onChange={(e) => update("loyalty", { redeem_rupees_per_point: Math.max(0.01, parseFloat(e.target.value) || 0.01) })}
+                onChange={(n) => update("loyalty", { redeem_rupees_per_point: n })}
+                min={0.01}
+                step={0.5}
               />
               <span className="text-sm text-gray-500">₹ off</span>
             </div>
@@ -119,10 +121,11 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Low-stock threshold</Label>
-            <Input
-              type="number" min={0}
+            <NumberField
               value={draft.stock.default_low_threshold}
-              onChange={(e) => update("stock", { default_low_threshold: Math.max(0, parseInt(e.target.value) || 0) })}
+              onChange={(n) => update("stock", { default_low_threshold: n })}
+              min={0}
+              integer
             />
           </div>
         </div>
@@ -148,10 +151,11 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
 
         <div className="space-y-1.5 max-w-xs">
           <Label className="text-xs">Reserve amount per table (₹)</Label>
-          <Input
-            type="number" min={0}
+          <NumberField
             value={draft.booking.advance_amount_per_table}
-            onChange={(e) => update("booking", { advance_amount_per_table: Math.max(0, parseInt(e.target.value) || 0) })}
+            onChange={(n) => update("booking", { advance_amount_per_table: n })}
+            min={0}
+            integer
           />
         </div>
 
@@ -274,6 +278,80 @@ function ApplyDefaultThresholdButton() {
   );
 }
 
+/**
+ * Numeric input that lets the user clear the field and type freely.
+ * The native onChange clamping previously forced any blank to "0" or "1"
+ * so deleting digits was impossible. Here we keep a raw string buffer
+ * locally, only push a parsed number up when the value is actually valid,
+ * and snap back to the last good value on blur if left empty.
+ */
+function NumberField({
+  value, onChange, min, max, step, integer, className,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  integer?: boolean;
+  className?: string;
+}) {
+  const [raw, setRaw] = useState<string>(String(value));
+  // Keep raw in sync when external value changes (e.g. saving resets state)
+  // — but only when our buffer doesn't represent the same number, so the
+  // user's mid-edit string isn't clobbered.
+  useEffect(() => {
+    const parsed = integer ? parseInt(raw) : parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed === value) return;
+    if (raw === "" && value === 0) return;
+    setRaw(String(value));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    setRaw(v);
+    if (v === "") return; // allow empty buffer; commit nothing yet
+    const n = integer ? parseInt(v) : parseFloat(v);
+    if (!Number.isFinite(n)) return;
+    let clamped = n;
+    if (min !== undefined && clamped < min) return; // don't auto-snap mid-edit
+    if (max !== undefined && clamped > max) clamped = max;
+    onChange(clamped);
+  }
+
+  function handleBlur() {
+    if (raw === "") {
+      // Field left empty — fall back to min (or 0). Pushes to parent + buffer.
+      const fallback = min ?? 0;
+      setRaw(String(fallback));
+      onChange(fallback);
+      return;
+    }
+    const n = integer ? parseInt(raw) : parseFloat(raw);
+    if (!Number.isFinite(n)) {
+      setRaw(String(value));
+      return;
+    }
+    let clamped = n;
+    if (min !== undefined && clamped < min) clamped = min;
+    if (max !== undefined && clamped > max) clamped = max;
+    setRaw(String(clamped));
+    onChange(clamped);
+  }
+
+  return (
+    <Input
+      type="number"
+      step={step}
+      value={raw}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      className={className}
+    />
+  );
+}
+
 function CancellationEditor({
   title, subtitle, tiers, onChange,
 }: {
@@ -307,16 +385,20 @@ function CancellationEditor({
         {tiers.map((t, i) => (
           <div key={i} className="flex items-center gap-3 p-3">
             <span className="text-xs text-gray-500">If cancelled at least</span>
-            <Input
-              type="number" min={0} className="w-20"
+            <NumberField
               value={t.hours_before}
-              onChange={(e) => update(i, { hours_before: Math.max(0, parseFloat(e.target.value) || 0) })}
+              onChange={(n) => update(i, { hours_before: n })}
+              min={0}
+              step={0.25}
+              className="w-20"
             />
             <span className="text-xs text-gray-500">hr before, refund</span>
-            <Input
-              type="number" min={0} max={100} className="w-20"
+            <NumberField
               value={t.refund_pct}
-              onChange={(e) => update(i, { refund_pct: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) })}
+              onChange={(n) => update(i, { refund_pct: n })}
+              min={0}
+              max={100}
+              className="w-20"
             />
             <span className="text-xs text-gray-500">%</span>
             <button

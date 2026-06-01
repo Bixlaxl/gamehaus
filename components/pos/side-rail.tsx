@@ -4,34 +4,32 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, LayoutGrid, CalendarDays, Boxes } from "lucide-react";
-import { LowStockNavBadge } from "@/components/inventory/low-stock-nav-badge";
-import { StockAlertsBell } from "@/components/inventory/stock-alerts-bell";
+import { LogOut, LayoutGrid, CalendarDays } from "lucide-react";
 
-type Route = "tables" | "bookings" | "inventory";
+// Inventory was removed from the staff side rail; owners still manage stock
+// via /owner/inventory. Bell + low-stock badge components stay in the repo
+// for the owner sidebar but are no longer rendered here.
+
+type Route = "tables" | "bookings";
 
 interface Props {
   /** Optional override — when omitted, the active route is derived from the URL pathname. */
   activeRoute?: Route;
   staffName?: string;
   locationName?: string;
-  /** Used to scope the low-stock badge to this staff's location. */
-  locationId?: string;
 }
 
 const NAV: { route: Route; label: string; href: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { route: "tables",    label: "Tables",    href: "/pos",           Icon: LayoutGrid   },
   { route: "bookings",  label: "Bookings",  href: "/pos/bookings",  Icon: CalendarDays },
-  { route: "inventory", label: "Inventory", href: "/pos/inventory", Icon: Boxes        },
 ];
 
 function deriveActive(pathname: string): Route {
-  if (pathname.startsWith("/pos/bookings"))  return "bookings";
-  if (pathname.startsWith("/pos/inventory")) return "inventory";
+  if (pathname.startsWith("/pos/bookings")) return "bookings";
   return "tables";
 }
 
-export function POSSideRail({ activeRoute, staffName, locationName, locationId }: Props) {
+export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
   const pathname = usePathname();
   const active   = activeRoute ?? deriveActive(pathname ?? "/pos");
   const router = useRouter();
@@ -57,19 +55,11 @@ export function POSSideRail({ activeRoute, staffName, locationName, locationId }
       )}
 
       <nav className="w-44 shrink-0 flex flex-col bg-[#161616] border-r border-[#222]">
-        {/* Brand + alerts bell */}
-        <div
-          className="h-14 flex items-center gap-2 px-3 border-b border-[#222] shrink-0"
-          style={{ ["--bell-ring" as string]: "#161616" } as React.CSSProperties}
-        >
+        {/* Brand */}
+        <div className="h-14 flex items-center gap-2 px-3 border-b border-[#222] shrink-0">
           <span className="flex-1 font-black text-lg tracking-tight" style={{ color: "#D4541A" }}>
             Gamehaus
           </span>
-          <StockAlertsBell
-            locationId={locationId}
-            variant="dark"
-            inventoryHref="/pos/inventory"
-          />
         </div>
 
         {/* Nav links */}
@@ -89,7 +79,6 @@ export function POSSideRail({ activeRoute, staffName, locationName, locationId }
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {label}
-                {route === "inventory" && <LowStockNavBadge locationId={locationId} />}
               </Link>
             );
           })}

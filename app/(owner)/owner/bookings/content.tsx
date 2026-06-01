@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { cn, getShopWindow } from "@/lib/utils";
+import { toast } from "sonner";
 import type { Booking, Order, Location } from "@/lib/supabase/types";
 
 const supabase = createClient();
@@ -51,10 +52,28 @@ function fmt(iso: string) {
 export function BookingsContent({
   initialLocations,
   initialBookings,
+  mode = "owner",
+  staffLocationId,
 }: {
   initialLocations: Pick<Location, "id" | "name" | "opening_time" | "closing_time">[];
   initialBookings: BookingRow[];
+  /** When 'staff', the rows show Check-in / No-show action buttons (gated by
+   *  the location's operating hours). 'owner' is read-only management. */
+  mode?: "owner" | "staff";
+  /** Staff's own location_id — used to gate actions by THEIR operating hours
+   *  even when their location is one of several in the list. */
+  staffLocationId?: string;
 }) {
+  const qc = useQueryClient();
+  const [busyBookingId, setBusyBookingId] = useState<string | null>(null);
+  // Re-evaluate operating hours every 30s — fine grain for gating actions
+  // (we don't need per-second precision; the user clicks a button, not a clock).
+  const [actionTick, setActionTick] = useState(0);
+  useEffect(() => {
+    if (mode !== "staff") return;
+    const id = setInterval(() => setActionTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [mode]);
   const [date, setDate]           = useState(new Date().toISOString().split("T")[0]);
   // The date this component was first mounted on. Used to decide whether the
   // SSR-passed initialBookings actually applies to the date the user is now
@@ -95,6 +114,52 @@ export function BookingsContent({
 
   const opening = locations?.[0]?.opening_time ?? "10:00";
   const closing = locations?.[0]?.closing_time ?? "23:00";
+
+  // Staff mode: action buttons are gated by THE STAFF'S OWN location hours.
+  // Read the recompute trigger so this re-evaluates every 30s.
+  void actionTick;
+  const staffLoc = mode === "staff" && staffLocationId
+    ? (locations ?? []).find((l) => l.id === staffLocationId)
+    : null;
+  const staffShop = staffLoc
+    ? getShopWindow(new Date(), staffLoc.opening_time, staffLoc.closing_time)
+    : null;
+  const actionsAllowed = mode !== "staff" || (staffShop !== null && !staffShop.outsideHours);
+  const actionsBlockedReason = staffShop?.outsideHours
+    ? (staffShop.beforeOpen ? `Shop opens at ${staffLoc?.opening_time}` : "Shop is closed")
+    : "";
+
+  async function doCheckIn(b: BookingRow) {
+    setBusyBookingId(b.id);
+    const res = await fetch(`/api/bookings/${b.id}/checkin`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      toast.error(body.error ?? "Check-in failed");
+    } else {
+      toast.success("Checked in");
+      void refetch();
+      // Realtime usually catches this on the Tables page, but invalidate
+      // the POS caches too so a quick tab back shows the running session.
+      qc.invalidateQueries({ queryKey: ["pos-orders"] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+    }
+    setBusyBookingId(null);
+  }
+
+  async function doNoShow(b: BookingRow) {
+    if (!confirm(`Mark ${b.order?.customer_name ?? "this customer"} as no-show? The slot will be freed.`)) return;
+    setBusyBookingId(b.id);
+    const res = await fetch(`/api/bookings/${b.id}/noshow`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      toast.error(body.error ?? "Failed to mark no-show");
+    } else {
+      toast.success("Marked no-show");
+      void refetch();
+      qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+    }
+    setBusyBookingId(null);
+  }
 
   const { data: bookings, isLoading, refetch } = useQuery({
     queryKey: ["owner-bookings", date, opening, closing],
@@ -270,6 +335,13 @@ export function BookingsContent({
         </span>
       </div>
 
+      {/* Outside-hours banner — only on staff mode when the shop isn't open */}
+      {mode === "staff" && !actionsAllowed && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold px-3 py-2">
+          {actionsBlockedReason}. Check-in and No-show are disabled until the shop is open.
+        </div>
+      )}
+
       {/* Schedule View */}
       {viewMode === "schedule" && (
         <div className="space-y-3">
@@ -325,6 +397,31 @@ export function BookingsContent({
                       >
                         Refund
                       </Button>
+                    )}
+                    {mode === "staff" && b.status === "confirmed" && (
+                      <div className="flex gap-1.5 shrink-0">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500"
+                          onClick={() => doCheckIn(b)}
+                          disabled={!actionsAllowed || busyBookingId === b.id}
+                          title={!actionsAllowed ? actionsBlockedReason : "Check in this customer"}
+                        >
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          {busyBookingId === b.id ? "…" : "Check in"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => doNoShow(b)}
+                          disabled={!actionsAllowed || busyBookingId === b.id}
+                          title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          {busyBookingId === b.id ? "…" : "No-show"}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -385,6 +482,31 @@ export function BookingsContent({
                         <Button variant="outline" size="sm" onClick={() => setRefund(b)}>
                           Process Refund
                         </Button>
+                      )}
+                      {mode === "staff" && b.status === "confirmed" && (
+                        <div className="flex justify-end gap-1.5">
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500"
+                            onClick={() => doCheckIn(b)}
+                            disabled={!actionsAllowed || busyBookingId === b.id}
+                            title={!actionsAllowed ? actionsBlockedReason : "Check in this customer"}
+                          >
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            {busyBookingId === b.id ? "…" : "Check in"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => doNoShow(b)}
+                            disabled={!actionsAllowed || busyBookingId === b.id}
+                            title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            {busyBookingId === b.id ? "…" : "No-show"}
+                          </Button>
+                        </div>
                       )}
                     </td>
                   </tr>

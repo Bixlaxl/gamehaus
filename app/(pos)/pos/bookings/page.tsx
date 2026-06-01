@@ -3,8 +3,15 @@ export const runtime = "edge";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { StaffBookingsContent } from "./content";
+import { BookingsContent } from "@/app/(owner)/owner/bookings/content";
 
+/**
+ * Staff bookings page — reuses the owner BookingsContent component verbatim
+ * so the two surfaces stay visually identical. Differences vs owner:
+ *   - mode="staff" injects Check-in / No-show buttons on each confirmed row
+ *   - those buttons are gated by the staff's location operating hours
+ *   - the API is auto-scoped to the staff's location (see /api/owner/bookings)
+ */
 export default async function StaffBookingsPage() {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -20,40 +27,51 @@ export default async function StaffBookingsPage() {
   const admin = createAdminClient();
   const { data: location } = await admin
     .from("locations")
-    .select("name")
+    .select("id, name, opening_time, closing_time")
     .eq("id", profile.location_id)
     .single();
 
-  // Today + tomorrow window — staff cares about what's coming next, not history.
+  const opening = location?.opening_time ?? "10:00";
+  const closing = location?.closing_time ?? "23:00";
   const todayDate = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 2);
-  const toDate = tomorrow.toISOString().split("T")[0];
-  const from = new Date(`${todayDate}T00:00:00+05:30`).toISOString();
-  const to   = new Date(`${toDate}T00:00:00+05:30`).toISOString();
+
+  const [openH, openM]   = opening.split(":").map(Number);
+  const [closeH, closeM] = closing.split(":").map(Number);
+  const crossesMidnight  = closeH < openH || (closeH === openH && closeM < openM);
+  const from = new Date(`${todayDate}T${opening}+05:30`).toISOString();
+  const closeDate = crossesMidnight
+    ? (() => { const d = new Date(todayDate + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
+    : todayDate;
+  const to = new Date(`${closeDate}T${closing}+05:30`).toISOString();
 
   const { data: bookings } = await admin
     .from("bookings")
     .select(`
       *,
       order:orders(customer_name, customer_phone, advance_paid),
-      order_item:order_items(status, table:tables(name, type, location_id))
+      order_item:order_items(table:tables(name, type, location:locations(name, id)))
     `)
-    .eq("order_item.table.location_id", profile.location_id)
     .gte("scheduled_start", from)
     .lte("scheduled_start", to)
     .order("scheduled_start");
 
-  // The join doesn't filter — it sets table to null when location_id mismatches.
-  // We filter those rows out here so staff only sees their own location.
-  const ownLocationBookings = (bookings ?? []).filter(
-    (b) => (b.order_item as { table?: unknown } | null)?.table != null
-  );
+  // Filter to staff's own location (server defensive; the GET endpoint also does this)
+  const ownLocationBookings = (bookings ?? []).filter((b) => {
+    const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;
+    return t?.location?.id === profile.location_id;
+  });
 
   return (
-    <StaffBookingsContent
-      locationId={profile.location_id}
-      locationName={location?.name ?? ""}
-      initialBookings={ownLocationBookings}
-    />
+    // Render in the same off-white surface the owner panel uses so the layout
+    // matches exactly. The /pos shared layout's dark wrapper is overridden
+    // here for this single page since the bookings UI was designed light-mode.
+    <main className="flex-1 overflow-y-auto bg-[#fafafa] text-gray-900 p-6">
+      <BookingsContent
+        mode="staff"
+        staffLocationId={profile.location_id}
+        initialLocations={location ? [location] : []}
+        initialBookings={ownLocationBookings}
+      />
+    </main>
   );
 }
