@@ -6,17 +6,23 @@ import { ok, err } from "@/lib/validators/schemas";
 export const runtime = "edge";
 
 /**
- * Check-in slider search.
+ * Check-in slider feed.
  *
- * Why this exists as an API instead of a browser-client Supabase query:
- *   RLS on the bookings table is restrictive for the anon role, so the
- *   previous browser-side query silently returned [] (no error, just no
- *   rows). This route uses the admin client to bypass RLS — same pattern
- *   as the other /api/pos/* feeds.
+ * Behaviour:
+ *   - Empty `q` → return ALL today + tomorrow confirmed bookings at this
+ *     location, ordered by start time. The slider is small enough that
+ *     showing the full list as the default is more useful than forcing the
+ *     staff to type something to discover bookings exist.
+ *   - With `q` → narrow that list by case-insensitive substring match on
+ *     customer name OR phone.
  *
- * Window: today + tomorrow. Covers same-day check-ins and the common
- * "I'm here for my booking tonight but the date already rolled over"
- * post-midnight edge case.
+ * Why admin client: RLS on bookings is restrictive for anon, so the
+ * previous browser-side query silently returned []. Same pattern as the
+ * other /api/pos/* feeds.
+ *
+ * Why IST-aware date window: Edge runtime is UTC. setHours() / new Date()
+ * in UTC can cut off late-night IST traffic (e.g. a midnight-IST booking
+ * is "tomorrow" in UTC). We resolve "today" in IST explicitly.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -30,35 +36,46 @@ export async function GET(request: Request) {
   if (!locationId) {
     return NextResponse.json(err("locationId required", "VALIDATION_ERROR"), { status: 400 });
   }
-  if (!q) {
-    return NextResponse.json(ok([]));
-  }
+
+  // ── IST-anchored 2-day window ────────────────────────────────────────────
+  // Shift "now" into IST so getUTC* reads IST clock components, then build
+  // the UTC ms of IST midnight today and +2 days from there.
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const nowMs   = Date.now();
+  const nowIst  = new Date(nowMs + IST_OFFSET_MS);
+  const y       = nowIst.getUTCFullYear();
+  const mo      = nowIst.getUTCMonth();
+  const d       = nowIst.getUTCDate();
+  const dayStartMs = Date.UTC(y, mo, d, 0, 0, 0) - IST_OFFSET_MS;       // IST today 00:00
+  const dayEndMs   = dayStartMs + 2 * 24 * 60 * 60 * 1000;              // +2 days
 
   const admin = createAdminClient();
-  const now      = new Date();
-  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
-  const dayEnd   = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 2);
-
   const { data, error } = await admin
     .from("bookings")
     .select("*, order:orders!inner(customer_name, customer_phone, location_id)")
     .eq("status", "confirmed")
     .eq("orders.location_id", locationId)
-    .gte("scheduled_start", dayStart.toISOString())
-    .lt("scheduled_start", dayEnd.toISOString())
+    .gte("scheduled_start", new Date(dayStartMs).toISOString())
+    .lt("scheduled_start",  new Date(dayEndMs).toISOString())
     .order("scheduled_start", { ascending: true });
 
   if (error) {
     return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
   }
 
-  // Filter by name/phone client-side on the server — small result set per location/2-day window
+  // Empty query → show the whole today/tomorrow list as the default view.
+  // Non-empty → narrow client-side (small set, no extra round trip).
+  const rows = data ?? [];
+  if (!q) {
+    return NextResponse.json(ok(rows));
+  }
+
   const term = q.toLowerCase();
-  const filtered = (data ?? []).filter((b) => {
-    const o = b.order as { customer_name: string; customer_phone: string | null } | null;
+  const filtered = rows.filter((b) => {
+    const o = b.order as { customer_name?: string; customer_phone?: string | null } | null;
     if (!o) return false;
     return (
-      o.customer_name.toLowerCase().includes(term) ||
+      (o.customer_name ?? "").toLowerCase().includes(term) ||
       (o.customer_phone ?? "").includes(term)
     );
   });
