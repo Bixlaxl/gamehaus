@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/image-compress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,8 +102,12 @@ export function TablesContent({
   });
 
   async function uploadImage(file: File, tableId: string, locationId: string): Promise<string> {
+    // Compress + convert to WebP in the browser before the network upload.
+    // A typical 3 MB iPhone shot becomes ~80 KB at 1200px / quality 0.85,
+    // visually indistinguishable on the card sizes we render.
+    const compressed = await compressImage(file, { maxWidth: 1200, quality: 0.85, format: "webp" });
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", compressed);
     fd.append("tableId", tableId);
     fd.append("locationId", locationId);
     const res = await fetch("/api/tables/upload", { method: "POST", body: fd });

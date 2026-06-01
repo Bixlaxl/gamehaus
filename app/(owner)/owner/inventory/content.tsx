@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
+import { compressImage } from "@/lib/image-compress";
 import NextImage from "next/image";
 import { Plus, Pencil, Trash2, Package, Image } from "lucide-react";
 import { StockBadge, StockControls } from "@/components/inventory/stock-controls";
@@ -92,8 +93,12 @@ export function InventoryContent({
   }, [displayed]);
 
   async function uploadImage(file: File, itemId: string, locationId: string): Promise<string> {
+    // Compress + convert to WebP client-side before the upload. Inventory cards
+    // render small (~80px thumbs) so we don't need a huge source — 800px is
+    // plenty even on retina, keeps the upload payload <60 KB.
+    const compressed = await compressImage(file, { maxWidth: 800, quality: 0.85, format: "webp" });
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", compressed);
     fd.append("itemId", itemId);
     fd.append("locationId", locationId);
     const res = await fetch("/api/inventory/upload", { method: "POST", body: fd });
