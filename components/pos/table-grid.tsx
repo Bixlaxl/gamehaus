@@ -60,10 +60,11 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
   return (
     <div
       onClick={onClick}
-      className={`group rounded-xl flex flex-col min-h-[300px] bg-white dark:bg-[#111] overflow-hidden cursor-pointer select-none
-        transition-[transform,box-shadow,border-color] duration-150 ease-out
-        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30 hover:border-[#D4541A]/60
-        active:translate-y-0 active:scale-[0.99]
+      className={`group rounded-xl flex flex-col min-h-[300px] overflow-hidden cursor-pointer select-none
+        bg-white hover:bg-gray-50
+        dark:bg-[#111] dark:hover:bg-[#1c1c1c]
+        transition-colors duration-150 ease-out
+        active:scale-[0.99]
         ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : "1px solid rgba(255,255,255,0.07)" }}
     >
@@ -187,10 +188,10 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   const canExtend30 = gapToNextMins >= 30;
   const accentColor    = isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981";
   const bgClass        = isOvertime
-    ? "bg-red-50 dark:bg-[rgba(239,68,68,0.08)]"
+    ? "bg-red-50 hover:bg-red-100 dark:bg-[rgba(239,68,68,0.08)] dark:hover:bg-[rgba(239,68,68,0.16)]"
     : isFiveMinWarning
-    ? "bg-amber-50 dark:bg-[rgba(245,158,11,0.07)]"
-    : "bg-emerald-50 dark:bg-[rgba(16,185,129,0.06)]";
+    ? "bg-amber-50 hover:bg-amber-100 dark:bg-[rgba(245,158,11,0.07)] dark:hover:bg-[rgba(245,158,11,0.16)]"
+    : "bg-emerald-50 hover:bg-emerald-100 dark:bg-[rgba(16,185,129,0.06)] dark:hover:bg-[rgba(16,185,129,0.14)]";
 
   const setStopConfirmItem = usePOSStore.getState().setStopConfirmItem;
   function stopSession(e: React.MouseEvent) {
@@ -222,9 +223,8 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
     <div
       onClick={onClick}
       className={`rounded-xl flex flex-col min-h-[220px] ${bgClass} overflow-hidden cursor-pointer select-none
-        transition-[transform,box-shadow] duration-150 ease-out
-        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30
-        active:translate-y-0 active:scale-[0.99]
+        transition-colors duration-150 ease-out
+        active:scale-[0.99]
         ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : `1px solid ${accentColor}22` }}
     >
@@ -444,10 +444,11 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[200px] bg-amber-50 dark:bg-[rgba(245,158,11,0.05)] overflow-hidden cursor-pointer select-none
-        transition-[transform,box-shadow] duration-150 ease-out
-        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-amber-900/30
-        active:translate-y-0 active:scale-[0.99]
+      className={`rounded-xl flex flex-col min-h-[200px] overflow-hidden cursor-pointer select-none
+        bg-amber-50 hover:bg-amber-100
+        dark:bg-[rgba(245,158,11,0.05)] dark:hover:bg-[rgba(245,158,11,0.13)]
+        transition-colors duration-150 ease-out
+        active:scale-[0.99]
         ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : "1px solid rgba(245,158,11,0.22)" }}
     >
