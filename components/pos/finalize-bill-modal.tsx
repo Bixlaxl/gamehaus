@@ -48,6 +48,11 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const savedPoints = pointsToRedeem[orderId] ?? 0;
 
   const [method,           setMethod]           = useState<PaymentMethod | null>(null);
+  // Split-payment state — when on, cashInput + upiInput drive `payments`;
+  // when off, the single `method` selection is used with the full amount.
+  const [splitMode,        setSplitMode]        = useState(false);
+  const [cashInput,        setCashInput]        = useState("");
+  const [upiInput,         setUpiInput]         = useState("");
   const [loading,          setLoading]          = useState(false);
   const [error,            setError]            = useState<string | null>(null);
   const [customerInfo,     setCustomerInfo]     = useState<CustomerInfo | null>(null);
@@ -93,6 +98,9 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   function close() {
     setFinalizeOrderId(null);
     setMethod(null);
+    setSplitMode(false);
+    setCashInput("");
+    setUpiInput("");
     setError(null);
     setStep("bill");
     setHandoverBookings([]);
@@ -100,8 +108,61 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     setManualPhone("");
   }
 
+  // Auto-balance helpers — typing in one field fills the other so the sum
+  // always equals finalDue. Staff can re-enter either side; we never let
+  // them go negative.
+  function changeCash(val: string) {
+    const cleaned = val.replace(/[^\d.]/g, "");
+    setCashInput(cleaned);
+    const n = parseFloat(cleaned);
+    if (Number.isFinite(n)) {
+      setUpiInput(String(Math.max(0, Math.round((finalDue - n) * 100) / 100)));
+    }
+  }
+  function changeUpi(val: string) {
+    const cleaned = val.replace(/[^\d.]/g, "");
+    setUpiInput(cleaned);
+    const n = parseFloat(cleaned);
+    if (Number.isFinite(n)) {
+      setCashInput(String(Math.max(0, Math.round((finalDue - n) * 100) / 100)));
+    }
+  }
+  function enterSplit() {
+    setSplitMode(true);
+    setMethod(null);
+    // Pre-fill 50/50 as a starting point — easy to override
+    const half = Math.round((finalDue / 2) * 100) / 100;
+    setCashInput(String(half));
+    setUpiInput(String(Math.round((finalDue - half) * 100) / 100));
+  }
+  function exitSplit() {
+    setSplitMode(false);
+    setCashInput("");
+    setUpiInput("");
+  }
+
+  // Sum of the split inputs — used both for validation and for the
+  // mismatch indicator under the fields.
+  const splitSum = (parseFloat(cashInput) || 0) + (parseFloat(upiInput) || 0);
+  const splitOk  = Math.abs(splitSum - finalDue) <= 0.5;
+
   async function confirmPayment() {
-    if (!method) return;
+    // Build the payments array — single-method = 1 entry; split = up to 2
+    const paymentsPayload = splitMode
+      ? [
+          { method: "cash" as const, amount: Math.round((parseFloat(cashInput) || 0) * 100) / 100 },
+          { method: "upi"  as const, amount: Math.round((parseFloat(upiInput)  || 0) * 100) / 100 },
+        ].filter((p) => p.amount > 0)
+      : method
+        ? [{ method, amount: finalDue }]
+        : [];
+
+    if (paymentsPayload.length === 0) return;
+    if (splitMode && !splitOk) {
+      setError(`Split total ₹${splitSum} must equal ₹${finalDue}`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -109,7 +170,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        payment_method:  method,
+        payments:        paymentsPayload,
         points_redeemed: clampedRedeem,
         ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
       }),
@@ -392,32 +453,90 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
             </p>
           </div>
 
-          {/* Payment method */}
+          {/* Payment method — single or split */}
           <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
-              Payment method
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {paymentMethods.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setMethod(opt.value)}
-                  className={`flex flex-col items-center gap-2 py-3 rounded-xl transition-all ${
-                    method === opt.value
-                      ? ""
-                      : "bg-gray-100 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] text-gray-500 dark:text-[#888]"
-                  }`}
-                  style={
-                    method === opt.value
-                      ? { background: "rgba(212,84,26,0.1)", border: "1px solid #D4541A", color: "#D4541A" }
-                      : {}
-                  }
-                >
-                  {opt.icon}
-                  <span className="text-xs font-semibold">{opt.label}</span>
-                </button>
-              ))}
+            <div className="flex items-baseline justify-between">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+                Payment method
+              </p>
+              <button
+                type="button"
+                onClick={splitMode ? exitSplit : enterSplit}
+                className="text-[11px] font-bold text-[#D4541A] hover:opacity-80"
+              >
+                {splitMode ? "← Single method" : "Split between Cash + UPI"}
+              </button>
             </div>
+
+            {!splitMode ? (
+              <div className="grid grid-cols-2 gap-2">
+                {paymentMethods.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setMethod(opt.value)}
+                    className={`flex flex-col items-center gap-2 py-3 rounded-xl transition-all ${
+                      method === opt.value
+                        ? ""
+                        : "bg-gray-100 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] text-gray-500 dark:text-[#888]"
+                    }`}
+                    style={
+                      method === opt.value
+                        ? { background: "rgba(212,84,26,0.1)", border: "1px solid #D4541A", color: "#D4541A" }
+                        : {}
+                    }
+                  >
+                    {opt.icon}
+                    <span className="text-xs font-semibold">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl p-3 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A]">
+                    <div className="flex items-center gap-1.5 mb-1.5 text-gray-500 dark:text-[#888]">
+                      <Banknote className="h-3.5 w-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wide">Cash</span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xs text-gray-500 dark:text-[#888]">₹</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={cashInput}
+                        onChange={(e) => changeCash(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-transparent outline-none text-lg font-bold tabular-nums text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-xl p-3 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A]">
+                    <div className="flex items-center gap-1.5 mb-1.5 text-gray-500 dark:text-[#888]">
+                      <Smartphone className="h-3.5 w-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wide">UPI</span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xs text-gray-500 dark:text-[#888]">₹</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={upiInput}
+                        onChange={(e) => changeUpi(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-transparent outline-none text-lg font-bold tabular-nums text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p
+                  className="text-[11px] font-semibold text-right tabular-nums"
+                  style={{ color: splitOk ? "#10b981" : "#ef4444" }}
+                >
+                  Split sum: {formatCurrency(splitSum)} / {formatCurrency(finalDue)}
+                  {!splitOk && ` (off by ${formatCurrency(Math.abs(splitSum - finalDue))})`}
+                </p>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -431,7 +550,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
           <button
             onClick={confirmPayment}
-            disabled={!method || loading}
+            disabled={loading || (splitMode ? !splitOk : !method)}
             className="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-30"
             style={{ background: "#D4541A" }}
           >

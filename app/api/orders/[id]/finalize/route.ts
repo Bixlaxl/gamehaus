@@ -10,8 +10,16 @@ import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 export const runtime = 'edge';
 
 
+// Each split is one row in the `payments` table. Sum must equal finalDue.
+// Single-method payment is just an array of length 1 — the modal sends it that
+// way so the API has one code path.
+const paymentSplit = z.object({
+  method: z.enum(["cash", "upi"]),
+  amount: z.number().nonnegative(),
+});
+
 const schema = z.object({
-  payment_method:  z.enum(["cash", "upi"]),
+  payments:        z.array(paymentSplit).min(1).max(4),
   coupon_code:     z.string().optional(),
   points_redeemed: z.number().int().min(0).optional().default(0),
   customer_phone:  z.string().optional(),
@@ -33,7 +41,7 @@ export async function POST(
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { payment_method, coupon_code, points_redeemed, customer_phone: phoneOverride } = parsed.data;
+  const { payments, coupon_code, points_redeemed, customer_phone: phoneOverride } = parsed.data;
   const admin = createAdminClient();
 
   // Fetch order, items, and extras in parallel — 3 round trips → 1
@@ -146,6 +154,16 @@ export async function POST(
   const finalDue = Math.max(0, Math.round((billAfterMembership - pointsDiscount) * 100) / 100);
   const pointsEarned = Math.floor(finalDue / earnRate);
 
+  // Validate split total: sum of payment amounts must equal finalDue, within
+  // ₹1 to absorb minor rounding (the modal rounds amounts to whole rupees).
+  const paymentTotal = Math.round(payments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+  if (Math.abs(paymentTotal - finalDue) > 1) {
+    return NextResponse.json(
+      err(`Payment total ₹${paymentTotal} does not match bill ₹${finalDue}`, "PAYMENT_MISMATCH"),
+      { status: 400 }
+    );
+  }
+
   // All four writes/reads are independent — run them in parallel (4 round trips → 1)
   const [
     { error: finalizeError },
@@ -166,14 +184,19 @@ export async function POST(
         coupon_id:       coupon?.id ?? order.coupon_id,
       })
       .eq("id", orderId),
-    admin.from("payments").insert({
-      order_id:     orderId,
-      amount:       finalDue,
-      method:       payment_method,
-      status:       "completed",
-      collected_by: user.id,
-      collected_at: now.toISOString(),
-    }),
+    // One row per split — a single-method payment is just a 1-row insert.
+    admin.from("payments").insert(
+      payments
+        .filter((p) => p.amount > 0)
+        .map((p) => ({
+          order_id:     orderId,
+          amount:       Math.round(p.amount * 100) / 100,
+          method:       p.method,
+          status:       "completed" as const,
+          collected_by: user.id,
+          collected_at: now.toISOString(),
+        }))
+    ),
     coupon
       ? admin.from("coupons").update({ used_count: coupon.used_count + 1 }).eq("id", coupon.id)
       : Promise.resolve(null),
