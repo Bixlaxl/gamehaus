@@ -60,23 +60,29 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[180px] bg-white dark:bg-[#111] overflow-hidden cursor-pointer transition-all select-none
+      className={`rounded-xl flex flex-col min-h-[300px] bg-white dark:bg-[#111] overflow-hidden cursor-pointer transition-all select-none
         ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
       style={{ border: isSelected ? undefined : "1px solid rgba(255,255,255,0.07)" }}
     >
       <div style={{ height: 4, background: accentTop, flexShrink: 0 }} />
-      {/* Image banner — full width, ~88px tall, so staff identify the table visually */}
-      <div className="relative w-full h-[88px] bg-gray-100 dark:bg-[#1a1a1a] overflow-hidden shrink-0">
+      {/* Image banner — fills a 4:3 aspect area, object-contain so the WHOLE
+          table photo is visible regardless of orientation (a tall PS5 console
+          shot doesn't get its top chopped off). Soft dark background fills any
+          letterboxed area so the card still looks deliberate. */}
+      <div
+        className="relative w-full bg-gray-100 dark:bg-[#0a0a0a] overflow-hidden shrink-0"
+        style={{ aspectRatio: "4 / 3" }}
+      >
         {table.image_url ? (
           <NextImage
             src={table.image_url}
             alt={table.name}
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
-            className="object-cover"
+            className="object-contain"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-40">
+          <div className="absolute inset-0 flex items-center justify-center text-6xl opacity-30">
             {typeIcon[table.type] ?? "🎱"}
           </div>
         )}
