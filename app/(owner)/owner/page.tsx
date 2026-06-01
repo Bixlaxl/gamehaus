@@ -7,6 +7,7 @@ import { DashboardRefresh } from "@/components/owner/dashboard-refresh";
 import {
   TrendingUp, Zap, Calendar, Receipt,
   ArrowUpRight, ArrowDownRight, Minus,
+  Clock, Flame, Snowflake, Package, Crown,
 } from "lucide-react";
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -162,6 +163,10 @@ export default async function OwnerDashboard({
   const monthStart    = new Date(`${monthFirstStr}T${opening}+05:30`);
   const sevenDaysAgo  = new Date(todayStart);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  // 30-day window for insights — long enough to smooth out daily noise
+  // for peak-hour / best-seller / table-revenue rankings.
+  const thirtyDaysAgo = new Date(todayStart);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
 
   // All queries fetch location_id so we can filter in JS
   const [
@@ -173,6 +178,8 @@ export default async function OwnerDashboard({
     { data: allRecentOrders },
     { data: weekOrders },
     { data: allLiveDetail },
+    { data: insightItems },
+    { data: insightExtras },
   ] = await Promise.all([
     admin.from("orders").select("amount_due, advance_paid, location_id")
       .eq("status", "finalized")
@@ -216,7 +223,28 @@ export default async function OwnerDashboard({
       .eq("status", "running")
       .order("actual_start", { ascending: true })
       .limit(20),
+
+    // ── Insights window (last 30 days) — all 3 read from the same join shape
+    //    so we filter by location in JS without an extra round trip ─────────
+    // Finished order_items → drives Peak/Slow hours AND Most-profitable table.
+    // We include table because Most-profitable groups by it, and we filter by
+    // table.location_id to honour the location tab.
+    admin.from("order_items")
+      .select("actual_start, final_amount, table_id, table:tables(name, type, location_id)")
+      .eq("status", "finished")
+      .gte("actual_start", thirtyDaysAgo.toISOString()),
+
+    // Sold extras → drives Best-selling items. Join order so we can scope
+    // by order.location_id.
+    admin.from("order_extras")
+      .select("name, price, quantity, order:orders!inner(location_id, status)")
+      .eq("is_deleted", false)
+      .eq("order.status", "finalized")
+      .gte("created_at", thirtyDaysAgo.toISOString()),
   ]);
+
+  // Rest of the destructure happens after — but since we added 2 elements
+  // we need to pull them off the result array manually below.
 
   // ── Location filters (applied in JS) ─────────────────────────────────────────
   const loc = selectedLocId;
@@ -260,6 +288,74 @@ export default async function OwnerDashboard({
     weekData.push({ date: dayStart, revenue });
   }
   const weekTotal = weekData.reduce((s, d) => s + d.revenue, 0);
+
+  // ── 30-day insights: peak/slow hours, best sellers, profitable tables ──
+  // Convert ISO timestamp to IST hour (0-23). Edge runtime is UTC so we
+  // shift by +5:30 before reading the hour.
+  const istHourOf = (iso: string) => {
+    const ms = new Date(iso).getTime() + 5.5 * 60 * 60 * 1000;
+    return new Date(ms).getUTCHours();
+  };
+
+  // Filter items by selected location (via table.location_id) before any aggregation
+  const filteredInsightItems = (insightItems ?? []).filter(
+    (i) => !loc || (i.table as { location_id?: string } | null)?.location_id === loc
+  );
+
+  // Peak/Slow: bucket sessions by IST start hour. Only show hours within
+  // the location's operating window so "3 AM" doesn't appear as "slow".
+  const opensHour  = parseInt(opening.split(":")[0]);
+  const closesHour = parseInt(closing.split(":")[0]);
+  const operatingHours: number[] = [];
+  if (crossesMidnight) {
+    for (let h = opensHour; h < 24; h++)     operatingHours.push(h);
+    for (let h = 0;        h < closesHour; h++) operatingHours.push(h);
+  } else {
+    for (let h = opensHour; h < closesHour; h++) operatingHours.push(h);
+  }
+  const hourBuckets: Record<number, number> = {};
+  for (const h of operatingHours) hourBuckets[h] = 0;
+  for (const item of filteredInsightItems) {
+    if (!item.actual_start) continue;
+    const h = istHourOf(item.actual_start);
+    if (h in hourBuckets) hourBuckets[h]++;
+  }
+  const sessionsByHour = operatingHours.map((h) => ({ hour: h, count: hourBuckets[h] }));
+  const maxHourCount   = Math.max(...sessionsByHour.map((b) => b.count), 1);
+  const hasHourData    = sessionsByHour.some((b) => b.count > 0);
+  const sortedHours    = [...sessionsByHour].sort((a, b) => b.count - a.count);
+  const peakHours      = hasHourData ? sortedHours.slice(0, 3).filter((b) => b.count > 0) : [];
+  const slowHours      = hasHourData
+    ? [...sortedHours].reverse().slice(0, 3).filter((b) => b.count >= 0)
+    : [];
+
+  // Best-selling items — group by name (same item name across locations rolls up)
+  const filteredInsightExtras = (insightExtras ?? []).filter(
+    (e) => !loc || (e.order as { location_id?: string } | null)?.location_id === loc
+  );
+  const sellerMap: Record<string, { name: string; units: number; revenue: number }> = {};
+  for (const e of filteredInsightExtras) {
+    const key = e.name;
+    if (!sellerMap[key]) sellerMap[key] = { name: e.name, units: 0, revenue: 0 };
+    sellerMap[key].units   += e.quantity;
+    sellerMap[key].revenue += e.price * e.quantity;
+  }
+  const topSellers = Object.values(sellerMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  // Most-profitable tables — sum final_amount per table_id
+  const tableMap: Record<string, { name: string; type: string; revenue: number; sessions: number }> = {};
+  for (const item of filteredInsightItems) {
+    const t = item.table as { name: string; type: string } | null;
+    if (!t) continue;
+    if (!tableMap[item.table_id]) tableMap[item.table_id] = { name: t.name, type: t.type, revenue: 0, sessions: 0 };
+    tableMap[item.table_id].revenue += item.final_amount ?? 0;
+    tableMap[item.table_id].sessions += 1;
+  }
+  const topTables = Object.values(tableMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -401,6 +497,177 @@ export default async function OwnerDashboard({
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── 30-day insights: peak/slow hours + hourly distribution ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+
+        <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-gray-500" /> Hourly activity
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Sessions started per hour · last 30 days
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center justify-end gap-1">
+                  <Flame className="h-2.5 w-2.5" style={{ color: "#ef4444" }} /> Peak
+                </p>
+                <p className="text-sm font-bold tabular-nums text-gray-900 mt-0.5">
+                  {peakHours.length > 0
+                    ? peakHours.map((h) => `${h.hour}:00`).join(" · ")
+                    : "—"}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center justify-end gap-1">
+                  <Snowflake className="h-2.5 w-2.5" style={{ color: "#6366f1" }} /> Slow
+                </p>
+                <p className="text-sm font-bold tabular-nums text-gray-900 mt-0.5">
+                  {slowHours.length > 0
+                    ? slowHours.map((h) => `${h.hour}:00`).join(" · ")
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+          {!hasHourData ? (
+            <div className="py-10 text-center text-sm text-gray-400">
+              No session history yet — once tables start running, the busy hours show up here.
+            </div>
+          ) : (
+            <div className="flex items-end gap-1" style={{ height: 110 }}>
+              {sessionsByHour.map((b) => {
+                const pct = b.count / maxHourCount;
+                const h   = Math.max(Math.round(pct * 90), b.count > 0 ? 4 : 0);
+                const isPeak = peakHours.some((p) => p.hour === b.hour) && b.count > 0;
+                const isSlow = slowHours.some((s) => s.hour === b.hour) && b.count === 0;
+                return (
+                  <div key={b.hour} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                    <span className="text-[9px] font-semibold text-gray-400 tabular-nums leading-none">
+                      {b.count > 0 ? b.count : ""}
+                    </span>
+                    <div
+                      className="w-full rounded-t-md"
+                      style={{
+                        height: h,
+                        minHeight: b.count > 0 ? 4 : 0,
+                        background: isPeak ? "#ef4444" : isSlow ? "#e5e7eb" : "#D4541A",
+                      }}
+                      title={`${b.hour}:00 — ${b.count} session${b.count === 1 ? "" : "s"}`}
+                    />
+                    <span className="text-[9px] font-semibold text-gray-400 tabular-nums leading-none">
+                      {b.hour}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Most-profitable tables — vertical list on the right of the hour chart */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <Crown className="h-4 w-4 text-amber-500" />
+            <p className="text-sm font-bold text-gray-900">Most profitable</p>
+            <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              30 days
+            </span>
+          </div>
+          {topTables.length === 0 ? (
+            <div className="px-5 py-12 text-center text-sm text-gray-400">
+              No finished sessions yet
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {topTables.map((t, i) => (
+                <div key={t.name + i} className="px-5 py-3 flex items-center gap-3">
+                  <span
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0"
+                    style={{
+                      background: i === 0 ? "rgba(245,158,11,0.15)" : "rgba(0,0,0,0.04)",
+                      color:      i === 0 ? "#f59e0b" : "#6b7280",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-lg shrink-0">{tableIcon(t.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
+                    <p className="text-[11px] text-gray-400 tabular-nums">
+                      {t.sessions} session{t.sessions === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold tabular-nums text-gray-900 shrink-0">
+                    {formatCurrency(t.revenue)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Best selling items ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+          <Package className="h-4 w-4 text-emerald-600" />
+          <p className="text-sm font-bold text-gray-900">Best-selling items</p>
+          <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            By revenue · 30 days
+          </span>
+        </div>
+        {topSellers.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-gray-400">
+            No catalogue sales yet — once staff adds extras to orders, the top sellers appear here.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {topSellers.map((s, i) => {
+              const maxRev = topSellers[0].revenue;
+              const pct    = (s.revenue / maxRev) * 100;
+              return (
+                <div key={s.name + i} className="px-6 py-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0"
+                      style={{
+                        background: i === 0 ? "rgba(16,185,129,0.12)" : "rgba(0,0,0,0.04)",
+                        color:      i === 0 ? "#10b981" : "#6b7280",
+                      }}
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
+                        <p className="text-sm font-bold tabular-nums text-gray-900 shrink-0">
+                          {formatCurrency(s.revenue)}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 mt-1">
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${pct}%`, background: "#10b981" }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-gray-400 tabular-nums shrink-0 w-16 text-right">
+                          {s.units} sold
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Recent orders ── */}
