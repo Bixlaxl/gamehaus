@@ -344,7 +344,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }
 
   function addToCart(t: Table) {
-    if (selectedSlots.length === 0) return;
+    // Minimum booking is start + stop (i.e. ≥ 30 min). A single 15-min slot
+    // isn't a valid session — the footer's disabled state already prevents
+    // this path, but we guard here too in case it's reached programmatically.
+    if (selectedSlots.length < 2) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
     const startIso  = new Date(`${date}T${firstSlot}:00`).toISOString();
@@ -675,10 +678,19 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                     {/* ╔═════════════════════════════ STEP 1 — WHEN ═════════════════════════════╗ */}
                     {onWhen && (
                       <>
-                        {/* Either an instructional hint OR a chosen-time recap */}
+                        {/* Either an instructional hint OR a chosen-time recap.
+                            We require start AND stop — a single 15-min slot isn't a valid booking. */}
                         {selectedSlots.length === 0 ? (
                           <p className="text-sm" style={{ color: textSec }}>
                             Tap a start time, then a finish time.
+                          </p>
+                        ) : selectedSlots.length === 1 ? (
+                          <p className="text-sm" style={{ color: textSec }}>
+                            Start{" "}
+                            <span className="font-bold" style={{ color: textPri }}>
+                              {fmt(selectedSlots[0])}
+                            </span>
+                            . Now pick a <span className="font-bold" style={{ color: textPri }}>finish time</span>.
                           </p>
                         ) : (
                           <p className="text-sm" style={{ color: textSec }}>
@@ -911,7 +923,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
               {step === "when" ? (
                 <>
                   <div className="flex-1 min-w-0">
-                    {selectedSlots.length > 0 ? (
+                    {selectedSlots.length >= 2 ? (
                       <>
                         <p className="text-sm font-bold tabular-nums" style={{ color: textPri }}>
                           {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
@@ -920,6 +932,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                           {selLabel} booked
                         </p>
                       </>
+                    ) : selectedSlots.length === 1 ? (
+                      <p className="text-xs" style={{ color: textMut }}>Pick a finish time to continue</p>
                     ) : (
                       <p className="text-xs" style={{ color: textMut }}>Pick start, then finish</p>
                     )}
@@ -929,7 +943,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       if (pricingOptions.length > 0) setStep("players");
                       else addToCart(booking);
                     }}
-                    disabled={selectedSlots.length === 0}
+                    disabled={selectedSlots.length < 2}
                     className="px-5 py-3 rounded-xl font-bold text-white text-sm transition-opacity disabled:opacity-40 flex items-center gap-1.5"
                     style={{ background: "#111111" }}
                   >
