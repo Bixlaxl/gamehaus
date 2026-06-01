@@ -731,7 +731,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                               const isStartSlot   = selectedSlots.length > 0 && s === selectedSlots[0];
                               const isStopSlot    = selectedSlots.length > 1 && s === selectedSlots[selectedSlots.length - 1];
                               const isInterior    = selected && !isStartSlot && !isStopSlot;
-                              const display       = fmt(s);
+                              // Once a start has been picked, every OTHER slot displays its
+                              // END time so clicking "8:45 PM" reads as "session ends at 8:45".
+                              // The start slot itself keeps its start time (with the START label
+                              // above it) so the customer can still tell when their session begins.
+                              const hasStart      = selectedSlots.length > 0;
+                              const display       = (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s);
 
                               // Booked elsewhere — hatched, non-interactive
                               if (serverBlocked) {
