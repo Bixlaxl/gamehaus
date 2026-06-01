@@ -14,7 +14,6 @@ import { installPOSAuthGuard } from "@/lib/pos-fetch";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
 import { POSAlerts } from "./pos-alerts";
-import { POSSideRail } from "./side-rail";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
 import type { Table, Order, OrderItem, Booking } from "@/lib/supabase/types";
 
@@ -259,18 +258,16 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   })();
 
   return (
-    <div className="dark h-screen flex overflow-hidden bg-[#0a0a0a]">
-
-      {/* Sign-out overlay */}
+    // No outer dark/flex wrapper — that's owned by app/(pos)/pos/layout.tsx
+    // so the side rail stays mounted across /pos, /pos/bookings, /pos/inventory.
+    <>
+      {/* Sign-out overlay — back-button protection still routes here */}
       {signingOut && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm">
           <LogOut className="h-8 w-8 text-[#D4541A] animate-pulse mb-4" />
           <p className="text-white text-base font-semibold tracking-wide">Signing out…</p>
         </div>
       )}
-
-      {/* ── Side rail (shared across all /pos/* pages) ── */}
-      <POSSideRail activeRoute="tables" staffName={staffName} locationName={locationName} locationId={locationId} />
 
       {/* ── Main area ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -365,6 +362,6 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       <StopConfirmModal locationId={locationId} />
       <FinalizeBillModal locationId={locationId} />
       <UpcomingDrawer locationId={locationId} />
-    </div>
+    </>
   );
 }

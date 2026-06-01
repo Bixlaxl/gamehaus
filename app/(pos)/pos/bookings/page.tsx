@@ -3,7 +3,6 @@ export const runtime = "edge";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { POSSideRail } from "@/components/pos/side-rail";
 import { StaffBookingsContent } from "./content";
 
 export default async function StaffBookingsPage() {
@@ -51,18 +50,10 @@ export default async function StaffBookingsPage() {
   );
 
   return (
-    <div className="dark h-screen flex overflow-hidden bg-[#0a0a0a]">
-      <POSSideRail
-        activeRoute="bookings"
-        staffName={profile.name}
-        locationName={location?.name ?? ""}
-        locationId={profile.location_id}
-      />
-      <StaffBookingsContent
-        locationId={profile.location_id}
-        locationName={location?.name ?? ""}
-        initialBookings={ownLocationBookings}
-      />
-    </div>
+    <StaffBookingsContent
+      locationId={profile.location_id}
+      locationName={location?.name ?? ""}
+      initialBookings={ownLocationBookings}
+    />
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
+import { useNowSampled } from "@/hooks/use-now-sampled";
 import { X, Star } from "lucide-react";
 import { getShopWindow } from "@/lib/utils";
 import type { Table } from "@/lib/supabase/types";
@@ -35,7 +36,10 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   const walkInPrefilledTableId = usePOSStore((s) => s.walkInPrefilledTableId);
   const setWalkInOpen          = usePOSStore((s) => s.setWalkInOpen);
   const tables                 = usePOSStore((s) => s.tables);
-  const now                    = usePOSStore((s) => s.now);
+  // Walk-in slider uses `now` only for the shop-window check and to derive
+  // session end-time. Per-second precision would re-render the whole form
+  // (autocomplete + multi-select tables) every tick. 30s sampling is plenty.
+  const now                    = useNowSampled(30_000);
   const openingTime            = usePOSStore((s) => s.openingTime);
   const closingTime            = usePOSStore((s) => s.closingTime);
   const { beforeOpen, outsideHours } = getShopWindow(now, openingTime, closingTime);

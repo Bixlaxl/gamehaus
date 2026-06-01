@@ -3,6 +3,7 @@
 import { useState, useRef, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
+import { useNowSampled } from "@/hooks/use-now-sampled";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
@@ -76,7 +77,11 @@ function PanelWalkIn({
   table: TableWithStatus;
 }) {
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
-  const now         = usePOSStore((s) => s.now);
+  // PanelWalkIn only uses `now` for hour-granularity checks (shop hours +
+  // minutes-until-next-booking) — per-second precision would cost a full
+  // re-render of this form (autocomplete debouncers, 10+ state hooks) every
+  // tick for nothing visible. 30s sampling is plenty.
+  const now         = useNowSampled(30_000);
   const openingTime = usePOSStore((s) => s.openingTime);
   const closingTime = usePOSStore((s) => s.closingTime);
   const qc    = useQueryClient();

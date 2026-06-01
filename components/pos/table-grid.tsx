@@ -3,6 +3,7 @@
 import { useState, useMemo, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
+import { useNowSampled } from "@/hooks/use-now-sampled";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatSignedCountdown, formatCurrency } from "@/lib/utils";
 import { CalendarClock, Phone } from "lucide-react";
@@ -349,7 +350,10 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const now = usePOSStore((s) => s.now);
+  // BookedCard only displays "in N min" / "Arriving now" — coarse enough that
+  // a 10s sample beats subscribing to the 1Hz clock (which would re-render
+  // every booked card 60×/min instead of 6).
+  const now = useNowSampled(10_000);
   const qc  = useQueryClient();
   const booking  = table.upcomingBooking!;
   const [loadingCheckin, setLoadingCheckin] = useState(false);

@@ -3,7 +3,6 @@ export const runtime = "edge";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { POSSideRail } from "@/components/pos/side-rail";
 import { StaffInventoryContent } from "./content";
 
 export default async function StaffInventoryPage() {
@@ -32,18 +31,10 @@ export default async function StaffInventoryPage() {
   ]);
 
   return (
-    <div className="dark h-screen flex overflow-hidden bg-[#0a0a0a]">
-      <POSSideRail
-        activeRoute="inventory"
-        staffName={profile.name}
-        locationName={location?.name ?? ""}
-        locationId={profile.location_id}
-      />
-      <StaffInventoryContent
-        locationId={profile.location_id}
-        locationName={location?.name ?? ""}
-        initialItems={items ?? []}
-      />
-    </div>
+    <StaffInventoryContent
+      locationId={profile.location_id}
+      locationName={location?.name ?? ""}
+      initialItems={items ?? []}
+    />
   );
 }
