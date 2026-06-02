@@ -298,10 +298,65 @@ function PanelWalkIn({
       return;
     }
 
+    // ── Optimistic push so the right panel flips to PanelSession instantly ──
+    // Previously the staff waited 200-500ms for the network refetch to land
+    // AND for the cascading buildTableStatus + ContextPanel re-render. Cold
+    // start on Vercel's edge could stretch that to several seconds. Now we
+    // push the new order into the store immediately using the data we just
+    // sent — Realtime + the background invalidate below reconcile any
+    // server-side differences (the real ids, etc.) once they arrive.
+    const nowIso = new Date().toISOString();
+    const expectedEnd = new Date(Date.now() + duration * 60 * 1000).toISOString();
+    const tempItemId = `temp-item-${Math.random().toString(36).slice(2)}`;
+    const optimisticOrder: POSOrder = {
+      id:               body.data.order_id,
+      location_id:      locationId,
+      type:             "walk_in",
+      status:           "open",
+      customer_name:    finalName,
+      customer_phone:   customerPhone.trim() || null,
+      created_by:       null,
+      created_at:       nowIso,
+      finalized_at:     null,
+      coupon_id:        null,
+      advance_paid:     0,
+      points_redeemed:  0,
+      subtotal:         0,
+      discount_amount:  0,
+      total_amount:     0,
+      amount_due:       0,
+      extras: [],
+      items: [{
+        id:                      tempItemId,
+        order_id:                body.data.order_id,
+        table_id:                table.id,
+        status:                  "running",
+        scheduled_start:         null,
+        scheduled_end:           null,
+        scheduled_duration_mins: duration,
+        actual_start:            nowIso,
+        actual_end:              null,
+        expected_end:            expectedEnd,
+        extended_mins:           0,
+        rate_per_hour:           effectiveRate,
+        final_amount:            null,
+        num_people:              numPeople ? Number(numPeople) : null,
+        is_deleted:              false,
+        deleted_at:              null,
+        created_at:              nowIso,
+        table:                   table,
+      }],
+    };
+    usePOSStore.setState((s) => ({ openOrders: [...s.openOrders, optimisticOrder] }));
+    // selectedTableId already points at this table; ContextPanel will see the
+    // running item in openOrders + flip to PanelSession on the very next render.
+
+    // Reconcile in the background — Realtime usually catches this in <1s but
+    // the explicit invalidate guarantees the table grid + bill numbers swap
+    // from optimistic to authoritative server state regardless.
     qc.invalidateQueries({ queryKey: ["pos-orders",  locationId] });
     qc.invalidateQueries({ queryKey: ["pos-tables",  locationId] });
     setLoading(false);
-    // selectedTableId stays — panel auto-switches to PanelSession once data refreshes
   }
 
   return (
