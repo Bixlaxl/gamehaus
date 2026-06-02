@@ -4,6 +4,7 @@ import { useState, useRef, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
+import { NameMismatchModal } from "./name-mismatch-modal";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
@@ -102,6 +103,10 @@ function PanelWalkIn({
   const [error,         setError]         = useState<string | null>(null);
   const [customer,      setCustomer]      = useState<CustomerLookup | null>(null);
   const [lookingUp,     setLookingUp]     = useState(false);
+  // When the typed name disagrees with the name stored against this phone,
+  // we open this modal at submit-time and let staff pick. Phone is the
+  // identity; whichever name they pick is what we ultimately send.
+  const [nameMismatch, setNameMismatch] = useState<{ existing: string; entered: string } | null>(null);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Autocomplete state — name and phone each have their own dropdown.
   // Both fetch from /api/customers/search which routes digit-only queries
@@ -148,6 +153,9 @@ function PanelWalkIn({
         const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(cleaned)}`);
         const data = await res.json() as { found: boolean; customer: CustomerLookup | null };
         setCustomer(data.customer);
+        // Auto-fill name ONLY when the field is blank. If staff has already
+        // typed a name, leave it — the mismatch popup at submit-time will let
+        // them choose between the typed name and the stored one.
         if (data.found && data.customer?.name && !customerName.trim()) {
           setCustomerName(data.customer.name);
         }
@@ -233,7 +241,7 @@ function PanelWalkIn({
     if (phoneSearchAbort.current) phoneSearchAbort.current.abort();
   }
 
-  async function startWalkIn() {
+  function startWalkIn() {
     if (outsideHours) {
       setError(beforeOpen ? "Shop hasn't opened yet" : "Shop has closed for the day");
       return;
@@ -245,6 +253,21 @@ function PanelWalkIn({
       return;
     }
 
+    // Phone-as-identity check: if the stored profile name differs from
+    // what staff typed, open the mismatch popup instead of submitting.
+    // Modal buttons (Use existing / Update name) call submitWalkIn() with
+    // the chosen name directly.
+    const typed   = customerName.trim();
+    const stored  = customer?.name?.trim();
+    if (customerPhone.length === 10 && stored && stored.toLowerCase() !== typed.toLowerCase()) {
+      setNameMismatch({ existing: stored, entered: typed });
+      return;
+    }
+
+    void submitWalkIn(typed);
+  }
+
+  async function submitWalkIn(finalName: string) {
     setLoading(true);
     setError(null);
 
@@ -254,7 +277,7 @@ function PanelWalkIn({
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
         location_id:    locationId,
-        customer_name:  customerName.trim(),
+        customer_name:  finalName,
         customer_phone: customerPhone.trim() || undefined,
         items: [{
           table_id:      table.id,
@@ -283,6 +306,31 @@ function PanelWalkIn({
 
   return (
     <div className="flex flex-col h-full">
+      {nameMismatch && (
+        <NameMismatchModal
+          existingName={nameMismatch.existing}
+          enteredName={nameMismatch.entered}
+          phone={customerPhone}
+          onCancel={() => setNameMismatch(null)}
+          onUseExisting={() => {
+            // Replace the typed name with the existing one and submit.
+            // The upsert in /api/walkin will write the same name back —
+            // effectively a no-op on the profile.
+            setCustomerName(nameMismatch.existing);
+            const chosen = nameMismatch.existing;
+            setNameMismatch(null);
+            void submitWalkIn(chosen);
+          }}
+          onUpdateName={() => {
+            // Keep the typed name and submit. The upsert overwrites
+            // customer_profiles.name so the owner panel will reflect
+            // the new name on the next refresh.
+            const chosen = nameMismatch.entered;
+            setNameMismatch(null);
+            void submitWalkIn(chosen);
+          }}
+        />
+      )}
       <PanelHeader
         title={`Walk-in — ${table.name}`}
         subtitle={

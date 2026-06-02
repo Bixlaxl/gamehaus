@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
+import { NameMismatchModal } from "./name-mismatch-modal";
 import { X, Star } from "lucide-react";
 import { getShopWindow } from "@/lib/utils";
 import type { Table } from "@/lib/supabase/types";
@@ -53,6 +54,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   const [error,            setError]            = useState<string | null>(null);
   const [customer,         setCustomer]         = useState<CustomerLookup | null>(null);
   const [lookingUp,        setLookingUp]        = useState(false);
+  const [nameMismatch,     setNameMismatch]     = useState<{ existing: string; entered: string } | null>(null);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const idleTables = tables.filter((t) => !t.activeOrderItem);
@@ -108,7 +110,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
     setDurations((prev) => ({ ...prev, [id]: prev[id] ?? 60 }));
   }
 
-  async function createOrder() {
+  function createOrder() {
     if (!customerName.trim()) { setError("Customer name is required"); return; }
     if (selectedTableIds.length === 0) { setError("Select at least one table"); return; }
 
@@ -119,6 +121,17 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
       return;
     }
 
+    // Phone-as-identity: if the stored profile name differs, ask before submit
+    const typed   = customerName.trim();
+    const stored  = customer?.name?.trim();
+    if (customerPhone.trim().length === 10 && stored && stored.toLowerCase() !== typed.toLowerCase()) {
+      setNameMismatch({ existing: stored, entered: typed });
+      return;
+    }
+    void submitOrder(typed);
+  }
+
+  async function submitOrder(finalName: string) {
     setLoading(true); setError(null);
 
     const items = selectedTableIds.map((tid) => {
@@ -131,7 +144,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         location_id: locationId,
-        customer_name: customerName.trim(),
+        customer_name: finalName,
         customer_phone: customerPhone.trim() || undefined,
         items,
       }),
@@ -151,6 +164,25 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
 
   return (
     <div className="fixed inset-0 z-40 flex">
+      {nameMismatch && (
+        <NameMismatchModal
+          existingName={nameMismatch.existing}
+          enteredName={nameMismatch.entered}
+          phone={customerPhone}
+          onCancel={() => setNameMismatch(null)}
+          onUseExisting={() => {
+            setCustomerName(nameMismatch.existing);
+            const chosen = nameMismatch.existing;
+            setNameMismatch(null);
+            void submitOrder(chosen);
+          }}
+          onUpdateName={() => {
+            const chosen = nameMismatch.entered;
+            setNameMismatch(null);
+            void submitOrder(chosen);
+          }}
+        />
+      )}
       <div className="flex-1 bg-black/50 dark:bg-black/60" onClick={close} />
       <div className="w-96 flex flex-col bg-white dark:bg-[#111] border-l border-gray-200 dark:border-[#1F1F1F]">
 

@@ -12,7 +12,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { cn, getShopWindow } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking, Order, Location } from "@/lib/supabase/types";
@@ -41,7 +41,6 @@ const STATUS_DOT: Record<string, string> = {
 const TYPE_ICON: Record<string, string> = {
   snooker: "🎱", pool: "🎱", ps5: "🎮", foosball: "⚽",
 };
-const TYPE_ORDER: Record<string, number> = { snooker: 0, pool: 1, ps5: 2, foosball: 3 };
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", {
@@ -84,7 +83,6 @@ export function BookingsContent({
   const [locationFilter, setLoc]  = useState("all");
   const [typeFilter, setType]     = useState("all");
   const [statusFilter, setStatus] = useState("all");
-  const [viewMode, setViewMode]   = useState<"schedule" | "list">("schedule");
   const [refundBooking, setRefund] = useState<BookingRow | null>(null);
 
   function shiftDate(days: number) {
@@ -222,46 +220,12 @@ export function BookingsContent({
     return true;
   }), [bookings, locationFilter, typeFilter, statusFilter]);
 
-  const byTable = useMemo(() => {
-    const map = new Map<string, { tableName: string; tableType: string; rows: BookingRow[] }>();
-    for (const b of filtered) {
-      const table = b.order_item?.table as TableRef | null;
-      const key = table?.name ?? "Unknown";
-      if (!map.has(key)) map.set(key, { tableName: key, tableType: table?.type ?? "", rows: [] });
-      map.get(key)!.rows.push(b);
-    }
-    return [...map.values()].sort((a, b) => {
-      const ao = TYPE_ORDER[a.tableType] ?? 9;
-      const bo = TYPE_ORDER[b.tableType] ?? 9;
-      return ao !== bo ? ao - bo : a.tableName.localeCompare(b.tableName);
-    });
-  }, [filtered]);
-
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header — only the List view is kept; Schedule was the same data minus
+          the Location column, so it was redundant for multi-location owners. */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Bookings</h1>
-        <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-          <Button
-            variant={viewMode === "schedule" ? "default" : "ghost"}
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            onClick={() => setViewMode("schedule")}
-          >
-            <CalendarDays className="h-3.5 w-3.5 mr-1" />
-            Schedule
-          </Button>
-          <Button
-            variant={viewMode === "list" ? "default" : "ghost"}
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            onClick={() => setViewMode("list")}
-          >
-            <LayoutList className="h-3.5 w-3.5 mr-1" />
-            List
-          </Button>
-        </div>
       </div>
 
       {/* Filters */}
@@ -330,7 +294,7 @@ export function BookingsContent({
         >
           <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
         </Button>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs font-semibold text-gray-700">
           {filtered.length} booking{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -342,128 +306,38 @@ export function BookingsContent({
         </div>
       )}
 
-      {/* Schedule View */}
-      {viewMode === "schedule" && (
-        <div className="space-y-3">
-          {!isLoading && byTable.length === 0 && (
-            <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-100">
-              No bookings for this date
-            </div>
-          )}
-          {byTable.map(({ tableName, tableType, rows }) => (
-            <div key={tableName} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2.5 px-4 py-3 bg-gray-50/80 border-b border-gray-100">
-                <span className="text-sm">{TYPE_ICON[tableType] ?? "🎱"}</span>
-                <span className="font-semibold text-gray-900 text-sm">{tableName}</span>
-                <Badge variant="outline" className="text-[10px] capitalize py-0">{typeType(tableType)}</Badge>
-                <span className="ml-auto text-xs text-gray-400">
-                  {rows.length} booking{rows.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {rows.map((b) => (
-                  <div key={b.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/50 transition-colors">
-                    <div className={cn("w-2 h-2 rounded-full shrink-0 mt-0.5", STATUS_DOT[b.status] ?? "bg-gray-300")} />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-medium text-gray-900 text-sm">{b.order?.customer_name}</span>
-                      {b.order?.customer_phone && (
-                        <span className="text-xs text-gray-400 ml-2">{b.order.customer_phone}</span>
-                      )}
-                    </div>
-                    <span className="text-sm font-mono text-gray-600 tabular-nums shrink-0">
-                      {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
-                    </span>
-                    {(b.order?.advance_paid ?? 0) > 0 && (
-                      <span className="text-xs bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5 shrink-0">
-                        ₹{b.order?.advance_paid} paid
-                      </span>
-                    )}
-                    <Badge
-                      variant={
-                        b.status === "confirmed"  ? "success"     :
-                        b.status === "checked_in" ? "outline"     :
-                        b.status === "no_show"    ? "destructive" : "secondary"
-                      }
-                      className="shrink-0 text-[11px]"
-                    >
-                      {STATUS_LABELS[b.status] ?? b.status}
-                    </Badge>
-                    {(b.status === "no_show" || b.status === "cancelled") && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs shrink-0"
-                        onClick={() => setRefund(b)}
-                      >
-                        Refund
-                      </Button>
-                    )}
-                    {mode === "staff" && b.status === "confirmed" && (
-                      <div className="flex gap-1.5 shrink-0">
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500"
-                          onClick={() => doCheckIn(b)}
-                          disabled={!actionsAllowed || busyBookingId === b.id}
-                          title={!actionsAllowed ? actionsBlockedReason : "Check in this customer"}
-                        >
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          {busyBookingId === b.id ? "…" : "Check in"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => doNoShow(b)}
-                          disabled={!actionsAllowed || busyBookingId === b.id}
-                          title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
-                        >
-                          <XCircle className="h-3 w-3 mr-1" />
-                          {busyBookingId === b.id ? "…" : "No-show"}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* List View */}
-      {viewMode === "list" && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Bookings list — single view (Location column included) */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-100 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Time</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Table</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Advance</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Time</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Customer</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Table</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Location</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Advance</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Status</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-200">
               {filtered.map((b) => {
                 const table = b.order_item?.table as TableRef | null;
                 return (
-                  <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700 tabular-nums">
+                  <tr key={b.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-sm text-gray-900 font-medium tabular-nums">
                       {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{b.order?.customer_name}</p>
-                      <p className="text-xs text-gray-500">{b.order?.customer_phone}</p>
+                      <p className="font-semibold text-gray-900">{b.order?.customer_name}</p>
+                      <p className="text-xs text-gray-600 font-medium">{b.order?.customer_phone}</p>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="px-4 py-3 text-gray-900 font-medium">
                       <span className="mr-1">{TYPE_ICON[table?.type ?? ""] ?? ""}</span>
                       {table?.name ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{table?.location?.name ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="px-4 py-3 text-gray-700 font-medium">{table?.location?.name ?? "—"}</td>
+                    <td className="px-4 py-3 text-gray-900 font-semibold">
                       {(b.order?.advance_paid ?? 0) > 0 ? `₹${b.order?.advance_paid}` : "—"}
                     </td>
                     <td className="px-4 py-3">
@@ -514,7 +388,7 @@ export function BookingsContent({
               })}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500 font-medium">
                     No bookings for this date
                   </td>
                 </tr>
@@ -522,7 +396,6 @@ export function BookingsContent({
             </tbody>
           </table>
         </div>
-      )}
 
       {/* Refund dialog */}
       <Dialog open={!!refundBooking} onOpenChange={() => setRefund(null)}>
@@ -554,6 +427,3 @@ export function BookingsContent({
   );
 }
 
-function typeType(t: string) {
-  return t === "ps5" ? "PS5" : t.charAt(0).toUpperCase() + t.slice(1);
-}
