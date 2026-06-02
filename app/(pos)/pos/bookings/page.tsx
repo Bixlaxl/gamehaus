@@ -62,10 +62,12 @@ export default async function StaffBookingsPage() {
   });
 
   return (
-    // Render in the same off-white surface the owner panel uses so the layout
-    // matches exactly. The /pos shared layout's dark wrapper is overridden
-    // here for this single page since the bookings UI was designed light-mode.
-    <main className="flex-1 overflow-y-auto bg-[#fafafa] text-gray-900 p-6">
+    // BookingsContent was built for the owner light-mode panel; on the staff
+    // side it lives in the dark POS shell where bg-white cards on near-white
+    // surrounds disappeared. The .pos-bookings-dark class (in globals.css)
+    // recolors all the inherited gray/white classes into a high-contrast
+    // dark palette so cards + text + filters all stay readable.
+    <main className="pos-bookings-dark flex-1 overflow-y-auto p-6">
       <BookingsContent
         mode="staff"
         staffLocationId={profile.location_id}

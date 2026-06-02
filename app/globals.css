@@ -83,3 +83,48 @@
   border-width: 2px;
   border-style: solid;
 }
+
+/* ── Dark-themed island for staff bookings ──────────────────────────────────
+   The shared BookingsContent was authored for owner light mode. On the staff
+   side it lives inside the dark POS shell, where white-on-near-white cards
+   blend into the background. Scoping these overrides under .pos-bookings-dark
+   recolors the inherited light classes into a high-contrast dark palette
+   without forking the component. */
+.pos-bookings-dark               { color: #f5f5f5; background: #0e0e0e; }
+
+.pos-bookings-dark .bg-white     { background: #161616 !important; }
+.pos-bookings-dark .bg-gray-50,
+.pos-bookings-dark .bg-gray-50\/50,
+.pos-bookings-dark .bg-gray-50\/80   { background: #111 !important; }
+.pos-bookings-dark .bg-gray-100      { background: #1a1a1a !important; }
+.pos-bookings-dark .hover\:bg-gray-50:hover,
+.pos-bookings-dark .hover\:bg-gray-50\/50:hover  { background: #1d1d1d !important; }
+.pos-bookings-dark .hover\:bg-gray-100:hover     { background: #222 !important; }
+
+.pos-bookings-dark .text-gray-900    { color: #fafafa !important; }
+.pos-bookings-dark .text-gray-800    { color: #ededed !important; }
+.pos-bookings-dark .text-gray-700    { color: #d4d4d4 !important; }
+.pos-bookings-dark .text-gray-600    { color: #b5b5b5 !important; }
+.pos-bookings-dark .text-gray-500    { color: #888 !important; }
+.pos-bookings-dark .text-gray-400    { color: #666 !important; }
+
+.pos-bookings-dark .border-gray-100,
+.pos-bookings-dark .border-gray-200  { border-color: #2a2a2a !important; }
+.pos-bookings-dark .divide-gray-50 > * + *,
+.pos-bookings-dark .divide-gray-100 > * + *,
+.pos-bookings-dark .divide-gray-200 > * + * { border-color: #2a2a2a !important; }
+
+/* Inputs / Selects rendered inside the dark island */
+.pos-bookings-dark input,
+.pos-bookings-dark button[role="combobox"],
+.pos-bookings-dark [data-slot="select-trigger"] {
+  background: #1a1a1a !important;
+  border-color: #2a2a2a !important;
+  color: #f5f5f5 !important;
+}
+.pos-bookings-dark input::placeholder { color: #666 !important; }
+
+/* The amber paid-advance pill should keep its tint but lift contrast on dark */
+.pos-bookings-dark .bg-green-50  { background: rgba(16,185,129,0.15) !important; }
+.pos-bookings-dark .text-green-700 { color: #34d399 !important; }
+.pos-bookings-dark .border-green-200 { border-color: rgba(16,185,129,0.35) !important; }
