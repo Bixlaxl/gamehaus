@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Search, X, Pencil, Save, Banknote, Smartphone, Phone } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, X, Banknote, Smartphone, Phone } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -75,7 +74,6 @@ function tableNameOf(t: BillRow["items"][number]["table"]): string {
 }
 
 export function BillsContent({ locationId, locationName, initial }: Props) {
-  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<BillRow | null>(null);
 
@@ -135,7 +133,6 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Tables</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Payment</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Paid</th>
-                <th className="px-4 py-3 w-10" />
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -180,9 +177,6 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums">{formatCurrency(total)}</td>
-                    <td className="px-4 py-3 text-right opacity-60">
-                      <Pencil className="h-3.5 w-3.5 inline" />
-                    </td>
                   </tr>
                 );
               })}
@@ -192,70 +186,21 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
       )}
 
       {selected && (
-        <BillDetailModal
-          bill={selected}
-          onClose={() => setSelected(null)}
-          onSaved={() => {
-            qc.invalidateQueries({ queryKey: ["staff-bills", locationId] });
-            setSelected(null);
-          }}
-        />
+        <BillDetailModal bill={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-//  Detail / edit modal
+//  Detail modal — read-only view of a finalized bill
 // ────────────────────────────────────────────────────────────────────────────
 function BillDetailModal({
-  bill, onClose, onSaved,
+  bill, onClose,
 }: {
   bill: BillRow;
   onClose: () => void;
-  onSaved: () => void;
 }) {
-  const [name,  setName]  = useState(bill.customer_name  ?? "");
-  const [phone, setPhone] = useState(bill.customer_phone ?? "");
-  // payment_methods: { payment_id → new method } — only changed ones get sent
-  const [methods, setMethods] = useState<Record<string, "cash" | "upi">>(
-    Object.fromEntries(bill.payments.map((p) => [p.id, (p.method === "cash" ? "cash" : "upi") as "cash" | "upi"]))
-  );
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const payload: Record<string, unknown> = {};
-      if (name.trim() && name.trim() !== bill.customer_name) payload.customer_name = name.trim();
-      const cleanedPhone = phone.trim() || null;
-      if (cleanedPhone !== (bill.customer_phone ?? null)) payload.customer_phone = cleanedPhone;
-      // Only send method changes that actually differ from current
-      const changed: Record<string, "cash" | "upi"> = {};
-      for (const p of bill.payments) {
-        if (methods[p.id] && methods[p.id] !== p.method) changed[p.id] = methods[p.id];
-      }
-      if (Object.keys(changed).length > 0) payload.payment_methods = changed;
-      if (Object.keys(payload).length === 0) return null;
-
-      const res = await fetch(`/api/pos/bills/${bill.id}`, {
-        method:  "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(payload),
-      });
-      const body = await res.json() as { success: boolean; error?: string };
-      if (!body.success) throw new Error(body.error ?? "Save failed");
-      return body;
-    },
-    onSuccess: (result) => {
-      if (result === null) {
-        toast.success("No changes to save");
-      } else {
-        toast.success("Bill updated");
-      }
-      onSaved();
-    },
-    onError: (err) => toast.error((err as Error).message),
-  });
-
   const activeExtras = bill.extras.filter((e) => !e.is_deleted);
 
   return (
@@ -269,23 +214,13 @@ function BillDetailModal({
         </DialogHeader>
 
         <div className="max-h-[70vh] overflow-y-auto">
-          {/* Customer (editable) */}
-          <section className="px-5 py-4 border-b space-y-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Customer</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-600">Name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600">Phone</label>
-                <Input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                  placeholder="10-digit phone"
-                />
-              </div>
-            </div>
+          {/* Customer */}
+          <section className="px-5 py-4 border-b">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Customer</h3>
+            <p className="font-semibold text-base text-gray-900">{bill.customer_name ?? "—"}</p>
+            {bill.customer_phone && (
+              <p className="text-sm font-mono text-gray-700 mt-1">{bill.customer_phone}</p>
+            )}
           </section>
 
           {/* Tables */}
@@ -349,38 +284,24 @@ function BillDetailModal({
             </div>
           </section>
 
-          {/* Payments (method editable) */}
+          {/* Payments */}
           <section className="px-5 py-4 space-y-2">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Payments</h3>
-            <p className="text-[11px] text-gray-500">Amounts stay as recorded — only the method can be corrected here.</p>
             <ul className="space-y-2 text-sm">
               {bill.payments.map((p) => (
                 <li key={p.id} className="flex items-center gap-3">
                   <span className="tabular-nums font-bold w-24">{formatCurrency(p.amount)}</span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setMethods((m) => ({ ...m, [p.id]: "cash" }))}
-                      className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${
-                        methods[p.id] === "cash"
-                          ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                    >
-                      <Banknote className="h-3 w-3" />
-                      Cash
-                    </button>
-                    <button
-                      onClick={() => setMethods((m) => ({ ...m, [p.id]: "upi" }))}
-                      className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${
-                        methods[p.id] === "upi"
-                          ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                    >
-                      <Smartphone className="h-3 w-3" />
-                      UPI
-                    </button>
-                  </div>
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide"
+                    style={
+                      p.method === "cash"
+                        ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                        : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
+                    }
+                  >
+                    {p.method === "cash" ? <Banknote className="h-3 w-3" /> : <Smartphone className="h-3 w-3" />}
+                    {p.method}
+                  </span>
                   <span className="ml-auto text-xs opacity-60">
                     {p.status === "completed" && p.collected_at ? fmtDateTime(p.collected_at) : p.status}
                   </span>
@@ -393,20 +314,12 @@ function BillDetailModal({
           </section>
         </div>
 
-        <div className="px-5 py-3 border-t flex items-center justify-end gap-2 bg-gray-50">
+        <div className="px-5 py-3 border-t flex items-center justify-end bg-gray-50">
           <button
             onClick={onClose}
             className="px-3 py-2 rounded-md text-sm font-semibold bg-white border hover:bg-gray-100"
           >
             <X className="h-4 w-4 inline mr-1" /> Close
-          </button>
-          <button
-            onClick={() => save.mutate()}
-            disabled={save.isPending}
-            className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4 inline mr-1" />
-            {save.isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
       </DialogContent>
