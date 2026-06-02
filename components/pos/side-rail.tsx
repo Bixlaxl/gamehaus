@@ -4,13 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, LayoutGrid, CalendarDays } from "lucide-react";
+import { LogOut, LayoutGrid, CalendarDays, Receipt } from "lucide-react";
 
 // Inventory was removed from the staff side rail; owners still manage stock
 // via /owner/inventory. Bell + low-stock badge components stay in the repo
 // for the owner sidebar but are no longer rendered here.
 
-type Route = "tables" | "bookings";
+type Route = "tables" | "bookings" | "bills";
 
 interface Props {
   /** Optional override — when omitted, the active route is derived from the URL pathname. */
@@ -22,10 +22,12 @@ interface Props {
 const NAV: { route: Route; label: string; href: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { route: "tables",    label: "Tables",    href: "/pos",           Icon: LayoutGrid   },
   { route: "bookings",  label: "Bookings",  href: "/pos/bookings",  Icon: CalendarDays },
+  { route: "bills",     label: "Bills",     href: "/pos/bills",     Icon: Receipt      },
 ];
 
 function deriveActive(pathname: string): Route {
   if (pathname.startsWith("/pos/bookings")) return "bookings";
+  if (pathname.startsWith("/pos/bills"))    return "bills";
   return "tables";
 }
 

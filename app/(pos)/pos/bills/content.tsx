@@ -1,0 +1,418 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Search, X, Pencil, Save, Banknote, Smartphone, Phone } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { formatCurrency } from "@/lib/utils";
+
+// Subset of fields the bills feed actually uses — exported so the SSR page
+// can cast its raw query result without duplicating the type.
+export interface BillRow {
+  id: string;
+  location_id: string;
+  type: "walk_in" | "online" | string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  status: string;
+  subtotal: number;
+  discount_amount: number;
+  total_amount: number;
+  amount_due: number;
+  advance_paid: number;
+  points_redeemed: number;
+  finalized_at: string | null;
+  created_at: string;
+  items: {
+    id: string;
+    table_id: string;
+    status: string;
+    actual_start: string | null;
+    actual_end:   string | null;
+    expected_end: string | null;
+    rate_per_hour: number;
+    final_amount: number | null;
+    num_people: number | null;
+    table: { name: string; type: string } | { name: string; type: string }[] | null;
+  }[];
+  extras: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    is_deleted: boolean;
+  }[];
+  payments: {
+    id: string;
+    amount: number;
+    method: "cash" | "upi" | string;
+    status: string;
+    collected_at: string | null;
+  }[];
+}
+
+interface Props {
+  locationId: string;
+  locationName: string;
+  initial: BillRow[];
+}
+
+function fmtDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function tableNameOf(t: BillRow["items"][number]["table"]): string {
+  if (!t) return "Table";
+  if (Array.isArray(t)) return t[0]?.name ?? "Table";
+  return t.name;
+}
+
+export function BillsContent({ locationId, locationName, initial }: Props) {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<BillRow | null>(null);
+
+  const { data: bills = initial } = useQuery<BillRow[]>({
+    queryKey: ["staff-bills", locationId, search],
+    queryFn: async () => {
+      const url = `/api/pos/bills?location_id=${locationId}${search ? `&q=${encodeURIComponent(search)}` : ""}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const body = await res.json() as { success: true; data: BillRow[] } | { success: false; error: string };
+      if (!body.success) throw new Error(body.error);
+      return body.data;
+    },
+    initialData: !search ? initial : undefined,
+    initialDataUpdatedAt: !search ? Date.now() : undefined,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const totals = useMemo(() => {
+    const count = bills.length;
+    const revenue = bills.reduce((s, b) => s + (b.amount_due + b.advance_paid), 0);
+    return { count, revenue };
+  }, [bills]);
+
+  return (
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Bills</h1>
+          <p className="text-sm opacity-70 mt-0.5">
+            {locationName} · {totals.count} bill{totals.count === 1 ? "" : "s"} · {formatCurrency(totals.revenue)} total
+          </p>
+        </div>
+        <div className="relative">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or phone…"
+            className="pl-9 w-64"
+          />
+        </div>
+      </div>
+
+      {bills.length === 0 ? (
+        <div className="rounded-2xl border p-12 text-center opacity-60">
+          {search ? "No matching bills" : "No finalized bills yet at this location."}
+        </div>
+      ) : (
+        <div className="rounded-2xl border overflow-hidden bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">When</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Customer</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Tables</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Payment</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Paid</th>
+                <th className="px-4 py-3 w-10" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {bills.map((b) => {
+                const tablesList = b.items
+                  .map((i) => tableNameOf(i.table))
+                  .filter((n, idx, arr) => arr.indexOf(n) === idx)
+                  .join(", ");
+                const total = b.amount_due + b.advance_paid;
+                const methods = b.payments
+                  .filter((p) => p.status === "completed")
+                  .map((p) => p.method)
+                  .filter((m, idx, arr) => arr.indexOf(m) === idx);
+                return (
+                  <tr
+                    key={b.id}
+                    onClick={() => setSelected(b)}
+                    className="hover:bg-gray-50 cursor-pointer"
+                  >
+                    <td className="px-4 py-3 font-mono text-sm font-medium">{fmtDateTime(b.finalized_at)}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold">{b.customer_name ?? "—"}</p>
+                      {b.customer_phone && <p className="text-xs opacity-70">{b.customer_phone}</p>}
+                    </td>
+                    <td className="px-4 py-3">{tablesList || "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        {methods.length === 0 ? "—" : methods.map((m) => (
+                          <span
+                            key={m}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                            style={
+                              m === "cash"
+                                ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                                : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
+                            }
+                          >
+                            {m === "cash" ? <Banknote className="h-2.5 w-2.5" /> : <Smartphone className="h-2.5 w-2.5" />}
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold tabular-nums">{formatCurrency(total)}</td>
+                    <td className="px-4 py-3 text-right opacity-60">
+                      <Pencil className="h-3.5 w-3.5 inline" />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selected && (
+        <BillDetailModal
+          bill={selected}
+          onClose={() => setSelected(null)}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["staff-bills", locationId] });
+            setSelected(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Detail / edit modal
+// ────────────────────────────────────────────────────────────────────────────
+function BillDetailModal({
+  bill, onClose, onSaved,
+}: {
+  bill: BillRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name,  setName]  = useState(bill.customer_name  ?? "");
+  const [phone, setPhone] = useState(bill.customer_phone ?? "");
+  // payment_methods: { payment_id → new method } — only changed ones get sent
+  const [methods, setMethods] = useState<Record<string, "cash" | "upi">>(
+    Object.fromEntries(bill.payments.map((p) => [p.id, (p.method === "cash" ? "cash" : "upi") as "cash" | "upi"]))
+  );
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, unknown> = {};
+      if (name.trim() && name.trim() !== bill.customer_name) payload.customer_name = name.trim();
+      const cleanedPhone = phone.trim() || null;
+      if (cleanedPhone !== (bill.customer_phone ?? null)) payload.customer_phone = cleanedPhone;
+      // Only send method changes that actually differ from current
+      const changed: Record<string, "cash" | "upi"> = {};
+      for (const p of bill.payments) {
+        if (methods[p.id] && methods[p.id] !== p.method) changed[p.id] = methods[p.id];
+      }
+      if (Object.keys(changed).length > 0) payload.payment_methods = changed;
+      if (Object.keys(payload).length === 0) return null;
+
+      const res = await fetch(`/api/pos/bills/${bill.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error ?? "Save failed");
+      return body;
+    },
+    onSuccess: (result) => {
+      if (result === null) {
+        toast.success("No changes to save");
+      } else {
+        toast.success("Bill updated");
+      }
+      onSaved();
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const activeExtras = bill.extras.filter((e) => !e.is_deleted);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 py-4 border-b">
+          <DialogTitle className="text-base font-bold flex items-center gap-2">
+            Bill <span className="font-mono text-xs opacity-60">#{bill.id.slice(0, 8)}</span>
+            <span className="ml-auto text-xs font-normal opacity-60">{fmtDateTime(bill.finalized_at)}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="max-h-[70vh] overflow-y-auto">
+          {/* Customer (editable) */}
+          <section className="px-5 py-4 border-b space-y-3">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Customer</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Name</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600">Phone</label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="10-digit phone"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Tables */}
+          <section className="px-5 py-4 border-b space-y-2">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Tables</h3>
+            <ul className="space-y-1.5 text-sm">
+              {bill.items.map((it) => {
+                const tn = tableNameOf(it.table);
+                const mins = it.actual_start && it.actual_end
+                  ? Math.round((new Date(it.actual_end).getTime() - new Date(it.actual_start).getTime()) / 60000)
+                  : null;
+                return (
+                  <li key={it.id} className="flex justify-between gap-3">
+                    <span className="font-medium">
+                      {tn}
+                      {mins != null && <span className="opacity-60 font-normal"> · {mins}m</span>}
+                      {it.num_people && <span className="opacity-60 font-normal"> · {it.num_people} ppl</span>}
+                    </span>
+                    <span className="tabular-nums font-semibold">
+                      {formatCurrency(it.final_amount ?? 0)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          {/* Extras */}
+          {activeExtras.length > 0 && (
+            <section className="px-5 py-4 border-b space-y-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Extras</h3>
+              <ul className="space-y-1.5 text-sm">
+                {activeExtras.map((e) => (
+                  <li key={e.id} className="flex justify-between gap-3">
+                    <span className="font-medium">
+                      {e.name}
+                      {e.quantity > 1 && <span className="opacity-60 font-normal"> × {e.quantity}</span>}
+                    </span>
+                    <span className="tabular-nums font-semibold">{formatCurrency(e.price * e.quantity)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Totals */}
+          <section className="px-5 py-4 border-b text-sm space-y-1.5">
+            <div className="flex justify-between"><span className="opacity-70">Subtotal</span><span className="tabular-nums">{formatCurrency(bill.subtotal)}</span></div>
+            {bill.discount_amount > 0 && (
+              <div className="flex justify-between text-emerald-600"><span>Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
+            )}
+            {bill.advance_paid > 0 && (
+              <div className="flex justify-between text-emerald-600"><span>Advance paid</span><span className="tabular-nums">−{formatCurrency(bill.advance_paid)}</span></div>
+            )}
+            {bill.points_redeemed > 0 && (
+              <div className="flex justify-between text-amber-600"><span>Points redeemed ({bill.points_redeemed} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed)}</span></div>
+            )}
+            <div className="flex justify-between pt-2 border-t font-bold text-base">
+              <span>Collected at venue</span>
+              <span className="tabular-nums text-[#D4541A]">{formatCurrency(bill.amount_due)}</span>
+            </div>
+          </section>
+
+          {/* Payments (method editable) */}
+          <section className="px-5 py-4 space-y-2">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Payments</h3>
+            <p className="text-[11px] text-gray-500">Amounts stay as recorded — only the method can be corrected here.</p>
+            <ul className="space-y-2 text-sm">
+              {bill.payments.map((p) => (
+                <li key={p.id} className="flex items-center gap-3">
+                  <span className="tabular-nums font-bold w-24">{formatCurrency(p.amount)}</span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setMethods((m) => ({ ...m, [p.id]: "cash" }))}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${
+                        methods[p.id] === "cash"
+                          ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      <Banknote className="h-3 w-3" />
+                      Cash
+                    </button>
+                    <button
+                      onClick={() => setMethods((m) => ({ ...m, [p.id]: "upi" }))}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${
+                        methods[p.id] === "upi"
+                          ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      <Smartphone className="h-3 w-3" />
+                      UPI
+                    </button>
+                  </div>
+                  <span className="ml-auto text-xs opacity-60">
+                    {p.status === "completed" && p.collected_at ? fmtDateTime(p.collected_at) : p.status}
+                  </span>
+                </li>
+              ))}
+              {bill.payments.length === 0 && (
+                <li className="text-xs opacity-60 italic">No payment records (this bill may have been settled by advance).</li>
+              )}
+            </ul>
+          </section>
+        </div>
+
+        <div className="px-5 py-3 border-t flex items-center justify-end gap-2 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-3 py-2 rounded-md text-sm font-semibold bg-white border hover:bg-gray-100"
+          >
+            <X className="h-4 w-4 inline mr-1" /> Close
+          </button>
+          <button
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4 inline mr-1" />
+            {save.isPending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Convenience re-export so `Phone` icon can be used in cell, etc.
+export { Phone };
