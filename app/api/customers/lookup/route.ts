@@ -16,31 +16,62 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("customer_profiles")
-    .select("name, points_balance, visit_count, total_spent")
-    .eq("phone", phone)
-    .single();
+  // Profile + active membership in parallel — the membership discount has to
+  // flow back to the finalize modal so its displayed Total Due matches what
+  // the server actually charges. Without this, an active membership silently
+  // shaved the bill server-side and the modal's payment-total check failed
+  // with "Payment total ₹X does not match bill ₹Y".
+  const nowIso = new Date().toISOString();
+  const [profileResult, membershipResult] = await Promise.all([
+    admin
+      .from("customer_profiles")
+      .select("name, points_balance, visit_count, total_spent")
+      .eq("phone", phone)
+      .single(),
+    admin
+      .from("customer_memberships")
+      .select("plan:membership_plans(discount_pct)")
+      .eq("customer_phone", phone)
+      .eq("is_active", true)
+      .lte("starts_at", nowIso)
+      .gte("expires_at", nowIso)
+      .order("starts_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
+  const data = profileResult.data;
   if (!data) {
     return NextResponse.json({ found: false, customer: null });
   }
 
-  // If name is provided (public website), require it to match — prevents guessing phone numbers
+  // If name is provided (public website), require it to match — prevents
+  // guessing phone numbers from seeing points / membership. On mismatch we
+  // still surface a name_mismatch hint with the stored name so the checkout
+  // page can show the same "Use existing / Update name" popup the staff sees.
   if (nameParam) {
     const storedName = (data.name ?? "").toLowerCase().trim();
     if (storedName !== nameParam) {
-      return NextResponse.json({ found: false, customer: null });
+      return NextResponse.json({
+        found:         false,
+        customer:      null,
+        name_mismatch: true,
+        stored_name:   data.name,
+      });
     }
   }
+
+  const mPlan = (membershipResult.data as { plan: { discount_pct: number } | { discount_pct: number }[] | null } | null)?.plan;
+  const membershipDiscountPct = Array.isArray(mPlan) ? (mPlan[0]?.discount_pct ?? 0) : (mPlan?.discount_pct ?? 0);
 
   return NextResponse.json({
     found: true,
     customer: {
-      name:           data.name,
-      points_balance: data.points_balance,
-      visit_count:    data.visit_count,
-      total_spent:    data.total_spent,
+      name:                    data.name,
+      points_balance:          data.points_balance,
+      visit_count:             data.visit_count,
+      total_spent:             data.total_spent,
+      membership_discount_pct: membershipDiscountPct,
     },
   });
 }

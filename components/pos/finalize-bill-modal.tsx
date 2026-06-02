@@ -18,6 +18,10 @@ type PaymentMethod = "cash" | "upi";
 interface CustomerInfo {
   points_balance: number;
   name: string | null;
+  /** Live discount % from any active membership the customer holds. The
+   *  server applies this on top of bill.totalDue at finalize time, so the
+   *  modal needs to mirror it to keep the displayed Total Due in sync. */
+  membership_discount_pct?: number | null;
 }
 
 type HandoverBooking = Pick<Booking, "id" | "scheduled_start" | "scheduled_end"> & {
@@ -69,9 +73,15 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0);
   const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= bill.scheduledSubtotal;
-  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
+  // Membership discount mirrors the server's finalize math: applied AFTER
+  // bill.totalDue (which already absorbs the advance) and BEFORE points
+  // redemption. Floor matches Math.floor in /api/orders/[id]/finalize.
+  const membershipPct      = customerInfo?.membership_discount_pct ?? 0;
+  const membershipDiscount = membershipPct > 0 ? Math.floor(bill.totalDue * membershipPct / 100) : 0;
+  const billAfterMembership = Math.max(0, bill.totalDue - membershipDiscount);
+  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
   const clampedRedeem = Math.min(redeemPoints, maxRedeem);
-  const finalDue      = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
+  const finalDue      = Math.max(0, Math.round((billAfterMembership - clampedRedeem) * 100) / 100);
   const pointsToEarn  = Math.floor(finalDue / 100);
 
   const phoneForLookup = selectedOrder?.customer_phone ?? (manualPhone.length >= 10 ? manualPhone : null);
@@ -374,6 +384,12 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               <div className="flex justify-between">
                 <span style={{ color: "#10b981" }}>Advance paid</span>
                 <span style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
+              </div>
+            )}
+            {membershipDiscount > 0 && (
+              <div className="flex justify-between">
+                <span style={{ color: "#8b5cf6" }}>Membership ({membershipPct}% off)</span>
+                <span style={{ color: "#8b5cf6" }}>−{formatCurrency(membershipDiscount)}</span>
               </div>
             )}
             {clampedRedeem > 0 && (

@@ -7,6 +7,7 @@ import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import Script from "next/script";
+import { NameMismatchModal } from "@/components/pos/name-mismatch-modal";
 import {
   ArrowLeft, Trash2, ShoppingCart, User, Phone,
   CreditCard, Tag, ChevronRight, Clock, Calendar, Star, CalendarX,
@@ -100,6 +101,9 @@ export default function CheckoutPage() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [customer, setCustomer]       = useState<CustomerLookup | null>(null);
+  // When the typed name doesn't match the name stored against this phone,
+  // we show the same Use existing / Update name choice the staff sees.
+  const [nameMismatchOnline, setNameMismatchOnline] = useState<{ stored: string; entered: string } | null>(null);
   const [lookingUp, setLookingUp]     = useState(false);
   const [redeemInput, setRedeemInput] = useState("0");
   const [now, setNow]                 = useState(() => new Date());
@@ -224,6 +228,7 @@ export default function CheckoutPage() {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
     setCustomer(null);
     setRedeemInput("0");
+    setNameMismatchOnline(null);
     // Both a valid Indian mobile number and name are required for lookup on the public site
     const isValidIndianPhone = /^[6-9]\d{9}$/.test(currentPhone.trim());
     if (isValidIndianPhone && currentName.trim().length >= 2) {
@@ -231,8 +236,19 @@ export default function CheckoutPage() {
       lookupTimer.current = setTimeout(async () => {
         const url = `/api/customers/lookup?phone=${encodeURIComponent(currentPhone.trim())}&name=${encodeURIComponent(currentName.trim())}`;
         const res  = await fetch(url);
-        const data = await res.json() as { found: boolean; customer: CustomerLookup | null };
+        const data = await res.json() as {
+          found: boolean;
+          customer: CustomerLookup | null;
+          name_mismatch?: boolean;
+          stored_name?: string | null;
+        };
         setCustomer(data.customer);
+        // Same number, different name → surface the popup so the customer
+        // can pick whether to use the previously-registered name or update
+        // their profile to the newly entered one.
+        if (data.name_mismatch && data.stored_name) {
+          setNameMismatchOnline({ stored: data.stored_name, entered: currentName.trim() });
+        }
         setLookingUp(false);
       }, 600);
     } else {
@@ -431,6 +447,28 @@ export default function CheckoutPage() {
   return (
     <>
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      {nameMismatchOnline && (
+        <NameMismatchModal
+          existingName={nameMismatchOnline.stored}
+          enteredName={nameMismatchOnline.entered}
+          phone={phone}
+          onCancel={() => setNameMismatchOnline(null)}
+          onUseExisting={() => {
+            // Drop their typed name in favour of the previously-registered one
+            // and re-run the lookup so the points / membership badges appear
+            // (the lookup currently returned found:false because of the mismatch).
+            setName(nameMismatchOnline.stored);
+            setNameMismatchOnline(null);
+            triggerLookup(phone, nameMismatchOnline.stored);
+          }}
+          onUpdateName={() => {
+            // Keep the typed name. /api/orders' upsert into customer_profiles
+            // will overwrite the stored name on submit, so the owner panel
+            // reflects the new name on next refresh.
+            setNameMismatchOnline(null);
+          }}
+        />
+      )}
       <div className="min-h-screen" style={{ background: bg }}>
 
         {/* Header */}
