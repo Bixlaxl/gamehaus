@@ -415,9 +415,37 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
   async function checkIn(e: React.MouseEvent) {
     e.stopPropagation();
     setLoadingCheckin(true);
+
+    // Optimistic: flip the order_item to running with the booked anchor times
+    // so the BookedCard swaps for a RunningCard on the very next render. The
+    // server applies identical logic for on-time arrival (actual_start =
+    // scheduled_start, expected_end = scheduled_end). For early arrival the
+    // server shifts those — refetch reconciles within ~500ms.
+    const orderItemId = (booking as { order_item_id?: string }).order_item_id;
+    const prevSnapshot = orderItemId
+      ? usePOSStore.getState().openOrders
+          .flatMap((o) => o.items)
+          .find((i) => i.id === orderItemId)
+      : null;
+    if (orderItemId) {
+      usePOSStore.getState().patchOrderItem(orderItemId, {
+        status:       "running",
+        actual_start: booking.scheduled_start,
+        expected_end: booking.scheduled_end,
+      });
+    }
+
     const res = await fetch(`/api/bookings/${booking.id}/checkin`, { method: "POST" });
     if (!res.ok) {
-      const body = await res.json() as { error?: string };
+      // Roll back the optimistic flip
+      if (orderItemId && prevSnapshot) {
+        usePOSStore.getState().patchOrderItem(orderItemId, {
+          status:       prevSnapshot.status,
+          actual_start: prevSnapshot.actual_start,
+          expected_end: prevSnapshot.expected_end,
+        });
+      }
+      const body = await res.json().catch(() => ({})) as { error?: string };
       toast.error(body.error ?? "Check-in failed");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });

@@ -17,10 +17,16 @@ export async function GET(request: Request) {
   const locationId = searchParams.get("locationId");
   if (!locationId) return NextResponse.json(err("locationId required", "VALIDATION_ERROR"), { status: 400 });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // IST-anchored "today" window. Edge runs UTC, so setHours(0,0,0,0) cuts off
+  // IST traffic at the boundary — late-IST bookings would fall into UTC's
+  // next day. Compute IST today by shifting +5:30 then reading UTC fields.
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const nowIst = new Date(Date.now() + IST_OFFSET_MS);
+  const y  = nowIst.getUTCFullYear();
+  const mo = nowIst.getUTCMonth();
+  const d  = nowIst.getUTCDate();
+  const todayMs    = Date.UTC(y, mo, d, 0, 0, 0) - IST_OFFSET_MS;     // IST today 00:00
+  const tomorrowMs = todayMs + 24 * 60 * 60 * 1000;
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -31,9 +37,13 @@ export async function GET(request: Request) {
       order_item:order_items!order_item_id(table_id, status)
     `)
     .eq("orders.location_id", locationId)
-    .gte("scheduled_start", today.toISOString())
-    .lt("scheduled_start", tomorrow.toISOString())
-    .in("status", ["confirmed"]);
+    .gte("scheduled_start", new Date(todayMs).toISOString())
+    .lt("scheduled_start", new Date(tomorrowMs).toISOString())
+    .in("status", ["confirmed"])
+    // Sort ascending so the buildTableStatus .find() on the client picks the
+    // EARLIEST upcoming booking per table — not whichever one Supabase chose
+    // to return first (that's how the 7:30pm booking was eclipsing the 2:15pm one).
+    .order("scheduled_start", { ascending: true });
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
