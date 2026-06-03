@@ -176,10 +176,17 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     return unsubscribe;
   }, [locationId, handleOrderItemChange, handleOrderChange, handleTableChange, qc]);
 
-  // Build table status
+  // ── Build table status from the STORE, not the network cache ─────────────
+  // store.openOrders is the unified source of truth — patchOrderItem,
+  // optimistic check-in / walk-in flips, and Supabase Realtime all write to
+  // it. Previously buildTableStatus read from rawOrders (the useQuery cache),
+  // so every patch only reached cards after the next /api/pos/orders refetch.
+  // That's the visible lag staff complained about. Now any store update
+  // (optimistic, realtime, manual patch) makes the grid re-render on the
+  // very next tick — instant card flip without waiting on the network.
   const buildTableStatus = useCallback(() => {
     if (!rawTables) return;
-    const activeItems = (rawOrders ?? []).flatMap((o) =>
+    const activeItems = openOrders.flatMap((o) =>
       (o.items ?? []).filter(
         (i) => (i.status === "running" || i.status === "scheduled") && !i.is_deleted
       )
@@ -201,9 +208,12 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       };
     });
     setTables(tablesWithStatus);
-  }, [rawTables, rawOrders, rawBookings, setTables]);
+  }, [rawTables, openOrders, rawBookings, setTables]);
 
   useEffect(() => { buildTableStatus(); }, [buildTableStatus]);
+  // Hydrate the store from the network cache whenever a refetch lands.
+  // patchOrderItem / realtime / optimistic updates keep openOrders fresh
+  // between refetches.
   useEffect(() => { if (rawOrders) setOpenOrders(rawOrders); }, [rawOrders, setOpenOrders]);
 
   // Upcoming bookings header badge — uses Date.now() inline since POSScreen
