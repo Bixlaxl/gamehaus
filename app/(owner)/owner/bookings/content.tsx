@@ -12,7 +12,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, XCircle, CalendarPlus } from "lucide-react";
+import { ManualBookingModal } from "@/components/pos/manual-booking-modal";
 import { cn, getShopWindow } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking, Order, Location } from "@/lib/supabase/types";
@@ -84,6 +85,7 @@ export function BookingsContent({
   const [typeFilter, setType]     = useState("all");
   const [statusFilter, setStatus] = useState("all");
   const [refundBooking, setRefund] = useState<BookingRow | null>(null);
+  const [manualOpen,    setManualOpen] = useState(false);
 
   function shiftDate(days: number) {
     const d = new Date(date + "T12:00:00");
@@ -224,8 +226,17 @@ export function BookingsContent({
     <div className="space-y-6">
       {/* Header — only the List view is kept; Schedule was the same data minus
           the Location column, so it was redundant for multi-location owners. */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Bookings</h1>
+        {mode === "staff" && staffLocationId && (
+          <button
+            onClick={() => setManualOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 transition-opacity"
+          >
+            <CalendarPlus className="h-4 w-4" />
+            Manual booking
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -423,6 +434,15 @@ export function BookingsContent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {manualOpen && staffLocationId && (
+        <ManualBookingModal
+          locationId={staffLocationId}
+          defaultDate={date}
+          onClose={() => setManualOpen(false)}
+          onCreated={() => { setManualOpen(false); void refetch(); }}
+        />
+      )}
     </div>
   );
 }
