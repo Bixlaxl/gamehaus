@@ -5,6 +5,40 @@ import { tableSchema, ok, err } from "@/lib/validators/schemas";
 
 export const runtime = 'edge';
 
+/**
+ * GET — owner-only list of every table across all locations.
+ * Optional ?location_id filters to one location.
+ *
+ * Same RLS-bypass reasoning as /api/locations: the /owner/tables page used
+ * to query Supabase directly from the browser, so tables at locations the
+ * anon role couldn't read silently disappeared. Routing through admin here
+ * ensures the owner sees the real, full set.
+ */
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+
+  const { data: viewer } = await supabase
+    .from("users").select("role").eq("id", session.user.id).single();
+  if (viewer?.role !== "owner") {
+    return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const locationId = searchParams.get("location_id");
+
+  const admin = createAdminClient();
+  let query = admin
+    .from("tables")
+    .select("*")
+    .order("sort_order");
+  if (locationId) query = query.eq("location_id", locationId);
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+  return NextResponse.json(ok(data ?? []));
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();

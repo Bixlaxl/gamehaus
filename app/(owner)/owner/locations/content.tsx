@@ -24,12 +24,14 @@ function useLocations(initialLocations: Location[]) {
   return useQuery({
     queryKey: ["locations"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("locations")
-        .select("*")
-        .order("created_at");
-      if (error) throw error;
-      return data;
+      // Admin-backed API — bypasses RLS so the owner sees every location,
+      // not only those a browser-side query happens to be allowed to read.
+      const res = await fetch("/api/locations", { cache: "no-store" });
+      const body = await res.json() as
+        | { success: true;  data: Location[] }
+        | { success: false; error: string };
+      if (!body.success) throw new Error(body.error);
+      return body.data;
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),

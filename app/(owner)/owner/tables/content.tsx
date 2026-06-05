@@ -71,11 +71,16 @@ export function TablesContent({
   const { data: locations } = useQuery({
     queryKey: ["locations"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("locations")
-        .select("*")
-        .eq("is_active", true);
-      return data ?? [];
+      // Admin-backed — see the comment on /api/locations. Browser-side
+      // queries here hit RLS and silently drop locations the owner
+      // should otherwise see, which left the filter dropdown showing
+      // only one of several locations.
+      const res = await fetch("/api/locations", { cache: "no-store" });
+      const body = await res.json() as
+        | { success: true;  data: typeof initialLocations }
+        | { success: false; error: string };
+      if (!body.success) return [];
+      return body.data.filter((l) => l.is_active);
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
@@ -85,15 +90,18 @@ export function TablesContent({
   const { data: tables, isLoading } = useQuery({
     queryKey: ["tables", selectedLocation],
     queryFn: async () => {
-      let query = supabase
-        .from("tables")
-        .select("*")
-        .order("sort_order");
-      if (selectedLocation !== "all") {
-        query = query.eq("location_id", selectedLocation);
-      }
-      const { data } = await query;
-      return data ?? [];
+      // Admin-backed API — bypasses RLS so the owner sees tables across ALL
+      // locations, not only those the browser anon role happens to be
+      // allowed to read.
+      const url = selectedLocation === "all"
+        ? "/api/tables"
+        : `/api/tables?location_id=${encodeURIComponent(selectedLocation)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const body = await res.json() as
+        | { success: true;  data: typeof initialTables }
+        | { success: false; error: string };
+      if (!body.success) throw new Error(body.error);
+      return body.data;
     },
     initialData: selectedLocation === "all" ? initialTables : undefined,
     initialDataUpdatedAt: Date.now(),

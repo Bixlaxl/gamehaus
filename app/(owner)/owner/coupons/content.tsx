@@ -78,8 +78,12 @@ export function CouponsContent({
   const { data: locations } = useQuery({
     queryKey: ["locations"],
     queryFn: async () => {
-      const { data } = await supabase.from("locations").select("*").eq("is_active", true);
-      return (data ?? []) as Location[];
+      // Admin-backed — see /api/locations comment. Browser-side reads
+      // here hit RLS and silently drop rows.
+      const res  = await fetch("/api/locations", { cache: "no-store" });
+      const body = await res.json() as { success: true; data: Location[] } | { success: false; error: string };
+      if (!body.success) return [];
+      return body.data.filter((l) => l.is_active);
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
