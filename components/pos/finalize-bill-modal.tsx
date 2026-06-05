@@ -60,6 +60,12 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const [loading,          setLoading]          = useState(false);
   const [error,            setError]            = useState<string | null>(null);
   const [customerInfo,     setCustomerInfo]     = useState<CustomerInfo | null>(null);
+  // True while the customer lookup is in flight. We HAVE to block Collect
+  // during this window because membership_discount_pct (and points_balance)
+  // come from this fetch — clicking before it lands sends a payment_total
+  // that's higher than what the server computes after applying the
+  // discount, and the server rejects with PAYMENT_MISMATCH.
+  const [lookupPending,    setLookupPending]    = useState(false);
   const [redeemInput,      setRedeemInput]      = useState(String(savedPoints));
   const [step,             setStep]             = useState<"bill" | "handover">("bill");
   const [handoverBookings, setHandoverBookings] = useState<HandoverBooking[]>([]);
@@ -88,11 +94,16 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   useEffect(() => {
     setCustomerInfo(null);
-    if (!isOpen || !phoneForLookup) return;
+    if (!isOpen || !phoneForLookup) {
+      setLookupPending(false);
+      return;
+    }
+    setLookupPending(true);
     fetch(`/api/customers/lookup?phone=${encodeURIComponent(phoneForLookup)}`)
       .then((r) => r.json())
       .then((data: { found: boolean; customer: CustomerInfo | null }) => setCustomerInfo(data.customer))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLookupPending(false));
   }, [isOpen, phoneForLookup]);
 
   useEffect(() => {
@@ -566,11 +577,15 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
           <button
             onClick={confirmPayment}
-            disabled={loading || (splitMode ? !splitOk : !method)}
+            disabled={loading || lookupPending || (splitMode ? !splitOk : !method)}
             className="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-30"
             style={{ background: "#D4541A" }}
           >
-            {loading ? "Processing..." : `Collect ${formatCurrency(finalDue)}`}
+            {loading
+              ? "Processing..."
+              : lookupPending
+              ? "Loading customer…"
+              : `Collect ${formatCurrency(finalDue)}`}
           </button>
         </div>
       </DialogContent>
