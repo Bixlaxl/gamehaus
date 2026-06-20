@@ -155,6 +155,14 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
               { type: "text", text: amountPaid },
             ],
           },
+          {
+            type: "button",
+            sub_type: "url",
+            index: "0",
+            parameters: [
+              { type: "text", text: orderId },
+            ],
+          },
         ],
       },
     };
