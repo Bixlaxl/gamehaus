@@ -171,17 +171,17 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
                 Please arrive 5 minutes early. Show this confirmation at reception to check in.
               </p>
             </div>
-            <div
-              className="px-4 py-3 rounded-2xl"
-              style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}
-            >
-              <p className="flex items-start gap-2 text-xs" style={{ color: dark ? "#aaa" : "#777" }}>
-                <span className="mt-0.5 shrink-0 text-sm leading-none" style={{ color: "#EF4444" }}>⚠</span>
-                {amountDue > 0
-                  ? `Your advance payment is strictly non-refundable. Please pay the remaining ₹${amountDue.toLocaleString("en-IN")} at the venue.`
-                  : "This booking is non-refundable. No amount will be returned upon cancellation."}
-              </p>
-            </div>
+            {amountDue > 0 && (
+              <div
+                className="px-4 py-3 rounded-2xl"
+                style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}
+              >
+                <p className="flex items-start gap-2 text-xs" style={{ color: dark ? "#aaa" : "#777" }}>
+                  <span className="mt-0.5 shrink-0 text-sm leading-none" style={{ color: "#EF4444" }}>⚠</span>
+                  {`Your advance payment is strictly non-refundable. Please pay the remaining ₹${amountDue.toLocaleString("en-IN")} at the venue.`}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

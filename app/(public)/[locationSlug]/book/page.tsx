@@ -756,20 +756,20 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* Non-refundable notice — replaces the old cancellation-tier table */}
-              <div
-                className="rounded-xl px-4 py-3"
-                style={{ background: "rgba(239,68,68,0.07)", border: `1px solid rgba(239,68,68,0.25)` }}
-              >
-                <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: "#EF4444" }}>
-                  Non-refundable
-                </p>
-                <p className="text-xs leading-relaxed" style={{ color: dark ? "#aaa" : "#777" }}>
-                  {paymentMode === "advance"
-                    ? "Reservations are strictly non-refundable. The advance amount will not be returned under any circumstances."
-                    : "This payment is non-refundable. Please review your booking carefully before proceeding."}
-                </p>
-              </div>
+              {/* Non-refundable notice — only for advance/reserve mode */}
+              {paymentMode === "advance" && (
+                <div
+                  className="rounded-xl px-4 py-3"
+                  style={{ background: "rgba(239,68,68,0.07)", border: `1px solid rgba(239,68,68,0.25)` }}
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: "#EF4444" }}>
+                    Non-refundable
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: dark ? "#aaa" : "#777" }}>
+                    Reservations are strictly non-refundable. The advance amount will not be returned under any circumstances.
+                  </p>
+                </div>
+              )}
 
               {paymentMode === "full" && (
                 <div>
