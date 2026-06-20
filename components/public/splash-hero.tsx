@@ -143,11 +143,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
         {/* Header */}
         <header
           className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-2 max-w-5xl mx-auto"
-          style={{
-            opacity:   phase === "gone" ? 1 : 0,
-            transform: phase === "gone" ? "translateY(0)" : "translateY(-12px)",
-            transition: "opacity 500ms ease-out, transform 500ms ease-out",
-          }}
         >
           <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full overflow-hidden shrink-0">
             <Image src="/image.png" alt="Gamehaus" width={80} height={80} className="object-cover w-full h-full" />
@@ -171,11 +166,6 @@ export function SplashHero({ locations }: { locations: Location[] }) {
         {/* Hero */}
         <div
           className="px-4 sm:px-5 pt-8 sm:pt-10 pb-8 sm:pb-10 max-w-5xl mx-auto"
-          style={{
-            opacity:   phase === "gone" ? 1 : 0,
-            transform: phase === "gone" ? "translateY(0)" : "translateY(24px)",
-            transition: "opacity 600ms 80ms ease-out, transform 600ms 80ms ease-out",
-          }}
         >
           <h1 className="text-4xl md:text-6xl font-bold leading-tight" style={{ color: textPri }}>
             Book Your<br />
@@ -190,11 +180,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
         <div className="px-4 pb-20 max-w-5xl mx-auto">
           <p
             className="text-xs font-semibold tracking-widest uppercase px-1 mb-5"
-            style={{
-              color: textMuted,
-              opacity:    phase === "gone" ? 1 : 0,
-              transition: "opacity 500ms 120ms ease-out",
-            }}
+            style={{ color: textMuted }}
           >
             Choose a location
           </p>
@@ -214,13 +200,7 @@ export function SplashHero({ locations }: { locations: Location[] }) {
                   onTouchStart={() => router.prefetch(`/${loc.slug}`)}
                   className="block group active:scale-[0.985] transition-transform duration-150"
                 >
-                  <div
-                    style={{
-                      opacity:   phase === "gone" ? 1 : 0,
-                      transform: phase === "gone" ? "translateY(0)" : "translateY(32px)",
-                      transition: `opacity 600ms ${delay}ms ease-out, transform 600ms ${delay}ms cubic-bezier(0.22,1,0.36,1)`,
-                    }}
-                  >
+                  <div>
                     <div
                       className="relative rounded-2xl overflow-hidden border transition-all duration-200
                         bg-white border-[#E8E3D9]

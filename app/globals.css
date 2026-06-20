@@ -53,6 +53,11 @@
   * {
     @apply border-border;
   }
+  html {
+    /* Reserves scrollbar space from the start — prevents layout shift (CLS)
+       when a scrollbar appears/disappears as content loads or overlays close. */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground;
   }
