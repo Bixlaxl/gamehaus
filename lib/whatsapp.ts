@@ -61,6 +61,7 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       .select(`
         scheduled_start,
         scheduled_end,
+        rate_per_hour,
         tables (
           name
         )
@@ -76,10 +77,25 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     }
 
     // Extract location slug and timezone
-    // locations is a single object since orders -> locations is one-to-many (or zero/one-to-many)
     const locationInfo = order.locations as unknown as { slug: string; timezone: string } | null;
     const slug = locationInfo?.slug || "gamehaus";
     const timezone = locationInfo?.timezone || "Asia/Kolkata";
+
+    // Calculate total cost of order items
+    const totalCost = items.reduce((sum, item) => {
+      const start = new Date(item.scheduled_start!);
+      const end = new Date(item.scheduled_end!);
+      const hrs = (end.getTime() - start.getTime()) / (3600 * 1000);
+      const itemRate = Number(item.rate_per_hour) || 0;
+      return sum + (itemRate * hrs);
+    }, 0);
+
+    const roundedTotalCost = Math.round(totalCost);
+    const amountPaidVal = Math.round(order.advance_paid);
+    
+    // We consider it fully paid if the amount paid is at least the total cost (within a 1 rupee buffer)
+    const isFullyPaid = amountPaidVal >= roundedTotalCost - 1;
+    const amountDueVal = Math.max(0, roundedTotalCost - amountPaidVal);
 
     // 3. Prepare parameters
     // Parameter 1: Customer Name
@@ -118,8 +134,8 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
           hour12: true,
           timeZone: tz,
         });
-        str = str.replace(/\s+/g, ""); // e.g. "2:00 PM" -> "2:00PM"
-        str = str.replace(/:00(AM|PM)$/i, "$1"); // e.g. "2:00PM" -> "2PM"
+        str = str.replace(/\s+/g, "");
+        str = str.replace(/:00(AM|PM)$/i, "$1");
         return str;
       };
       return `${formatTime(start)}-${formatTime(end)}`;
@@ -133,16 +149,55 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     });
     const resourceAndTime = itemStrings.join(", ");
 
-    // Parameter 5: Amount Paid
-    const amountPaid = Math.round(order.advance_paid).toString();
-
-    // Determine template name based on location slug
-    const templateName = slug === "nerf-turf" ? "nerfturf_booking_confirmation" : "gamehaus_booking_confirmation";
-
     // Clean phone number: remove non-digits, prepend "91" if exactly 10 digits
     let cleanedPhone = order.customer_phone.replace(/\D/g, "");
     if (cleanedPhone.length === 10) {
       cleanedPhone = "91" + cleanedPhone;
+    }
+
+    // 4. Select correct template and construct payload components
+    let templateName = "";
+    const components = [];
+
+    if (isFullyPaid) {
+      // Fully paid booking
+      templateName = slug === "nerf-turf" ? "nerfturf_booking_confirmation" : "gamehaus_booking_confirmation";
+      
+      components.push(
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: customerName },
+            { type: "text", text: refCode },
+            { type: "text", text: formattedDate },
+            { type: "text", text: resourceAndTime },
+            { type: "text", text: amountPaidVal.toString() },
+          ],
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [
+            { type: "text", text: orderId },
+          ],
+        }
+      );
+    } else {
+      // Reservation (partial payment, no dynamic button as configured)
+      templateName = slug === "nerf-turf" ? "nerfturf_booking_reservation" : "gamehaus_booking_reservation";
+      
+      components.push({
+        type: "body",
+        parameters: [
+          { type: "text", text: customerName },
+          { type: "text", text: refCode },
+          { type: "text", text: formattedDate },
+          { type: "text", text: resourceAndTime },
+          { type: "text", text: amountPaidVal.toString() },
+          { type: "text", text: amountDueVal.toString() },
+        ],
+      });
     }
 
     // 5. Construct payload
@@ -153,26 +208,7 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       template: {
         name: templateName,
         language: { code: "en" },
-        components: [
-          {
-            type: "body",
-            parameters: [
-              { type: "text", text: customerName },
-              { type: "text", text: refCode },
-              { type: "text", text: formattedDate },
-              { type: "text", text: resourceAndTime },
-              { type: "text", text: amountPaid },
-            ],
-          },
-          {
-            type: "button",
-            sub_type: "url",
-            index: "0",
-            parameters: [
-              { type: "text", text: orderId },
-            ],
-          },
-        ],
+        components,
       },
     };
 
