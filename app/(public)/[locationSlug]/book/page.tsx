@@ -149,6 +149,17 @@ export default function CheckoutPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Auto-switch to full pay when subtotal is at or below the advance threshold
+  // so the customer never gets stuck on an invalid payment mode.
+  const subtotalForForce = cart.items.reduce((s, i) => s + i.amount, 0);
+  useEffect(() => {
+    const advanceAmt = advancePerTable * cart.items.length;
+    if (cart.items.length > 0 && subtotalForForce <= advanceAmt) {
+      setPaymentMode("full");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotalForForce, advancePerTable, cart.items.length]);
+
   // Any cart item whose start time has already passed by the time the user reaches checkout
   const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
   const hasExpired   = expiredItems.length > 0;
@@ -215,13 +226,18 @@ export default function CheckoutPage() {
   const chipBg  = dark ? "#1A1A1A" : "#EFEFEF";
 
   const subtotal      = cart.items.reduce((s, i) => s + i.amount, 0);
-  const baseAmount    = paymentMode === "advance" ? advancePerTable * cart.items.length : subtotal;
+  const advanceAmount = advancePerTable * cart.items.length;
+  // When total cost is at or below the advance fee, there's nothing to reserve.
+  // Force full pay and hide the advance option entirely.
+  const forceFullPay  = cart.items.length > 0 && subtotal <= advanceAmount;
+  const baseAmount    = paymentMode === "advance" ? advanceAmount : subtotal;
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
   const baseAfterCoupon   = Math.max(0, baseAmount - effectiveDiscount);
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
   const maxRedeem     = Math.min(customer?.points_balance ?? 0, Math.floor(baseAfterCoupon));
-  const clampedRedeem = Math.min(redeemPoints, maxRedeem);
+  // Minimum 100 points required to redeem; any input below 100 is treated as 0
+  const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
   const amountToPay   = Math.max(0, baseAfterCoupon - clampedRedeem);
 
   function triggerLookup(currentPhone: string, currentName: string) {
@@ -654,7 +670,8 @@ export default function CheckoutPage() {
                     </span>
                   </div>
                 )}
-                {!lookingUp && customer && customer.points_balance > 0 && (
+                {/* Redeem input — only shown when customer has ≥ 100 points */}
+                {!lookingUp && customer && customer.points_balance >= 100 && (
                   <div className="mt-2">
                     <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
                       <Star className="h-3 w-3" /> Redeem points
@@ -669,83 +686,90 @@ export default function CheckoutPage() {
                         className="w-28 px-3 py-2 rounded-xl text-sm font-medium outline-none"
                         style={{ background: inputBg, border: `1.5px solid ${inputBdr}`, color: textPri }}
                         onFocus={e => (e.currentTarget.style.borderColor = "#F59E0B")}
-                        onBlur={e => (e.currentTarget.style.borderColor = inputBdr)}
+                        onBlur={e  => (e.currentTarget.style.borderColor = inputBdr)}
                       />
                       <span className="text-sm" style={{ color: textSec }}>/ {maxRedeem} pts max</span>
                     </div>
+                    <p className="text-xs mt-1.5" style={{ color: textMut }}>
+                      Min. 100 pts to redeem
+                      {redeemPoints > 0 && redeemPoints < 100 && (
+                        <span style={{ color: "#EF4444" }}> — enter 100 or more</span>
+                      )}
+                    </p>
                   </div>
                 )}
               </div>
             </div>
           </Section>
 
+
           {/* Payment mode */}
           <Section surface={surface} border={border} dark={dark}>
             <SectionHeader title="Payment" border={border} textMut={textMut} />
             <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                {(["advance", "full"] as const).map(mode => {
-                  const active = paymentMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => setPaymentMode(mode)}
-                      className="p-4 rounded-xl border text-left transition-all"
-                      style={{
-                        background: active ? "rgba(212,84,26,0.08)" : inputBg,
-                        borderColor: active ? "#D4541A" : inputBdr,
-                        boxShadow: active ? "0 0 0 1px #D4541A" : "none",
-                      }}
-                    >
-                      <CreditCard className="h-4 w-4 mb-2" style={{ color: active ? "#D4541A" : textMut }} />
-                      <p className="font-semibold text-sm" style={{ color: textPri }}>
-                        {mode === "advance"
-                          ? `Reserve — ₹${advancePerTable * cart.items.length}`
-                          : "Pay in full"}
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: textSec }}>
-                        {mode === "advance"
-                          ? cart.items.length > 1
-                            ? `₹${advancePerTable}/table · rest at venue`
-                            : "Rest at venue"
-                          : formatCurrency(subtotal)}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Cancellation policy — surfaces the refund tiers owner configured */}
-              {(() => {
-                const tiers = (paymentMode === "full" ? cancellationTiers.full : cancellationTiers.advance)
-                  .slice()
-                  .sort((a, b) => b.hours_before - a.hours_before);
-                if (tiers.length === 0) return null;
-                return (
+              {/* Payment mode toggle — advance hidden when total ≤ advance threshold */}
+              {forceFullPay ? (
+                <div>
                   <div
-                    className="rounded-xl px-4 py-3"
-                    style={{ background: inputBg, border: `1px dashed ${inputBdr}` }}
+                    className="p-4 rounded-xl border"
+                    style={{ background: "rgba(212,84,26,0.08)", borderColor: "#D4541A", boxShadow: "0 0 0 1px #D4541A" }}
                   >
-                    <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMut }}>
-                      Cancellation refund
-                    </p>
-                    <ul className="space-y-1">
-                      {tiers.map((t, i) => (
-                        <li key={i} className="flex justify-between text-xs">
-                          <span style={{ color: textSec }}>
-                            {t.hours_before === 0
-                              ? "Less than 1 hour before"
-                              : `${t.hours_before}+ hours before`}
-                          </span>
-                          <span className="font-bold" style={{ color: t.refund_pct > 0 ? "#10B981" : textMut }}>
-                            {t.refund_pct}% refund
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    <CreditCard className="h-4 w-4 mb-2" style={{ color: "#D4541A" }} />
+                    <p className="font-semibold text-sm" style={{ color: textPri }}>Pay in full</p>
+                    <p className="text-xs mt-0.5" style={{ color: textSec }}>{formatCurrency(subtotal)}</p>
                   </div>
-                );
-              })()}
+                  <p className="text-xs mt-2 px-1" style={{ color: textMut }}>
+                    Reserve option unavailable — booking total ({formatCurrency(subtotal)}) is at or below the advance threshold ({formatCurrency(advanceAmount)}).
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {(["advance", "full"] as const).map(mode => {
+                    const active = paymentMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => setPaymentMode(mode)}
+                        className="p-4 rounded-xl border text-left transition-all"
+                        style={{
+                          background: active ? "rgba(212,84,26,0.08)" : inputBg,
+                          borderColor: active ? "#D4541A" : inputBdr,
+                          boxShadow: active ? "0 0 0 1px #D4541A" : "none",
+                        }}
+                      >
+                        <CreditCard className="h-4 w-4 mb-2" style={{ color: active ? "#D4541A" : textMut }} />
+                        <p className="font-semibold text-sm" style={{ color: textPri }}>
+                          {mode === "advance"
+                            ? `Reserve — ₹${advanceAmount}`
+                            : "Pay in full"}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: textSec }}>
+                          {mode === "advance"
+                            ? cart.items.length > 1
+                              ? `₹${advancePerTable}/table · rest at venue`
+                              : "Rest at venue"
+                            : formatCurrency(subtotal)}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Non-refundable notice — replaces the old cancellation-tier table */}
+              <div
+                className="rounded-xl px-4 py-3"
+                style={{ background: "rgba(239,68,68,0.07)", border: `1px solid rgba(239,68,68,0.25)` }}
+              >
+                <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: "#EF4444" }}>
+                  Non-refundable
+                </p>
+                <p className="text-xs leading-relaxed" style={{ color: dark ? "#aaa" : "#777" }}>
+                  {paymentMode === "advance"
+                    ? "Reservations are strictly non-refundable. The advance amount will not be returned under any circumstances."
+                    : "This payment is non-refundable. Please review your booking carefully before proceeding."}
+                </p>
+              </div>
 
               {paymentMode === "full" && (
                 <div>

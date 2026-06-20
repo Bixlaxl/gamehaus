@@ -793,7 +793,8 @@ function PanelSession({
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
-  const clampedRedeem = Math.min(redeemPoints, maxRedeem);
+  // Minimum 100 points required to redeem; any input below 100 is treated as 0
+  const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
   const displayTotal  = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
 
   function handleRedeemChange(val: string) {
@@ -1455,25 +1456,30 @@ function PanelSession({
           )}
         </div>
 
-        {/* Loyalty points row — only when bill is ready */}
-        {!hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance > 0 && (
-          <div className="px-5 py-2.5 border-t border-gray-100 dark:border-[#1a1a1a] flex items-center gap-2">
-            <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />
-            <span className="text-xs font-semibold text-gray-700 dark:text-[#ccc] flex-1">
-              {customerInfo.points_balance} pts
-            </span>
-            <input
-              type="number"
-              min="0"
-              max={maxRedeem}
-              value={redeemInput}
-              onChange={(e) => handleRedeemChange(e.target.value)}
-              placeholder="0"
-              className="w-16 text-xs font-semibold rounded-lg px-2 py-1 outline-none text-center tabular-nums
-                bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
-                text-gray-900 dark:text-white focus:border-[#f59e0b]"
-            />
-            <span className="text-xs font-medium text-gray-500 dark:text-[#999] shrink-0">/ {maxRedeem} max</span>
+        {/* Loyalty points row — only when bill is ready and customer has >= 100 pts */}
+        {!hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance >= 100 && (
+          <div className="px-5 py-2.5 border-t border-gray-100 dark:border-[#1a1a1a] flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />
+              <span className="text-xs font-semibold text-gray-700 dark:text-[#ccc] flex-1">
+                {customerInfo.points_balance} pts
+              </span>
+              <input
+                type="number"
+                min="0"
+                max={maxRedeem}
+                value={redeemInput}
+                onChange={(e) => handleRedeemChange(e.target.value)}
+                placeholder="0"
+                className="w-16 text-xs font-semibold rounded-lg px-2 py-1 outline-none text-center tabular-nums
+                  bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
+                  text-gray-900 dark:text-white focus:border-[#f59e0b]"
+              />
+              <span className="text-xs font-medium text-gray-500 dark:text-[#999] shrink-0">/ {maxRedeem} max</span>
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-[#555] pl-5">
+              Min. 100 pts to redeem{redeemPoints > 0 && redeemPoints < 100 ? " — enter 100 or more" : ""}
+            </p>
           </div>
         )}
 

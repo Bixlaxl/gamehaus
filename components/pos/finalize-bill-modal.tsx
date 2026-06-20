@@ -86,7 +86,8 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const membershipDiscount = membershipPct > 0 ? Math.floor(bill.totalDue * membershipPct / 100) : 0;
   const billAfterMembership = Math.max(0, bill.totalDue - membershipDiscount);
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
-  const clampedRedeem = Math.min(redeemPoints, maxRedeem);
+  // Minimum 100 points required to redeem; any input below 100 is treated as 0
+  const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
   const finalDue      = Math.max(0, Math.round((billAfterMembership - clampedRedeem) * 100) / 100);
   const pointsToEarn  = Math.floor(finalDue / 100);
 
@@ -454,22 +455,27 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               </div>
             )}
 
-            {customerInfo && customerInfo.points_balance > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
-                <input
-                  type="number"
-                  min="0"
-                  max={maxRedeem}
-                  value={redeemInput}
-                  onChange={(e) => handleRedeemChange(e.target.value)}
-                  className="w-20 text-sm rounded-lg px-2 py-1 outline-none transition-colors
-                    bg-gray-100 dark:bg-[#1A1A1A]
-                    border border-gray-200 dark:border-[#2A2A2A]
-                    text-gray-900 dark:text-white
-                    focus:border-[#f59e0b]"
-                />
-                <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
+            {customerInfo && customerInfo.points_balance >= 100 && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={maxRedeem}
+                    value={redeemInput}
+                    onChange={(e) => handleRedeemChange(e.target.value)}
+                    className="w-20 text-sm rounded-lg px-2 py-1 outline-none transition-colors
+                      bg-gray-100 dark:bg-[#1A1A1A]
+                      border border-gray-200 dark:border-[#2A2A2A]
+                      text-gray-900 dark:text-white
+                      focus:border-[#f59e0b]"
+                  />
+                  <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
+                </div>
+                <p className="text-[10px] text-gray-400 dark:text-[#555]">
+                  Min. 100 pts to redeem{redeemPoints > 0 && redeemPoints < 100 ? " — enter 100 or more" : ""}
+                </p>
               </div>
             )}
 
