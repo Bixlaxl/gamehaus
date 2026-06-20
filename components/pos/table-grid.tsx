@@ -149,6 +149,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   onClick: () => void;
 }) {
   const now            = usePOSStore((s) => s.now);
+  const closingTime    = usePOSStore((s) => s.closingTime);
   const patchOrderItem = usePOSStore((s) => s.patchOrderItem);
   const qc             = useQueryClient();
   const [extending, setExtending] = useState<number | null>(null);
@@ -178,14 +179,25 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
     }
   }
 
-  // Mins of usable gap between current session end and next booking
-  const gapToNextMins = (() => {
-    if (!table.upcomingBooking || !item.expected_end) return Infinity;
-    const ms = new Date(table.upcomingBooking.scheduled_start).getTime() - new Date(item.expected_end).getTime();
-    return Math.max(0, Math.floor(ms / 60000));
+  // Today's shop closing in ms. Treat closings <6am as next-day (midnight cross).
+  const closingMs = (() => {
+    if (!closingTime) return Infinity;
+    const [ch, cm] = closingTime.split(":").map(Number);
+    const close = new Date(now);
+    close.setHours(ch, cm, 0, 0);
+    if (close.getTime() < now.getTime() && ch < 6) close.setDate(close.getDate() + 1);
+    return close.getTime();
   })();
-  const canExtend15 = gapToNextMins >= 15;
-  const canExtend30 = gapToNextMins >= 30;
+
+  const anchorMs = item.expected_end ? new Date(item.expected_end).getTime() : now.getTime();
+  const bookingBoundaryMs = table.upcomingBooking
+    ? new Date(table.upcomingBooking.scheduled_start).getTime()
+    : Infinity;
+  const ceilingMs = Math.min(closingMs, bookingBoundaryMs);
+  const maxExtendMins = Math.max(0, Math.floor((ceilingMs - anchorMs) / 60000));
+
+  const canExtend15 = maxExtendMins >= 15;
+  const canExtend30 = maxExtendMins >= 30;
   const accentColor    = isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981";
   const bgClass        = isOvertime
     ? "bg-red-50 hover:bg-red-100 dark:bg-[rgba(239,68,68,0.08)] dark:hover:bg-[rgba(239,68,68,0.16)]"

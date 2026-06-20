@@ -126,23 +126,7 @@ export const addExtraSchema = z.object({
   inventory_item_id: z.string().uuid().optional(),
 });
 
-// Finalize bill
-export const finalizeBillSchema = z.object({
-  order_id: z.string().uuid(),
-  payment_method: z.enum(["cash", "upi", "card"]),
-  coupon_code: z.string().optional(),
-  points_redeemed: z.number().int().min(0).optional().default(0),
-});
 
-// Check-in booking
-export const checkinSchema = z.object({
-  booking_id: z.string().uuid(),
-});
-
-// No-show
-export const noshowSchema = z.object({
-  booking_id: z.string().uuid(),
-});
 
 // Coupon
 export const couponSchema = z.object({

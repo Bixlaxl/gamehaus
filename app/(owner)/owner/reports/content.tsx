@@ -133,7 +133,7 @@ export function ReportsContent({
     // instead of TanStack treating the stale initialData as still-fresh.
     initialData: from === initialFrom && to === initialTo ? initialReportData : undefined,
     initialDataUpdatedAt: from === initialFrom && to === initialTo ? Date.now() : undefined,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     placeholderData: keepPreviousData,
   });
 

@@ -109,11 +109,12 @@ app/
     ├── orders/                       # create + finalize + extras
     ├── walkin/                       # staff-side walk-in creation
     ├── bookings/[id]/                # checkin, noshow, reschedule
-    ├── sessions/                     # start, stop, extend
+    ├── sessions/                     # start, stop, extend, people (player count)
     ├── payments/                     # create-order, webhook, demo-confirm
     ├── coupons/validate              # live coupon check
     ├── customers/lookup              # phone → loyalty profile
-    ├── inventory/ + memberships/     # CRUD
+    ├── settings/                     # global settings CRUD
+    ├── inventory/ + memberships/     # CRUD + stock/low-stock/applying thresholds
     ├── locations/ + tables/ + staff/ # CRUD
     ├── tables/[id]/slots             # blocked-slot lookup for one table
     └── pos/                          # POS data feeds (tables, orders, bookings)
@@ -130,17 +131,26 @@ components/
 │   ├── stop-confirm-modal.tsx        # confirm stop
 │   ├── finalize-bill-modal.tsx       # payment + bill collection
 │   ├── pos-alerts.tsx                # toast-style alerts
-│   └── upcoming-view.tsx             # default panel showing upcoming bookings
+│   ├── upcoming-drawer.tsx           # drawer panel showing upcoming bookings
+│   ├── manual-booking-modal.tsx      # modal for manual bookings (used by owner too)
+│   └── name-mismatch-modal.tsx       # warning modal for name/phone mismatches
 ├── owner/
 │   ├── nav.tsx                       # dark sidebar nav (sign-out, refresh-on-nav)
 │   └── dashboard-refresh.tsx
+├── inventory/
+│   ├── low-stock-nav-badge.tsx       # sidebar badge for low stock
+│   ├── stock-alerts-bell.tsx         # stock alert popup trigger
+│   └── stock-controls.tsx            # controls to adjust stock levels
 ├── public/
 │   ├── splash-hero.tsx               # landing splash + location cards
 │   ├── location-browse.tsx           # slot grid + cart sheet
 │   └── booking-confirmation.tsx
+├── sw-register.tsx                   # registers service worker client-side
 └── ui/                               # shadcn primitives (Button, Dialog, etc.)
 
-hooks/                                # currently empty — old hooks removed
+hooks/
+└── use-now-sampled.ts                # throttled time sampling hook (e.g. 10s intervals)
+
 lib/
 ├── supabase/{admin,server,client,types}.ts
 ├── realtime/subscriptions.ts         # POS realtime channel setup
@@ -308,12 +318,32 @@ Phone-keyed loyalty record. Auto-created on first order.
 | `last_visit_at` | |
 
 #### `inventory_items`
-Per-location catalogue of drinks/snacks/accessories the staff can add to a bill.
+Per-location catalogue of drinks/snacks/accessories the staff can add to a bill. Includes stock management.
 | Field | Purpose |
 |---|---|
 | `location_id`, `name`, `category` | |
 | `selling_price`, `cost_price` | Profit = selling − cost; cost is snapshotted into `order_extras` at sale time |
 | `image_url`, `sort_order`, `is_active` | |
+| `stock_count` | Current stock level (decremented on extra sale, incremented on restock) |
+| `low_stock_threshold` | Triggers warning in UI when stock_count <= this value |
+
+#### `inventory_stock_logs`
+Audit log of all stock adjustments (sales, manual adjustments, restocks).
+| Field | Purpose |
+|---|---|
+| `inventory_item_id`, `location_id` | |
+| `change` | Positive/negative delta applied |
+| `reason` | 'restock' \| 'sale' \| 'adjustment' \| 'reverse' |
+| `order_extra_id` | Nullable — links to sold order extra |
+| `note`, `created_by` | Audit comment and staff actor |
+
+#### `app_settings`
+Global application settings stored as a single JSONB blob.
+| Field | Purpose |
+|---|---|
+| `id` | Always 1 (enforced by CHECK constraint) |
+| `data` | JSONB config object (e.g. `loyalty.earn_rupees_per_point`, `loyalty.redeem_rupees_per_point`) |
+| `updated_at`, `updated_by` | Audit columns |
 
 #### `table_availability_overrides`
 Block specific dates/times for a table (e.g. maintenance day).
@@ -325,6 +355,10 @@ idx_customer_memberships_active_lookup(customer_phone, is_active, expires_at)
 idx_inventory_items_location
 idx_inventory_items_location_active   -- partial WHERE is_active
 idx_order_extras_order_id
+idx_inv_stock_logs_item               -- compound (inventory_item_id, created_at DESC)
+idx_inv_stock_logs_loc                -- compound (location_id, created_at DESC)
+idx_customer_profiles_lower_name      -- B-tree lower(name) text_pattern_ops for autocomplete
+idx_customer_profiles_phone_prefix    -- B-tree phone text_pattern_ops for autocomplete
 ```
 
 ---
@@ -413,12 +447,17 @@ All routes use `export const runtime = 'edge'`. All responses use `ok(data)` / `
 
 ### Sessions
 
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
 | POST | `/api/sessions/start` | staff | Flip scheduled → running, set `actual_start = now` |
 | POST | `/api/sessions/stop` | staff | Flip running → finished, set `actual_end = now` |
 | POST | `/api/sessions/extend` | staff | Accepts both running AND finished items. Anchors new `expected_end` to current `expected_end` (not to "now") so brief staff delay doesn't shrink the add-on. Enforces next-booking gap + shop closing time. |
+| POST | `/api/sessions/people` | staff | Change player/controller count mid-session. Re-resolves rate from table's `people_pricing` config on the server. |
 
 ### Payments
 
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
 | POST | `/api/payments/create-order` | public | Calls Razorpay API to create an order, inserts pending payment row |
 | POST | `/api/payments/webhook` | Razorpay (HMAC verified) | On capture: marks payment completed, sets `advance_paid`, awards loyalty points |
 | POST | `/api/payments/demo-confirm` | public | Test path — bypasses Razorpay, marks payment completed |
@@ -434,13 +473,32 @@ All routes use `export const runtime = 'edge'`. All responses use `ok(data)` / `
 | POST | `/api/memberships/assign` | owner | Assign plan to a phone; deactivates any existing active membership for that phone |
 | GET | `/api/memberships/customer?phone=X` | admin | Get active membership for a phone |
 
-### CRUD (owner)
-| `/api/locations`, `/api/locations/[id]` | List, create, update, delete locations |
-| `/api/tables`, `/api/tables/[id]` | Same for tables |
-| `/api/tables/upload` | Image upload to `table-images` bucket |
-| `/api/tables/[id]/slots?date=YYYY-MM-DD` | Returns blocked time ranges for one table on one date. Used by public slot picker. |
-| `/api/inventory`, `/api/inventory/[id]`, `/api/inventory/upload` | Inventory CRUD + image |
-| `/api/staff`, `/api/staff/[id]` | Staff account CRUD |
+### Settings
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/settings` | admin | Retrieve global settings (loyalty earn/redeem rates, stock thresholds) |
+| PATCH | `/api/settings` | owner | Update global settings |
+
+### CRUD & Stock Management
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET/POST | `/api/locations` | owner | List/create locations |
+| PATCH/DELETE | `/api/locations/[id]` | owner | Update/delete location |
+| GET/POST | `/api/tables` | owner | List/create tables |
+| PATCH/DELETE | `/api/tables/[id]` | owner | Update/delete table |
+| POST | `/api/tables/upload` | owner | Image upload to `table-images` bucket |
+| GET | `/api/tables/[id]/slots?date=YYYY-MM-DD` | public | Returns blocked time ranges for one table on one date |
+| GET/POST | `/api/inventory` | owner | List/create inventory items |
+| PATCH/DELETE | `/api/inventory/[id]` | owner | Update/delete inventory item |
+| POST | `/api/inventory/upload` | owner | Image upload for inventory item |
+| POST | `/api/inventory/[id]/stock` | owner | Add/adjust stock for inventory item (logs to stock audit trail) |
+| GET | `/api/inventory/low-stock-count` | owner/staff | Get count of items below low-stock threshold |
+| GET | `/api/inventory/low-stock-list` | owner | List items under low-stock threshold |
+| POST | `/api/inventory/apply-default-threshold` | owner | Restores global default stock threshold to all items |
+| GET/POST | `/api/staff` | owner | List/create staff accounts (includes auth user setup) |
+| PATCH/DELETE | `/api/staff/[id]` | owner | Update/delete staff profiles |
 
 ### POS data feeds
 | `/api/pos/tables?locationId=X` | List tables for a location |
@@ -462,13 +520,13 @@ State:
   openOrders         : POSOrder[]
   selectedOrderId    : string | null
   selectedTableId    : string | null
-  walkInOpen / walkInPrefilledTableId / checkinOpen
+  walkInOpen / walkInPrefilledTableId / checkinOpen / upcomingDrawerOpen
   extendModalItem / stopConfirmItem / finalizeOrderId
   pointsToRedeem     : Record<orderId, points>
   openingTime / closingTime  : "HH:MM"
 
 Actions:
-  setX(...)                          ← simple setters
+  setX(...)                          ← simple setters (includes setUpcomingDrawerOpen)
   selectOrder(id)                    ← opens OrderPanel
   patchOrderItem(itemId, patch)      ← optimistic patch
   addOrderExtra / removeOrderExtra / patchOrderExtra   ← optimistic
@@ -589,8 +647,17 @@ Secondary order detail panel triggered from CheckinSlider / past-session history
 #### [`pos-alerts.tsx`](components/pos/pos-alerts.tsx)
 Toast-like alert area for overdue sessions or notable events.
 
-#### [`upcoming-view.tsx`](components/pos/upcoming-view.tsx)
-Default content for the right panel when no table is selected — shows list of upcoming bookings for today.
+#### [`upcoming-drawer.tsx`](components/pos/upcoming-drawer.tsx)
+Drawer panel triggered from the header "Upcoming" button that shows today's upcoming bookings split into time bands ("Next 30 minutes" and "Later today").
+
+#### [`manual-booking-modal.tsx`](components/pos/manual-booking-modal.tsx)
+Dialog overlay used (primarily in owner panel bookings calendar view) to manually schedule and book slots for any table.
+
+#### [`name-mismatch-modal.tsx`](components/pos/name-mismatch-modal.tsx)
+A modal warning UI triggered when the customer phone lookup results in a profile name that mismatches the name typed during walk-in or checkout, offering staff or customers a way to overwrite or reconcile.
+
+#### [`sw-register.tsx`](components/sw-register.tsx)
+Client-side component embedded in layout to register the Service Worker (`/sw.js`) in production, enabling offline asset and page caching.
 
 ### Owner components
 
@@ -871,7 +938,7 @@ Documented for future reference. None of these are speculative — each was trig
 ### Bundle
 - **Lucide icons are tree-shaken** via named imports.
 - **`next/image`** everywhere for table + inventory photos — automatic WebP, responsive sizing, lazy load.
-- **Dead code purged** — `bottom-bar.tsx`, `upcoming-drawer.tsx`, `table-sessions-drawer.tsx`, `use-auto-stop.ts`, `use-auto-extend.ts` were all unreferenced.
+- **Dead code purged** — `bottom-bar.tsx`, `table-sessions-drawer.tsx`, `use-auto-stop.ts`, `use-auto-extend.ts` were all unreferenced.
 
 ### Auth
 - **JWT claim `app_role`** is set via Supabase auth hook so middleware doesn't query `public.users` on every protected request.
@@ -890,6 +957,7 @@ Honest list of things that exist but aren't ideal:
 6. **No customer-facing email/SMS** — confirmations are screen-only; cancellation link is via WhatsApp (manual).
 7. **No customer cancellation enforced on the back end** — `/api/bookings/[id]/cancel` doesn't exist yet. Cancellation happens by phone or staff side.
 8. **Loyalty points double-award guard** — if the webhook fires AND the finalize runs both award points. Currently safe because the webhook subtracts `points_redeemed` and finalize awards based on `finalDue`. But if logic changes, recheck.
+
 
 ---
 

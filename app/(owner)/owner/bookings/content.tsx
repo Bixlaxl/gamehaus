@@ -109,7 +109,7 @@ export function BookingsContent({
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   const opening = locations?.[0]?.opening_time ?? "10:00";
@@ -191,7 +191,7 @@ export function BookingsContent({
     // value as fresh data for the new queryKey too and skips the fetch.
     initialData: date === initialDate ? initialBookings : undefined,
     initialDataUpdatedAt: date === initialDate ? Date.now() : undefined,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     placeholderData: keepPreviousData,
     // Owner has no realtime sub for /owner/bookings the way staff POS does.
     // 30s safety-net + on-focus refetch keeps the list fresh enough that a

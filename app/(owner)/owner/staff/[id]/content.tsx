@@ -98,7 +98,7 @@ export function StaffDetailContent({
     },
     initialData: initial,
     initialDataUpdatedAt: Date.now(),
-    staleTime:   30 * 1000,
+    staleTime:   0,
   });
 
   const { profile, stats, activity } = data;

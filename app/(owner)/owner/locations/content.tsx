@@ -35,7 +35,7 @@ function useLocations(initialLocations: Location[]) {
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 }
 

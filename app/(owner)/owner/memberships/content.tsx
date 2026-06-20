@@ -75,7 +75,7 @@ export function MembershipsContent({
     },
     initialData: initialPlans,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   // Assignments come from server props directly — router.refresh() pulls fresh data after mutations

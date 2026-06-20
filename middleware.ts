@@ -9,7 +9,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  const requiresAuth = pathname.startsWith("/owner") || pathname === "/pos";
+  const requiresAuth = pathname.startsWith("/owner") || pathname.startsWith("/pos");
   const isLogin      = pathname === "/login";
 
   // Public pages — skip auth entirely, no network call needed

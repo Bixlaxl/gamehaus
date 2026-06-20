@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   const { data: item, error: itemError } = await admin
     .from("order_items")
-    .select("*, table:tables(location:locations(closing_time))")
+    .select("*, table:tables(location:locations(opening_time, closing_time))")
     .eq("id", order_item_id)
     .single();
 
@@ -45,16 +45,36 @@ export async function POST(request: Request) {
   const newExpectedEnd = new Date(anchor.getTime() + extend_mins * 60 * 1000);
 
   // Enforce shop closing time as a hard ceiling
-  const closingTime = (item.table as { location: { closing_time: string } | null } | null)?.location?.closing_time;
-  if (closingTime) {
+  const openingTime = (item.table as { location: { opening_time: string; closing_time: string } | null } | null)?.location?.opening_time;
+  const closingTime = (item.table as { location: { opening_time: string; closing_time: string } | null } | null)?.location?.closing_time;
+  if (openingTime && closingTime) {
+    const [oh, om] = openingTime.split(":").map(Number);
     const [ch, cm] = closingTime.split(":").map(Number);
-    const todayClose = new Date(anchor);
-    todayClose.setHours(ch, cm, 0, 0);
-    if (todayClose.getTime() < anchor.getTime() && ch < 6) {
-      todayClose.setDate(todayClose.getDate() + 1);
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const nowMs  = Date.now();
+    const nowIst = new Date(nowMs + IST_OFFSET_MS);
+    const y = nowIst.getUTCFullYear();
+    const mo = nowIst.getUTCMonth();
+    const d = nowIst.getUTCDate();
+    const opensUtc  = Date.UTC(y, mo, d, oh, om) - IST_OFFSET_MS;
+    const closesUtc = Date.UTC(y, mo, d, ch, cm) - IST_OFFSET_MS;
+    const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
+
+    let closesMs: number;
+    if (!crossesMidnight) {
+      closesMs = closesUtc;
+    } else {
+      const nowMinsIst = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+      const closeMins  = ch * 60 + cm;
+      if (nowMinsIst < closeMins) {
+        closesMs = closesUtc;
+      } else {
+        closesMs = closesUtc + 24 * 60 * 60 * 1000;
+      }
     }
-    if (newExpectedEnd.getTime() > todayClose.getTime()) {
-      const maxMins = Math.max(0, Math.floor((todayClose.getTime() - anchor.getTime()) / 60000));
+
+    if (newExpectedEnd.getTime() > closesMs) {
+      const maxMins = Math.max(0, Math.floor((closesMs - anchor.getTime()) / 60000));
       return NextResponse.json(
         err(
           `Cannot extend past shop closing — only ${maxMins} mins available`,

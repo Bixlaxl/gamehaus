@@ -74,7 +74,7 @@ export function StaffContent({
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   const { data: staff, isLoading } = useQuery({
@@ -89,7 +89,7 @@ export function StaffContent({
     },
     initialData: initialStaff,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   // ── Create ──────────────────────────────────────────────────────────────────

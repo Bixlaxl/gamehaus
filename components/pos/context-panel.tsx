@@ -1054,14 +1054,25 @@ function PanelSession({
           const tableName  = (item.table as { name?: string } | null)?.name ?? "Table";
           const tableInStore   = posTables.find((t) => t.id === item.table_id);
           const upcomingForItem = tableInStore?.upcomingBooking ?? null;
-          // Mins of usable extension between this session and the next booking
-          const gapToNextMins = (() => {
-            if (!upcomingForItem || !item.expected_end) return Infinity;
-            const ms = new Date(upcomingForItem.scheduled_start).getTime() - new Date(item.expected_end).getTime();
-            return Math.max(0, Math.floor(ms / 60000));
+          // Today's shop closing in ms. Treat closings <6am as next-day (midnight cross).
+          const closingMs = (() => {
+            if (!closingTime) return Infinity;
+            const [ch, cm] = closingTime.split(":").map(Number);
+            const close = new Date(now);
+            close.setHours(ch, cm, 0, 0);
+            if (close.getTime() < now.getTime() && ch < 6) close.setDate(close.getDate() + 1);
+            return close.getTime();
           })();
-          // Extend allowed if there's no next booking OR if at least 15 min gap
-          const canExtend      = gapToNextMins >= 15;
+
+          const anchorMs = item.expected_end ? new Date(item.expected_end).getTime() : now.getTime();
+          const bookingBoundaryMs = upcomingForItem
+            ? new Date(upcomingForItem.scheduled_start).getTime()
+            : Infinity;
+          const ceilingMs = Math.min(closingMs, bookingBoundaryMs);
+          const maxExtendMins = Math.max(0, Math.floor((ceilingMs - anchorMs) / 60000));
+
+          // Extend allowed if there is at least 15 min available
+          const canExtend      = maxExtendMins >= 15;
           const hasNextBooking = !!upcomingForItem;
 
           let countdown = "";

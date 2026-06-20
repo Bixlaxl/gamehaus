@@ -20,20 +20,26 @@ export async function GET(request: Request) {
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
   const { data: viewer } = await supabase
-    .from("users").select("role").eq("id", session.user.id).single();
-  if (viewer?.role !== "owner") {
+    .from("users").select("role, location_id").eq("id", session.user.id).single();
+  if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
-  const locationId = searchParams.get("location_id");
+  const requestedLocation = searchParams.get("location_id");
+
+  // Staff is scoped to their own location regardless of what they ask for.
+  // Owner can request any location or all locations.
+  const effectiveLocation = viewer.role === "staff"
+    ? viewer.location_id
+    : requestedLocation;
 
   const admin = createAdminClient();
   let query = admin
     .from("tables")
     .select("*")
     .order("sort_order");
-  if (locationId) query = query.eq("location_id", locationId);
+  if (effectiveLocation) query = query.eq("location_id", effectiveLocation);
 
   const { data, error } = await query;
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });

@@ -87,7 +87,7 @@ export function CouponsContent({
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   const { data: coupons, isLoading } = useQuery({
@@ -101,7 +101,7 @@ export function CouponsContent({
     },
     initialData: initialCoupons,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   // ── Create ──────────────────────────────────────────────────────────────────

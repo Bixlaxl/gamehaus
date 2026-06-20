@@ -37,15 +37,20 @@ Auth flows through Supabase + middleware (`middleware.ts`). JWT role claim used 
 |-------|-------------|-------|
 | `locations` | id, name, slug, address, phone, opening_time, closing_time, timezone, is_active | Two locations |
 | `users` | id, name, email, role, location_id | staff has location_id, owner has null |
-| `tables` | id, location_id, name, type, hourly_rate, sort_order, is_active | type: snooker/pool/ps5/foosball |
+| `tables` | id, location_id, name, type, hourly_rate, sort_order, is_active, people_pricing | type: snooker/pool/ps5/foosball |
 | `orders` | id, location_id, type, customer_name, customer_phone, status, advance_paid, points_redeemed | type: walk_in/online, status: open/finalized/cancelled |
-| `order_items` | id, order_id, table_id, status, actual_start, actual_end, expected_end, rate_per_hour | status: scheduled/running/finished/cancelled |
-| `order_extras` | id, order_id, name, price, quantity, is_deleted | Beverages/drinks added during session |
+| `order_items` | id, order_id, table_id, status, actual_start, actual_end, expected_end, rate_per_hour, num_people | status: scheduled/running/finished/cancelled |
+| `order_extras` | id, order_id, name, price, quantity, cost_price, inventory_item_id, is_deleted | Beverages/drinks added during session |
 | `bookings` | id, order_id, order_item_id, scheduled_start, scheduled_end, status | Online reservation rows, checked in at POS |
 | `payments` | id, order_id, amount, method, status, razorpay_order_id, razorpay_payment_id | method: cash/upi/card/razorpay |
 | `coupons` | id, code, discount_type, discount_value, is_active, used_count | percent or flat discount |
 | `table_availability_overrides` | id, table_id, date, is_closed | Block specific dates |
-| `customer_profiles` | id, phone (unique), name, visit_count, total_spent, last_visit_at, **points_balance** | points_balance added — loyalty system |
+| `customer_profiles` | id, phone (unique), name, visit_count, total_spent, last_visit_at, points_balance | loyalty system |
+| `membership_plans` | id, name, price, duration_days, discount_pct, free_hrs, is_active | Membership definitions |
+| `customer_memberships` | id, customer_phone, plan_id, starts_at, expires_at, free_hrs_used, is_active | Active customer plans |
+| `inventory_items` | id, location_id, name, category, selling_price, cost_price, image_url, is_active, stock_count, low_stock_threshold | Product catalog |
+| `inventory_stock_logs` | id, inventory_item_id, location_id, change, reason, note, created_by | Stock audit trail |
+| `app_settings` | id, data, updated_at, updated_by | Global app config (single row) |
 
 ### Recent DB Migrations (run manually in Supabase)
 ```sql
@@ -84,11 +89,10 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - For walk-ins, `actual_start = now` and `expected_end = actual_start + chosen_duration`.
 - `GRACE_MINS` and `OT_BLOCK_MINS` are exported from the engine but no longer used in billing logic. The 2-minute auto-stop grace window is a local constant (`AUTO_STOP_GRACE_MINS = 2`) in `table-grid.tsx` and `context-panel.tsx`.
 
-### Grace / Auto-stop
-- **2-minute grace** after `expected_end`: session auto-stops, "Grace" badge shown in POS
-- No overtime charges — billing is purely slot-based (booked duration, not actual duration)
-- **Auto-stop** (`hooks/use-auto-stop.ts`): fires when grace window expires, stops the session automatically
-  - Skips tables that have an upcoming booking (`upcomingBooking` on `TableWithStatus`)
+### Grace / Overtime Display
+- **Overtime display** is active past `expected_end`: the session timer turns red and counts up ("-MM:SS over").
+- No overtime charges — billing is purely slot-based (booked/chosen duration, not actual duration).
+- **Manual Stop**: Staff must manually stop the session when finished. Auto-stop has been removed because silent auto-stopping was causing surprise behavior.
 
 ### Procedural Billing Rules
 - **Online bookings**: once advance is paid and slot is confirmed, the full slot amount is owed. Late arrival does not reduce the bill.
@@ -117,7 +121,7 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 | `components/pos/pos-screen.tsx` | Root POS layout — loads data, sets up realtime, builds `TableWithStatus` |
 | `components/pos/table-grid.tsx` | Left panel — table cards with live status (idle/running/booked/bill-ready) |
 | `components/pos/context-panel.tsx` | Right panel — context-aware: PanelDefault (upcoming), PanelWalkIn, PanelSession, PanelBooked |
-| `components/pos/upcoming-view.tsx` | Upcoming bookings list used inside PanelDefault |
+| `components/pos/upcoming-drawer.tsx` | Upcoming bookings drawer list opened via header button |
 | `components/pos/walk-in-slider.tsx` | Slide-in panel for new walk-in (legacy, may still be wired) |
 | `components/pos/finalize-bill-modal.tsx` | Payment + bill finalization modal |
 | `components/pos/extend-modal.tsx` | Extend running session dialog |
@@ -141,21 +145,27 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/orders` | admin client | Create order (walk-in or online) |
-| POST | `/api/orders/[id]/finalize` | staff | Stop sessions, calculate bill, record payment |
-| POST | `/api/orders/[id]/extras` | staff | Add beverage/extra to order |
-| DELETE | `/api/orders/[id]/extras/[extraId]` | staff | Remove extra |
+| POST | `/api/orders/[id]/finalize` | staff | Calculate bill, record payment, update profiles |
+| POST | `/api/orders/[id]/extras` | staff | Add beverage/extra to order (updates stock count) |
+| DELETE | `/api/orders/[id]/extras/[extraId]` | staff | Remove extra (reverts stock count) |
+| POST | `/api/walkin` | staff | Combined walk-in order creation and session start |
 | POST | `/api/sessions/start` | staff | Start a table session |
 | POST | `/api/sessions/stop` | staff | Stop a running session |
 | POST | `/api/sessions/extend` | staff | Extend expected end time |
+| POST | `/api/sessions/people` | staff | Change player/controller count mid-session |
 | POST | `/api/bookings/[id]/checkin` | staff | Check in — sets `actual_start = scheduled_start`, `expected_end = scheduled_end` (full slot billed) |
 | POST | `/api/bookings/[id]/noshow` | staff | Mark no-show — cancels order_item (frees slot), finalizes order with `amount_due = 0` (advance already collected) |
 | POST | `/api/payments/create-order` | public | Create Razorpay order |
 | POST | `/api/payments/webhook` | Razorpay | Confirm payment, update advance_paid |
 | GET/POST | `/api/locations` | owner | List/create locations |
-| PUT/DELETE | `/api/locations/[id]` | owner | Update/delete location |
+| PATCH/DELETE | `/api/locations/[id]` | owner | Update/delete location |
 | GET/POST | `/api/tables` | owner | List/create tables |
-| PUT/DELETE | `/api/tables/[id]` | owner | Update/delete table |
+| PATCH/DELETE | `/api/tables/[id]` | owner | Update/delete table |
 | POST | `/api/staff` | owner | Create staff account |
+| GET/PATCH | `/api/settings` | owner | Get/update global app settings |
+| POST | `/api/inventory/[id]/stock` | owner | Add/adjust stock for inventory item |
+| GET | `/api/inventory/low-stock-count` | owner/staff | Get count of items below low-stock threshold |
+| GET | `/api/inventory/low-stock-list` | owner | List items under low-stock threshold |
 
 ---
 
