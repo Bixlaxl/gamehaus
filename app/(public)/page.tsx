@@ -6,12 +6,26 @@ import { SplashHero } from "@/components/public/splash-hero";
 
 export default async function HomePage() {
   const supabase = createAdminClient();
+  const now = new Date().toISOString();
 
-  const { data: locations } = await supabase
-    .from("locations")
-    .select("*")
-    .eq("is_active", true)
-    .order("name");
+  const [{ data: locations }, { data: coupons }] = await Promise.all([
+    supabase
+      .from("locations")
+      .select("*")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("coupons")
+      .select("*")
+      .eq("is_active", true)
+      .eq("is_public", true)
+      .lte("valid_from", now)
+      .gte("valid_until", now)
+  ]);
 
-  return <SplashHero locations={locations ?? []} />;
+  const activeCoupons = (coupons ?? []).filter(
+    (c) => c.max_uses === null || c.used_count < c.max_uses
+  );
+
+  return <SplashHero locations={locations ?? []} coupons={activeCoupons} />;
 }

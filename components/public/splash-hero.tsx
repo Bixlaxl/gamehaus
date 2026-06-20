@@ -16,6 +16,16 @@ interface Location {
   slug: string;
 }
 
+interface Coupon {
+  id: string;
+  location_id: string | null;
+  code: string;
+  discount_type: "percent" | "flat";
+  discount_value: number;
+  valid_from: string;
+  valid_until: string;
+}
+
 type Phase = "loading" | "enter" | "hold" | "exit" | "gone";
 
 function isOpenNow(opening: string, closing: string): boolean {
@@ -36,7 +46,7 @@ function formatTime(t: string): string {
   return `${hour}${m > 0 ? `:${String(m).padStart(2, "0")}` : ""} ${ampm}`;
 }
 
-export function SplashHero({ locations }: { locations: Location[] }) {
+export function SplashHero({ locations, coupons = [] }: { locations: Location[]; coupons?: Coupon[] }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [adminLoading, setAdminLoading] = useState(false);
   const router = useRouter();
@@ -226,6 +236,29 @@ export function SplashHero({ locations }: { locations: Location[] }) {
                               <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
                             </div>
                           </div>
+                          {(() => {
+                            const locCoupons = coupons.filter(c => c.location_id === loc.id);
+                            const globCoupons = coupons.filter(c => c.location_id === null);
+                            const activeCoupon = locCoupons.length > 0 ? locCoupons[0] : (globCoupons.length > 0 ? globCoupons[0] : null);
+                            if (!activeCoupon) return null;
+                            return (
+                              <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl border animate-pulse"
+                                style={{
+                                  background: "rgba(212,84,26,0.06)",
+                                  borderColor: "rgba(212,84,26,0.25)",
+                                  color: "#D4541A",
+                                }}
+                              >
+                                <span>🏷️</span>
+                                <span>
+                                  {activeCoupon.discount_type === "percent"
+                                    ? `${activeCoupon.discount_value}% off`
+                                    : `₹${activeCoupon.discount_value} off`}
+                                  {" — online full pay only"}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div className="flex flex-col items-end gap-3 shrink-0">

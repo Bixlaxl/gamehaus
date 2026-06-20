@@ -54,6 +54,7 @@ function makeCoupon(overrides: Partial<Coupon> = {}): Coupon {
     max_uses: null,
     used_count: 0,
     is_active: true,
+    is_public: false,
     created_at: new Date().toISOString(),
     ...overrides,
   };

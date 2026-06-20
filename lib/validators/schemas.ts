@@ -86,6 +86,7 @@ export const createOrderSchema = z.object({
     .optional()
     .default(0),
   coupon_code: z.string().optional(),
+  payment_mode: z.enum(["advance", "full"]).optional(),
   items: z.array(
     z.object({
       table_id: z.string().uuid(),
@@ -141,6 +142,7 @@ export const couponSchema = z.object({
   valid_from: z.string().datetime(),
   valid_until: z.string().datetime(),
   max_uses: z.number().int().positive().optional(),
+  is_public: z.boolean().optional(),
 });
 
 // Inventory item

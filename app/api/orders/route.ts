@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { location_id, type, customer_name, customer_phone, items, points_redeemed, coupon_code } = parsed.data;
+  const { location_id, type, customer_name, customer_phone, items, points_redeemed, coupon_code, payment_mode } = parsed.data;
 
   // Online orders: public customers aren't logged in, use admin client
   // Walk-in orders: require staff authentication
@@ -95,6 +95,9 @@ export async function POST(request: Request) {
   // every rule here so a tampered request can't sneak through.
   let resolvedCouponId: string | null = null;
   if (coupon_code) {
+    if (type === "online" && payment_mode !== "full") {
+      return NextResponse.json(err("Coupons are only available for online bookings that are fully paid", "INVALID_COUPON"), { status: 400 });
+    }
     const normalized = coupon_code.trim().toUpperCase();
     const { data: coupon } = await admin
       .from("coupons")

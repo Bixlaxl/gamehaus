@@ -154,6 +154,7 @@ export interface Database {
           max_uses: number | null;
           used_count: number;
           is_active: boolean;
+          is_public: boolean;
           created_at: string;
         };
         Insert: {
@@ -167,6 +168,7 @@ export interface Database {
           max_uses?: number | null;
           used_count?: number;
           is_active?: boolean;
+          is_public?: boolean;
           created_at?: string;
         };
         Update: {
@@ -180,6 +182,7 @@ export interface Database {
           max_uses?: number | null;
           used_count?: number;
           is_active?: boolean;
+          is_public?: boolean;
           created_at?: string;
         };
         Relationships: [

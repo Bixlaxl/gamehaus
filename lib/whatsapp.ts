@@ -156,38 +156,9 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     }
 
     // 4. Select correct template and construct payload components
-    let templateName = "";
-    const components = [];
-
-    if (isFullyPaid) {
-      // Fully paid booking
-      templateName = slug === "nerf-turf" ? "nerfturf_booking_confirmation" : "gamehaus_booking_confirmation";
-      
-      components.push(
-        {
-          type: "body",
-          parameters: [
-            { type: "text", text: customerName },
-            { type: "text", text: refCode },
-            { type: "text", text: formattedDate },
-            { type: "text", text: resourceAndTime },
-            { type: "text", text: amountPaidVal.toString() },
-          ],
-        },
-        {
-          type: "button",
-          sub_type: "url",
-          index: "0",
-          parameters: [
-            { type: "text", text: orderId },
-          ],
-        }
-      );
-    } else {
-      // Reservation (partial payment, no dynamic button as configured)
-      templateName = slug === "nerf-turf" ? "nerfturf_booking_reservation" : "gamehaus_booking_reservation";
-      
-      components.push({
+    const templateName = slug === "nerf-turf" ? "nerfturf_table_reservation" : "gamehaus_table_reservation";
+    const components = [
+      {
         type: "body",
         parameters: [
           { type: "text", text: customerName },
@@ -197,8 +168,8 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
           { type: "text", text: amountPaidVal.toString() },
           { type: "text", text: amountDueVal.toString() },
         ],
-      });
-    }
+      }
+    ];
 
     // 5. Construct payload
     const payload = {

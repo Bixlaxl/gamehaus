@@ -175,3 +175,10 @@ CREATE INDEX IF NOT EXISTS idx_bookings_order_id ON bookings(order_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_order_item_id ON bookings(order_item_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_scheduled_start ON bookings(scheduled_start, status);
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
+
+
+-- ============================================================
+-- PUBLIC DEALS SYSTEM
+-- ============================================================
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false;
+

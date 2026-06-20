@@ -108,6 +108,9 @@ export default function CheckoutPage() {
   const [redeemInput, setRedeemInput] = useState("0");
   const [now, setNow]                 = useState(() => new Date());
   const [couponState, setCouponState] = useState<CouponState>({ status: "idle" });
+  const [publicCoupons, setPublicCoupons] = useState<any[]>([]);
+  const [publicCouponRemoved, setPublicCouponRemoved] = useState(false);
+  const [showPrivateInput, setShowPrivateInput] = useState(false);
   // Owner-configurable booking knobs. Defaults match the pre-settings world
   // (₹100/table advance, 3hr/1hr cancellation tiers) so the page renders
   // sensibly even before /api/settings resolves.
@@ -140,6 +143,34 @@ export default function CheckoutPage() {
   const lookupTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const couponTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitting   = useRef(false);
+
+  useEffect(() => {
+    if (!cart.locationId) return;
+    let abort = false;
+    fetch(`/api/coupons/active?location_id=${encodeURIComponent(cart.locationId)}`)
+      .then((res) => res.json())
+      .then((body: any) => {
+        if (abort) return;
+        if (body.success && Array.isArray(body.data)) {
+          setPublicCoupons(body.data);
+        }
+      })
+      .catch(() => {});
+    return () => { abort = true; };
+  }, [cart.locationId]);
+
+  const activePublicCoupon = publicCoupons.length > 0 ? publicCoupons[0] : null;
+
+  useEffect(() => {
+    if (activePublicCoupon && paymentMode === "full" && !publicCouponRemoved && !showPrivateInput) {
+      setCoupon(activePublicCoupon.code);
+    } else if (paymentMode !== "full" || publicCouponRemoved || showPrivateInput) {
+      if (activePublicCoupon && coupon === activePublicCoupon.code) {
+        setCoupon("");
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePublicCoupon, paymentMode, publicCouponRemoved, showPrivateInput]);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -804,50 +835,109 @@ export default function CheckoutPage() {
               })()}
 
               {paymentMode === "full" && (
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
-                    <Tag className="h-3 w-3" /> Coupon (optional)
+                <div className="space-y-3">
+                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-1" style={{ color: textMut }}>
+                    <Tag className="h-3 w-3" /> Coupon
                   </label>
-                  <input
-                    value={coupon}
-                    onChange={e => setCoupon(e.target.value.toUpperCase())}
-                    placeholder="PROMO10"
-                    className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none tracking-widest"
-                    style={{
-                      background: inputBg,
-                      border: `1.5px solid ${
-                        couponState.status === "valid"   ? "#10B981" :
-                        couponState.status === "invalid" ? "#EF4444" :
-                        inputBdr
-                      }`,
-                      color: textPri,
-                    }}
-                    onFocus={e => {
-                      if (couponState.status === "idle" || couponState.status === "checking") {
-                        e.currentTarget.style.borderColor = "#D4541A";
-                      }
-                    }}
-                    onBlur={e => {
-                      if (couponState.status === "idle" || couponState.status === "checking") {
-                        e.currentTarget.style.borderColor = inputBdr;
-                      }
-                    }}
-                  />
-                  {couponState.status === "checking" && (
-                    <p className="text-xs mt-1.5" style={{ color: textMut }}>Checking…</p>
-                  )}
-                  {couponState.status === "valid" && (
-                    <p className="text-xs font-semibold mt-1.5" style={{ color: "#10B981" }}>
-                      ✓ Applied — {couponState.discount_type === "percent"
-                        ? `${couponState.discount_value}% off`
-                        : `${formatCurrency(couponState.discount_value)} off`}
-                      {" "}({formatCurrency(couponState.discount_amount)} saved)
-                    </p>
-                  )}
-                  {couponState.status === "invalid" && (
-                    <p className="text-xs font-semibold mt-1.5" style={{ color: "#EF4444" }}>
-                      ✗ {couponState.reason}
-                    </p>
+                  
+                  {activePublicCoupon && !publicCouponRemoved && !showPrivateInput ? (
+                    <div className="rounded-xl p-4 border flex items-center justify-between transition-all"
+                      style={{
+                        background: "rgba(16,185,129,0.06)",
+                        borderColor: "rgba(16,185,129,0.3)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-4 w-4" style={{ color: "#10B981" }} />
+                        <div>
+                          <p className="font-semibold text-sm" style={{ color: textPri }}>
+                            Deal applied: {activePublicCoupon.discount_type === "percent"
+                              ? `${activePublicCoupon.discount_value}% off`
+                              : `₹${activePublicCoupon.discount_value} off`} ✓
+                          </p>
+                          <p className="text-xs" style={{ color: textSec }}>
+                            Online full prepay booking discount
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setPublicCouponRemoved(true);
+                          setCoupon("");
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:bg-red-500/10 text-red-500 border border-red-500/20"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {activePublicCoupon && !showPrivateInput ? (
+                        <button
+                          onClick={() => setShowPrivateInput(true)}
+                          className="text-xs font-semibold hover:opacity-85 transition-opacity"
+                          style={{ color: "#D4541A" }}
+                        >
+                          Have a private code?
+                        </button>
+                      ) : (
+                        <>
+                          <input
+                            value={coupon}
+                            onChange={e => setCoupon(e.target.value.toUpperCase())}
+                            placeholder="PROMO10"
+                            className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none tracking-widest"
+                            style={{
+                              background: inputBg,
+                              border: `1.5px solid ${
+                                couponState.status === "valid"   ? "#10B981" :
+                                couponState.status === "invalid" ? "#EF4444" :
+                                inputBdr
+                              }`,
+                              color: textPri,
+                            }}
+                            onFocus={e => {
+                              if (couponState.status === "idle" || couponState.status === "checking") {
+                                e.currentTarget.style.borderColor = "#D4541A";
+                              }
+                            }}
+                            onBlur={e => {
+                              if (couponState.status === "idle" || couponState.status === "checking") {
+                                e.currentTarget.style.borderColor = inputBdr;
+                              }
+                            }}
+                          />
+                          {activePublicCoupon && (
+                            <button
+                              onClick={() => {
+                                setShowPrivateInput(false);
+                                setPublicCouponRemoved(false);
+                              }}
+                              className="text-xs font-semibold hover:opacity-85 transition-opacity block mt-1"
+                              style={{ color: textSec }}
+                            >
+                              ← Back to public deal
+                            </button>
+                          )}
+                          {couponState.status === "checking" && (
+                            <p className="text-xs mt-1.5" style={{ color: textMut }}>Checking…</p>
+                          )}
+                          {couponState.status === "valid" && (
+                            <p className="text-xs font-semibold mt-1.5" style={{ color: "#10B981" }}>
+                              ✓ Applied — {couponState.discount_type === "percent"
+                                ? `${couponState.discount_value}% off`
+                                : `${formatCurrency(couponState.discount_value)} off`}
+                              {" "}({formatCurrency(couponState.discount_amount)} saved)
+                            </p>
+                          )}
+                          {couponState.status === "invalid" && (
+                            <p className="text-xs font-semibold mt-1.5" style={{ color: "#EF4444" }}>
+                              ✗ {couponState.reason}
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

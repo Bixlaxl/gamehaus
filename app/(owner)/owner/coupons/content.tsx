@@ -38,6 +38,7 @@ type CouponForm = {
   valid_from: string;
   valid_until: string;
   max_uses: string;
+  is_public: boolean;
 };
 
 const defaultForm: CouponForm = {
@@ -48,6 +49,7 @@ const defaultForm: CouponForm = {
   valid_from: new Date().toISOString().split("T")[0],
   valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
   max_uses: "",
+  is_public: false,
 };
 
 // Convert a local YYYY-MM-DD date string to end-of-day IST (UTC+5:30)
@@ -115,6 +117,7 @@ export function CouponsContent({
         valid_from:     toStartOfDayIST(values.valid_from),
         valid_until:    toEndOfDayIST(values.valid_until),
         max_uses:       values.max_uses ? parseInt(values.max_uses) : null,
+        is_public:      values.is_public,
       });
       if (dbError) throw new Error(dbError.message);
     },
@@ -138,6 +141,7 @@ export function CouponsContent({
         ...(values.discount_value !== undefined && { discount_value: parseFloat(values.discount_value) }),
         ...(values.max_uses       !== undefined && { max_uses:       values.max_uses ? parseInt(values.max_uses) : null }),
         ...(values.location_id    !== undefined && { location_id:    values.location_id === "all" ? null : values.location_id }),
+        ...(values.is_public      !== undefined && { is_public:      values.is_public }),
       }).eq("id", id);
       if (error) throw error;
     },
@@ -159,6 +163,7 @@ export function CouponsContent({
                 max_uses:       values.max_uses !== undefined ? (values.max_uses ? parseInt(values.max_uses) : null) : c.max_uses,
                 location_id:    values.location_id === "all" ? null : (values.location_id ?? c.location_id),
                 location:       values.location_id !== undefined ? (loc ? { name: loc.name } : null) : c.location,
+                is_public:      values.is_public !== undefined ? values.is_public : c.is_public,
               }
             : c
         )
@@ -228,6 +233,7 @@ export function CouponsContent({
       valid_from:     c.valid_from.split("T")[0],
       valid_until:    c.valid_until.split("T")[0],
       max_uses:       c.max_uses !== null ? String(c.max_uses) : "",
+      is_public:      c.is_public,
     });
     setEditError(null);
   }
@@ -257,6 +263,7 @@ export function CouponsContent({
               <th className="px-4 py-3 text-left font-medium text-gray-600">Code</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Discount</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Type</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Valid Until</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Uses</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
@@ -294,6 +301,11 @@ export function CouponsContent({
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {coupon.location?.name ?? "All locations"}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    <Badge variant={coupon.is_public ? "warning" : "outline"}>
+                      {coupon.is_public ? "Public Deal" : "Private Code"}
+                    </Badge>
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(coupon.valid_until).toLocaleDateString("en-IN")}
@@ -425,6 +437,19 @@ export function CouponsContent({
                 placeholder="Unlimited"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Visibility</Label>
+              <Select
+                value={createForm.is_public ? "public" : "private"}
+                onValueChange={(v) => setCreateForm({ ...createForm, is_public: v === "public" })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">Private Code (manually typed)</SelectItem>
+                  <SelectItem value="public">Public Deal (shown on home page)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {createError && <p className="text-sm text-destructive">{createError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -519,6 +544,19 @@ export function CouponsContent({
                 min="1"
                 placeholder="Unlimited"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Visibility</Label>
+              <Select
+                value={editForm.is_public ?? editTarget?.is_public ? "public" : "private"}
+                onValueChange={(v) => setEditForm({ ...editForm, is_public: v === "public" })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">Private Code (manually typed)</SelectItem>
+                  <SelectItem value="public">Public Deal (shown on home page)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {editError && <p className="text-sm text-destructive">{editError}</p>}
             <DialogFooter>
