@@ -36,6 +36,7 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
         customer_phone,
         advance_paid,
         location_id,
+        created_at,
         locations (
           slug,
           timezone
@@ -84,9 +85,17 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     // Parameter 1: Customer Name
     const customerName = order.customer_name || "Valued Customer";
 
-    // Parameter 2: Reference Code (e.g. GH-A1B2C3 or NT-D4E5F6)
-    const prefix = slug === "nerf-turf" ? "NT" : "GH";
-    const refCode = `${prefix}-${orderId.slice(0, 6).toUpperCase()}`;
+    // Count how many orders were created at this location on or before this order
+    const { count } = await admin
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("location_id", order.location_id)
+      .lte("created_at", order.created_at);
+
+    // Parameter 2: Reference Code (e.g. GM001 or NT001)
+    const prefix = slug === "nerf-turf" ? "NT" : "GM";
+    const seqStr = String(count || 1).padStart(3, "0");
+    const refCode = `${prefix}${seqStr}`;
 
     // Format booking date (using the first item's scheduled start date)
     const firstItem = items[0];
