@@ -12,7 +12,7 @@ import {
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({
-  label, value, sub, accent, icon, trend,
+  label, value, sub, accent, icon, trend, trendLabel = "vs yesterday",
 }: {
   label: string;
   value: string;
@@ -20,6 +20,7 @@ function StatCard({
   accent: string;
   icon: React.ReactNode;
   trend?: number;
+  trendLabel?: string;
 }) {
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -40,7 +41,7 @@ function StatCard({
                   : trend < 0
                   ? <ArrowDownRight className="h-3 w-3" />
                   : <Minus className="h-3 w-3" />}
-                {Math.abs(trend)}% vs yesterday
+                {Math.abs(trend)}% {trendLabel}
               </span>
             )}
           </div>
@@ -94,7 +95,8 @@ function RevenueChart({ data }: { data: { date: Date; revenue: number }[] }) {
 function tableIcon(type: string) {
   if (type === "ps5")      return "🎮";
   if (type === "foosball") return "⚽";
-  return "🎱";
+  if (type === "snooker" || type === "pool") return "🎱";
+  return "🎯";
 }
 
 function elapsed(start: string): string {
@@ -161,6 +163,10 @@ export default async function OwnerDashboard({
   const bizMonth      = parseInt(bizDateStr.slice(5, 7));
   const monthFirstStr = `${bizYear}-${String(bizMonth).padStart(2, "0")}-01`;
   const monthStart    = new Date(`${monthFirstStr}T${opening}+05:30`);
+  const lastMonthYear = bizMonth === 1 ? bizYear - 1 : bizYear;
+  const lastMonthVal  = bizMonth === 1 ? 12 : bizMonth - 1;
+  const lastMonthFirstStr = `${lastMonthYear}-${String(lastMonthVal).padStart(2, "0")}-01`;
+  const lastMonthStart    = new Date(`${lastMonthFirstStr}T${opening}+05:30`);
   const sevenDaysAgo  = new Date(todayStart);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   // 30-day window for insights — long enough to smooth out daily noise
@@ -173,6 +179,7 @@ export default async function OwnerDashboard({
     { data: todayOrders },
     { data: yesterdayOrders },
     { data: monthOrders },
+    { data: lastMonthOrders },
     { data: allLiveSessions },
     { data: allTodayBookings },
     { data: allRecentOrders },
@@ -194,6 +201,11 @@ export default async function OwnerDashboard({
     admin.from("orders").select("amount_due, advance_paid, location_id")
       .eq("status", "finalized")
       .gte("finalized_at", monthStart.toISOString()),
+
+    admin.from("orders").select("amount_due, advance_paid, location_id")
+      .eq("status", "finalized")
+      .gte("finalized_at", lastMonthStart.toISOString())
+      .lt("finalized_at", monthStart.toISOString()),
 
     // Live sessions — join tables to get location
     admin.from("order_items")
@@ -262,6 +274,7 @@ export default async function OwnerDashboard({
   const filteredToday      = (todayOrders      ?? []).filter(filterLoc);
   const filteredYesterday  = (yesterdayOrders  ?? []).filter(filterLoc);
   const filteredMonth      = (monthOrders      ?? []).filter(filterLoc);
+  const filteredLastMonth  = (lastMonthOrders  ?? []).filter(filterLoc);
   const filteredWeek       = (weekOrders       ?? []).filter(filterLoc);
   const filteredLive       = (allLiveSessions  ?? []).filter(filterTableLoc);
   const filteredBookings   = (allTodayBookings ?? []).filter(filterOrderLoc);
@@ -271,6 +284,7 @@ export default async function OwnerDashboard({
   const todayRevenue     = filteredToday.reduce((s, o)     => s + orderTotal(o), 0);
   const yesterdayRevenue = filteredYesterday.reduce((s, o) => s + orderTotal(o), 0);
   const monthRevenue     = filteredMonth.reduce((s, o)     => s + orderTotal(o), 0);
+  const lastMonthRevenue = filteredLastMonth.reduce((s, o) => s + orderTotal(o), 0);
   const liveCount        = filteredLive.length;
   const bookingsToday    = filteredBookings.length;
 
@@ -278,6 +292,11 @@ export default async function OwnerDashboard({
     yesterdayRevenue > 0
       ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
       : todayRevenue > 0 ? 100 : 0;
+
+  const monthTrend =
+    lastMonthRevenue > 0
+      ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+      : monthRevenue > 0 ? 100 : 0;
 
   // 7-day chart
   const weekData: { date: Date; revenue: number }[] = [];
@@ -449,6 +468,8 @@ export default async function OwnerDashboard({
           sub={`${filteredMonth.length} orders this month`}
           accent="#f59e0b"
           icon={<Receipt className="h-5 w-5" style={{ color: "#f59e0b" }} />}
+          trend={monthTrend}
+          trendLabel="vs last month"
         />
       </div>
 

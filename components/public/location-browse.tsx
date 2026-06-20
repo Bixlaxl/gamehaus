@@ -466,7 +466,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
         <div className="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-hide">
           {types.map(t => {
             const active = filter === t;
-            const tc     = t === "all" ? null : TYPE[t];
+            const tc     = t === "all" ? null : cfg(t);
             const accent = t === "all" ? "#111111" : (tc?.accent ?? "#111111");
             const count  = t === "all" ? tables.length : tables.filter(tb => tb.type === t).length;
             return (

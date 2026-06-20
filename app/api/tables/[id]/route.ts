@@ -21,7 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tables")
-    .update(parsed.data)
+    .update(parsed.data as any)
     .eq("id", id)
     .select()
     .single();

@@ -137,6 +137,84 @@ export function ReportsContent({
     placeholderData: keepPreviousData,
   });
 
+  const { data: monthlyHistory, isLoading: isHistoryLoading } = useQuery<ReportOrder[]>({
+    queryKey: ["monthly-history"],
+    queryFn: async () => {
+      const today = new Date();
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(today.getMonth() - 5);
+      sixMonthsAgo.setDate(1);
+      sixMonthsAgo.setHours(0, 0, 0, 0);
+
+      const { data: locations } = await supabase
+        .from("locations").select("*").eq("is_active", true);
+
+      const loc     = locations?.[0];
+      const opening = loc?.opening_time ?? "10:00";
+      
+      const fromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + opening + "+05:30").toISOString();
+
+      const { data: orders } = await supabase
+        .from("orders")
+        .select(`
+          id, amount_due, advance_paid, finalized_at, location_id,
+          location:locations(id, name),
+          items:order_items(status, rate_per_hour),
+          extras:order_extras(price, cost_price, quantity, is_deleted)
+        `)
+        .eq("status", "finalized")
+        .gte("finalized_at", fromISO)
+        .order("finalized_at", { ascending: true });
+
+      return (orders ?? []) as unknown as ReportOrder[];
+    },
+    staleTime: 0,
+  });
+
+  const monthlyData = useMemo(() => {
+    if (!monthlyHistory) return [];
+    
+    const list: { monthKey: string; label: string; revenue: number; ordersCount: number; MoM: number }[] = [];
+    const today = new Date();
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+      list.push({ monthKey, label, revenue: 0, ordersCount: 0, MoM: 0 });
+    }
+    
+    const orders = selectedLocationId
+      ? monthlyHistory.filter(o => o.location?.id === selectedLocationId)
+      : monthlyHistory;
+      
+    for (const order of orders) {
+      if (!order.finalized_at) continue;
+      const istMs = new Date(order.finalized_at).getTime() + 5.5 * 60 * 60 * 1000;
+      const istDate = new Date(istMs);
+      const mKey = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, "0")}`;
+      
+      const bucket = list.find(b => b.monthKey === mKey);
+      if (bucket) {
+        const orderRev = (order.amount_due ?? 0) + (order.advance_paid ?? 0);
+        bucket.revenue += orderRev;
+        bucket.ordersCount += 1;
+      }
+    }
+    
+    for (let i = 0; i < list.length; i++) {
+      if (i === 0) {
+        list[i].MoM = 0;
+      } else {
+        const prev = list[i - 1].revenue;
+        const curr = list[i].revenue;
+        list[i].MoM = prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0;
+      }
+    }
+    
+    return list;
+  }, [monthlyHistory, selectedLocationId]);
+
   const orders    = reportData?.orders    ?? [];
   const locations = reportData?.locations ?? [];
 
@@ -417,6 +495,99 @@ export function ReportsContent({
             );
           })}
         </div>
+      </div>
+
+      {/* Monthly Performance History (MoM) */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-[#D4541A]" />
+            <h2 className="font-semibold text-gray-900">Monthly Performance History</h2>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            Last 6 Months
+          </span>
+        </div>
+
+        {isHistoryLoading ? (
+          <div className="py-12 text-center text-sm text-gray-400">Loading history...</div>
+        ) : monthlyData.length === 0 ? (
+          <div className="py-12 text-center text-sm text-gray-400">No historical data available</div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Chart column */}
+            <div className="lg:col-span-2 flex flex-col justify-between">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Revenue Trend</p>
+                <p className="text-xs text-gray-500">Historical monthly revenue comparison</p>
+              </div>
+              
+              <div className="flex items-end gap-3 pt-6" style={{ height: 160 }}>
+                {(() => {
+                  const maxVal = Math.max(...monthlyData.map(d => d.revenue), 1);
+                  return monthlyData.map((d) => {
+                    const pct = d.revenue / maxVal;
+                    const h   = Math.max(Math.round(pct * 110), d.revenue > 0 ? 5 : 0);
+                    return (
+                      <div key={d.monthKey} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                        {d.revenue > 0 && (
+                          <span className="text-[10px] font-bold text-gray-800 tabular-nums">
+                            {d.revenue >= 1000 ? `${(d.revenue / 1000).toFixed(0)}k` : Math.round(d.revenue)}
+                          </span>
+                        )}
+                        <div
+                          className="w-full rounded-t-lg transition-all duration-300 hover:opacity-90"
+                          style={{
+                            height: h,
+                            minHeight: d.revenue > 0 ? 4 : 0,
+                            background: "linear-gradient(180deg, #D4541A 0%, #a63f11 100%)",
+                            boxShadow: "0 2px 8px rgba(212,84,26,0.15)",
+                          }}
+                          title={`${d.label} — ${formatCurrency(d.revenue)}`}
+                        />
+                        <span className="text-[10px] font-semibold text-gray-400 tabular-nums truncate w-full text-center">
+                          {d.label.split(" ")[0]}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Table/List column */}
+            <div className="border-t lg:border-t-0 lg:border-l border-gray-100 pt-6 lg:pt-0 lg:pl-6 space-y-4">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Breakdown</p>
+              
+              <div className="space-y-3 overflow-y-auto" style={{ maxHeight: 180 }}>
+                {monthlyData.map((d, i) => {
+                  const hasTrend = i > 0;
+                  const isUp = d.MoM > 0;
+                  const isDown = d.MoM < 0;
+                  
+                  return (
+                    <div key={d.monthKey} className="flex items-center justify-between text-sm py-1">
+                      <div>
+                        <p className="font-semibold text-gray-900">{d.label}</p>
+                        <p className="text-[11px] text-gray-400">{d.ordersCount} orders</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-gray-900 tabular-nums">{formatCurrency(d.revenue)}</p>
+                        {hasTrend && d.revenue > 0 && (
+                          <p className={`text-[10px] font-bold flex items-center justify-end gap-0.5 mt-0.5 ${
+                            isUp ? "text-emerald-500" : isDown ? "text-red-400" : "text-gray-400"
+                          }`}>
+                            {isUp ? "+" : ""}{d.MoM}% MoM
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top customers */}

@@ -153,3 +153,12 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+
+-- ============================================================
+-- SUPPORT CUSTOM / DYNAMIC TABLE TYPES
+-- ============================================================
+-- Drop the check constraint on table type to allow custom table types (e.g. simulator).
+-- Run this in your Supabase SQL editor:
+ALTER TABLE tables DROP CONSTRAINT IF EXISTS tables_type_check;
+

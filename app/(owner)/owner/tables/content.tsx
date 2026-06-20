@@ -32,7 +32,7 @@ const supabase = createClient();
 type TableForm = {
   location_id: string;
   name: string;
-  type: "snooker" | "pool" | "ps5" | "foosball";
+  type: string;
   size: string;
   description: string;
   hourly_rate: string;
@@ -67,6 +67,8 @@ export function TablesContent({
   const [deleteConfirm, setDeleteConfirm] = useState<Table | null>(null);
   const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<Table | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [customType, setCustomType] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   const { data: locations } = useQuery({
     queryKey: ["locations"],
@@ -194,7 +196,7 @@ export function TablesContent({
             ? {
                 ...t,
                 name:           values.name,
-                type:           values.type,
+                type:           values.type as any,
                 hourly_rate:    parseFloat(values.hourly_rate),
                 sort_order:     parseInt(values.sort_order),
                 size:           values.size || null,
@@ -295,6 +297,8 @@ export function TablesContent({
   function openAdd() {
     setEditing(null);
     setForm({ ...defaultForm, location_id: locations?.[0]?.id ?? "" });
+    setCustomType("");
+    setShowCustomInput(false);
     setDialogOpen(true);
   }
 
@@ -306,6 +310,7 @@ export function TablesContent({
         pp[k] = String(v);
       }
     }
+    const isDefault = ["snooker", "pool", "ps5", "foosball"].includes(t.type);
     setForm({
       location_id:    t.location_id,
       name:           t.name,
@@ -317,12 +322,15 @@ export function TablesContent({
       image_file:     null,
       people_pricing: pp,
     });
+    setCustomType(isDefault ? "" : t.type);
+    setShowCustomInput(!isDefault);
     setDialogOpen(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    upsertMutation.mutate({ ...form, editId: editing?.id });
+    const typeValue = showCustomInput ? customType.toLowerCase().trim() : form.type;
+    upsertMutation.mutate({ ...form, type: typeValue, editId: editing?.id });
   }
 
   const typeIcon: Record<string, string> = {
@@ -383,7 +391,7 @@ export function TablesContent({
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <span>{typeIcon[table.type]}</span>
+                    <span>{typeIcon[table.type] ?? "🎯"}</span>
                     <h3 className="font-semibold text-gray-900">{table.name}</h3>
                   </div>
                   <Badge variant={table.is_active ? "success" : "secondary"}>
@@ -483,10 +491,16 @@ export function TablesContent({
               <div className="space-y-2">
                 <Label>Type</Label>
                 <Select
-                  value={form.type}
-                  onValueChange={(v) =>
-                    setForm({ ...form, type: v as TableForm["type"] })
-                  }
+                  value={showCustomInput ? "custom" : form.type}
+                  onValueChange={(v) => {
+                    if (v === "custom") {
+                      setShowCustomInput(true);
+                      setForm({ ...form, type: customType || "custom" });
+                    } else {
+                      setShowCustomInput(false);
+                      setForm({ ...form, type: v });
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -496,10 +510,27 @@ export function TablesContent({
                     <SelectItem value="pool">Pool</SelectItem>
                     <SelectItem value="ps5">PS5</SelectItem>
                     <SelectItem value="foosball">Foosball</SelectItem>
+                    <SelectItem value="custom">Custom...</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
+            {showCustomInput && (
+              <div className="space-y-2">
+                <Label htmlFor="customType">Custom Type Name</Label>
+                <Input
+                  id="customType"
+                  value={customType}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomType(val);
+                    setForm({ ...form, type: val });
+                  }}
+                  placeholder="e.g. simulator"
+                  required
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="rate">Rate (₹/hr)</Label>

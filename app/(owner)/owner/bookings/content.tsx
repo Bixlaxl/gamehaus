@@ -26,7 +26,6 @@ type BookingRow = Booking & {
   order_item: { table: TableRef } | null;
 };
 
-const TABLE_TYPES = ["all", "snooker", "pool", "ps5", "foosball"] as const;
 const TYPE_LABELS: Record<string, string> = {
   all: "All types", snooker: "Snooker", pool: "Pool", ps5: "PS5", foosball: "Foosball",
 };
@@ -214,6 +213,19 @@ export function BookingsContent({
     return () => { void supabase.removeChannel(channel); };
   }, [refetch]);
 
+  const tableTypes = useMemo(() => {
+    const typesSet = new Set(["snooker", "pool", "ps5", "foosball"]);
+    if (bookings) {
+      for (const b of bookings) {
+        const t = b.order_item?.table;
+        if (t?.type) {
+          typesSet.add(t.type);
+        }
+      }
+    }
+    return ["all", ...typesSet];
+  }, [bookings]);
+
   const filtered = useMemo(() => (bookings ?? []).filter((b) => {
     const table = b.order_item?.table as TableRef | null;
     if (locationFilter !== "all" && table?.location?.id !== locationFilter) return false;
@@ -279,8 +291,8 @@ export function BookingsContent({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {TABLE_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>{TYPE_LABELS[t]}</SelectItem>
+            {tableTypes.map((t) => (
+              <SelectItem key={t} value={t}>{TYPE_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -344,7 +356,7 @@ export function BookingsContent({
                       <p className="text-xs text-gray-600 font-medium">{b.order?.customer_phone}</p>
                     </td>
                     <td className="px-4 py-3 text-gray-900 font-medium">
-                      <span className="mr-1">{TYPE_ICON[table?.type ?? ""] ?? ""}</span>
+                      <span className="mr-1">{TYPE_ICON[table?.type ?? ""] ?? "🎯"}</span>
                       {table?.name ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-700 font-medium">{table?.location?.name ?? "—"}</td>

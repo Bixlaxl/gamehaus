@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tables")
-    .insert(parsed.data)
+    .insert(parsed.data as any)
     .select()
     .single();
 

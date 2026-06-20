@@ -62,7 +62,7 @@ export const locationSchema = z.object({
 export const tableSchema = z.object({
   location_id: z.string().uuid(),
   name: z.string().min(1),
-  type: z.enum(["snooker", "pool", "ps5", "foosball"]),
+  type: z.string().min(1),
   size: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   image_url: z.string().url().nullable().optional(),

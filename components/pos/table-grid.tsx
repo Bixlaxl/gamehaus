@@ -30,7 +30,7 @@ function fmtName(name: string) {
 // fine — staff can re-upload later.
 function TableThumb({ table, size = 28 }: { table: { image_url: string | null; name: string; type: string }; size?: number }) {
   if (!table.image_url) {
-    return <span className="text-base shrink-0">{typeIcon[table.type] ?? "🎱"}</span>;
+    return <span className="text-base shrink-0">{typeIcon[table.type] ?? "🎯"}</span>;
   }
   return (
     <NextImage
@@ -87,7 +87,7 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-6xl opacity-30">
-            {typeIcon[table.type] ?? "🎱"}
+            {typeIcon[table.type] ?? "🎯"}
           </div>
         )}
         <span className="absolute top-2 right-2 text-[10px] font-extrabold px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white uppercase tracking-wide">
