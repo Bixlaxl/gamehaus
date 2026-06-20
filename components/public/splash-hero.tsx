@@ -73,22 +73,35 @@ function LocationSlideshow({ image_urls, alt, accent }: { image_urls: string[]; 
   }
 
   return (
-    <div className="relative w-full h-full">
-      {image_urls.map((url, index) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={url}
-          src={url}
-          alt={`${alt} - image ${index + 1}`}
-          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 group-hover:scale-105"
-          style={{
-            opacity: index === currentIdx ? 1 : 0,
-            zIndex: index === currentIdx ? 1 : 0,
-            transitionProperty: "opacity, transform",
-            transitionDuration: "1000ms, 500ms",
-          }}
-        />
-      ))}
+    <div className="relative w-full h-full bg-[#121212]">
+      {image_urls.map((url, index) => {
+        const isActive = index === currentIdx;
+        return (
+          <div
+            key={url}
+            className="absolute inset-0 w-full h-full transition-opacity duration-1000"
+            style={{
+              opacity: isActive ? 1 : 0,
+              zIndex: isActive ? 1 : 0,
+            }}
+          >
+            {/* Blurred background image to fill empty space for non-standard aspect ratios */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 pointer-events-none"
+            />
+            {/* Sharp centered foreground image */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`${alt} - image ${index + 1}`}
+              className="relative w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
