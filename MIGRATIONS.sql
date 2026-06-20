@@ -182,3 +182,9 @@ CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
 -- ============================================================
 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false;
 
+
+-- ============================================================
+-- LOCATION IMAGES
+-- ============================================================
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url text;
+

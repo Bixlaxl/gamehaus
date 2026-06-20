@@ -14,6 +14,7 @@ interface Location {
   opening_time: string;
   closing_time: string;
   slug: string;
+  image_url: string | null;
 }
 
 interface Coupon {
@@ -219,60 +220,86 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
                         dark:hover:border-[#D4541A]/30 dark:hover:bg-[#1A1A1A]"
                     >
                       {/* top accent bar */}
-                      <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: accent }} />
+                      <div className="absolute top-0 left-0 right-0 h-[2.5px] z-10" style={{ background: accent }} />
 
-                      <div className="p-5 md:p-6 flex items-center gap-4">
-                        <div className="flex-1 min-w-0">
-                          <h2 className="text-xl md:text-2xl font-bold mb-3 text-gray-900 dark:text-white">
+                      {/* Image Area */}
+                      <div className="relative h-48 sm:h-56 w-full overflow-hidden bg-gray-100 dark:bg-gray-900 border-b border-[#E8E3D9]/60 dark:border-[#272727]/60">
+                        {loc.image_url ? (
+                          <img
+                            src={loc.image_url}
+                            alt={loc.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div 
+                            className="w-full h-full flex flex-col items-center justify-center gap-2"
+                            style={{
+                              background: `linear-gradient(135deg, ${accent}15, ${accent}25)`
+                            }}
+                          >
+                            <span className="text-4xl">🎱🎮</span>
+                            <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Gamehaus</span>
+                          </div>
+                        )}
+                        
+                        {/* Floating open/closed badge */}
+                        <div className="absolute top-4 right-4">
+                          <span className={open
+                            ? "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/90 text-white backdrop-blur-sm shadow-sm"
+                            : "text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-950/85 text-gray-200 backdrop-blur-sm shadow-sm"
+                          }>
+                            {open ? "Open Now" : "Closed"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Text Content Area */}
+                      <div className="p-5 md:p-6 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white group-hover:text-[#D4541A] transition-colors duration-150">
                             {loc.name}
                           </h2>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#666]">
-                              <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
-                              <span className="truncate">{loc.address}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#666]">
-                              <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
-                              <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
-                            </div>
-                          </div>
-                          {(() => {
-                            const locCoupons = coupons.filter(c => c.location_id === loc.id);
-                            const globCoupons = coupons.filter(c => c.location_id === null);
-                            const activeCoupon = locCoupons.length > 0 ? locCoupons[0] : (globCoupons.length > 0 ? globCoupons[0] : null);
-                            if (!activeCoupon) return null;
-                            return (
-                              <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl border animate-pulse"
-                                style={{
-                                  background: "rgba(212,84,26,0.06)",
-                                  borderColor: "rgba(212,84,26,0.25)",
-                                  color: "#D4541A",
-                                }}
-                              >
-                                <span>🏷️</span>
-                                <span>
-                                  {activeCoupon.discount_type === "percent"
-                                    ? `${activeCoupon.discount_value}% off`
-                                    : `₹${activeCoupon.discount_value} off`}
-                                  {" — online full pay only"}
-                                </span>
-                              </div>
-                            );
-                          })()}
-                        </div>
-
-                        <div className="flex flex-col items-end gap-3 shrink-0">
-                          <span className={open
-                            ? "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-[#222] text-gray-400 dark:text-[#555]"
-                          }>
-                            {open ? "Open" : "Closed"}
-                          </span>
                           <ChevronRight
-                            className="h-5 w-5 transition-transform duration-150 group-hover:translate-x-0.5"
+                            className="h-5 w-5 transition-transform duration-150 group-hover:translate-x-0.5 text-gray-400 dark:text-[#555]"
                             style={{ color: accent + "80" }}
                           />
                         </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#888]">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
+                            <span className="truncate">{loc.address}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#888]">
+                            <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
+                            <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
+                          </div>
+                        </div>
+
+                        {/* Active deal badge */}
+                        {(() => {
+                          const locCoupons = coupons.filter(c => c.location_id === loc.id);
+                          const globCoupons = coupons.filter(c => c.location_id === null);
+                          const activeCoupon = locCoupons.length > 0 ? locCoupons[0] : (globCoupons.length > 0 ? globCoupons[0] : null);
+                          if (!activeCoupon) return null;
+                          return (
+                            <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl border animate-pulse"
+                              style={{
+                                background: "rgba(212,84,26,0.06)",
+                                borderColor: "rgba(212,84,26,0.25)",
+                                color: "#D4541A",
+                              }}
+                            >
+                              <span>🏷️</span>
+                              <span>
+                                {activeCoupon.discount_type === "percent"
+                                  ? `${activeCoupon.discount_value}% off`
+                                  : `₹${activeCoupon.discount_value} off`}
+                                {" — online full pay only"}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

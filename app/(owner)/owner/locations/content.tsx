@@ -47,6 +47,7 @@ type LocationForm = {
   opening_time: string;
   closing_time: string;
   timezone: string;
+  image_url: string;
 };
 
 const defaultForm: LocationForm = {
@@ -57,6 +58,7 @@ const defaultForm: LocationForm = {
   opening_time: "10:00",
   closing_time: "23:00",
   timezone: "Asia/Kolkata",
+  image_url: "",
 };
 
 export function LocationsContent({ initialLocations }: { initialLocations: Location[] }) {
@@ -71,9 +73,14 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
 
   const upsertMutation = useMutation({
     mutationFn: async (values: LocationForm & { editId?: string }) => {
+      const payload = {
+        ...values,
+        phone: values.phone || null,
+        image_url: values.image_url || null,
+      };
       const res = values.editId
-        ? await fetch(`/api/locations/${values.editId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) })
-        : await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
+        ? await fetch(`/api/locations/${values.editId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        : await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
     },
@@ -92,6 +99,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                 opening_time: values.opening_time,
                 closing_time: values.closing_time,
                 timezone:     values.timezone,
+                image_url:    values.image_url || null,
               }
             : l
         )
@@ -209,6 +217,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
       opening_time: loc.opening_time,
       closing_time: loc.closing_time,
       timezone: loc.timezone,
+      image_url: loc.image_url ?? "",
     });
     setFormError(null);
     setDialogOpen(true);
@@ -235,22 +244,35 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
         {locations?.map((loc) => (
           <div
             key={loc.id}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start justify-between"
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start justify-between gap-4"
           >
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h2 className="font-semibold text-gray-900">{loc.name}</h2>
-                <Badge variant={loc.is_active ? "success" : "secondary"}>
-                  {loc.is_active ? "Active" : "Inactive"}
-                </Badge>
-              </div>
-              <p className="text-sm text-gray-500">{loc.address}</p>
-              {loc.phone && (
-                <p className="text-sm text-gray-500">{loc.phone}</p>
+            <div className="flex items-start gap-4">
+              {loc.image_url ? (
+                <img
+                  src={loc.image_url}
+                  alt={loc.name}
+                  className="w-16 h-16 rounded-xl object-cover border border-gray-100 shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-gray-50 border border-gray-100 shrink-0 flex items-center justify-center text-gray-400 text-xs">
+                  No Image
+                </div>
               )}
-              <p className="text-xs text-gray-400">
-                /{loc.slug} · {loc.opening_time} – {loc.closing_time}
-              </p>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold text-gray-900">{loc.name}</h2>
+                  <Badge variant={loc.is_active ? "success" : "secondary"}>
+                    {loc.is_active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-500">{loc.address}</p>
+                {loc.phone && (
+                  <p className="text-sm text-gray-500">{loc.phone}</p>
+                )}
+                <p className="text-xs text-gray-400">
+                  /{loc.slug} · {loc.opening_time} – {loc.closing_time}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {!loc.is_active && (
@@ -314,6 +336,15 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
                 required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="image_url">Image URL</Label>
+              <Input
+                id="image_url"
+                value={form.image_url}
+                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                placeholder="https://images.unsplash.com/photo-..."
               />
             </div>
             <div className="space-y-2">
