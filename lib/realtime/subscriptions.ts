@@ -12,8 +12,8 @@ export function subscribeToPOS(
     // Called on bookings INSERT (no direct handler exists), and on order_extras
     // changes (also no direct handler). Lets the caller invalidate just the
     // specific queries those events affect — not 'pos-orders' broadly.
-    onBookingsChange?: () => void;
-    onExtrasChange?:   () => void;
+    onBookingsChange?: (payload?: any) => void;
+    onExtrasChange?:   (payload?: any) => void;
   }
 ) {
   const supabase = createClient();
@@ -48,7 +48,7 @@ export function subscribeToPOS(
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "order_extras" },
-      () => handlers.onExtrasChange?.()
+      (payload) => handlers.onExtrasChange?.(payload as any)
     )
     .subscribe();
 

@@ -162,3 +162,16 @@ END $$;
 -- Run this in your Supabase SQL editor:
 ALTER TABLE tables DROP CONSTRAINT IF EXISTS tables_type_check;
 
+
+-- ============================================================
+-- PERFORMANCE OPTIMIZATION INDEXES
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_orders_location_status ON orders(location_id, status);
+CREATE INDEX IF NOT EXISTS idx_tables_location ON tables(location_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_table_id ON order_items(table_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_status ON order_items(status);
+CREATE INDEX IF NOT EXISTS idx_bookings_order_id ON bookings(order_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_order_item_id ON bookings(order_item_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_scheduled_start ON bookings(scheduled_start, status);
+CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);

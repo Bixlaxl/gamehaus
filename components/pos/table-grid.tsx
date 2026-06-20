@@ -735,7 +735,7 @@ type BookingRow = Booking & {
 };
 
 function UpcomingStrip({ locationId }: { locationId: string }) {
-  const now    = usePOSStore((s) => s.now);
+  const now    = useNowSampled(30_000);
   const tables = usePOSStore((s) => s.tables);
 
   const { data: bookings = [] } = useQuery<BookingRow[]>({

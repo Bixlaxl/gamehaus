@@ -169,8 +169,14 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
         // double render-cascade on every booking insert (handler + refetch).
         qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
       },
-      onExtrasChange: () => {
-        qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      onExtrasChange: (payload) => {
+        const { eventType, new: newRow, old: oldRow } = payload as { eventType: string; new: { order_id: string }; old: { order_id: string } };
+        const orderId = eventType === "DELETE" ? oldRow?.order_id : newRow?.order_id;
+        if (!orderId) return;
+        const hasOrder = usePOSStore.getState().openOrders.some((o) => o.id === orderId);
+        if (hasOrder) {
+          qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+        }
       },
     });
     return unsubscribe;
@@ -358,7 +364,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
             }}
           >
             <div style={{ width: 380, height: "100%" }}>
-              <ContextPanel locationId={locationId} closingTime={closingTime} />
+              {showContextPanel && <ContextPanel locationId={locationId} closingTime={closingTime} />}
             </div>
           </div>
         </div>

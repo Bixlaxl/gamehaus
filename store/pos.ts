@@ -159,6 +159,11 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   handleOrderItemChange: (payload) => {
     const { eventType, new: newRow, old: oldRow } = payload;
     set((state) => {
+      const orderId = eventType === "DELETE" ? (oldRow as any)?.order_id : (newRow as any)?.order_id;
+      if (!orderId) return {};
+      const hasOrder = state.openOrders.some((o) => o.id === orderId);
+      if (!hasOrder) return {}; // Skip state update and prevent React re-renders!
+
       const orders = state.openOrders.map((order) => {
         let items = order.items;
         if (eventType === "INSERT") {
@@ -169,8 +174,8 @@ export const usePOSStore = create<POSStore>((set, get) => ({
         } else if (eventType === "UPDATE") {
           items = items.map((i) =>
             i.id === (newRow as OrderItem).id
-              ? { ...i, ...(newRow as OrderItem) }
-              : i
+               ? { ...i, ...(newRow as OrderItem) }
+               : i
           );
         } else if (eventType === "DELETE") {
           items = items.filter((i) => i.id !== (oldRow as OrderItem).id);
