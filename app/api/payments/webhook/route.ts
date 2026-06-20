@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAppSettings } from "@/lib/settings";
+import { sendWhatsAppConfirmation } from "@/lib/whatsapp";
 
 export const runtime = 'edge';
 
@@ -88,6 +89,9 @@ export async function POST(request: Request) {
           });
         }
       }
+
+      // Trigger WhatsApp booking confirmation notification
+      await sendWhatsAppConfirmation(paymentRow.order_id);
     }
   }
 

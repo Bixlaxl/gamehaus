@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAppSettings } from "@/lib/settings";
+import { sendWhatsAppConfirmation } from "@/lib/whatsapp";
 
 export const runtime = 'edge';
 
@@ -82,6 +83,9 @@ export async function POST(request: Request) {
       });
     }
   }
+
+  // Trigger WhatsApp booking confirmation notification
+  await sendWhatsAppConfirmation(order_id);
 
   return NextResponse.json(ok({ confirmed: true }));
 }
