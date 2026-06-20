@@ -771,6 +771,38 @@ export default function CheckoutPage() {
                 </div>
               )}
 
+              {/* Cancellation policy — only for full payment mode */}
+              {paymentMode === "full" && (() => {
+                const tiers = cancellationTiers.full
+                  .slice()
+                  .sort((a, b) => b.hours_before - a.hours_before);
+                if (tiers.length === 0) return null;
+                return (
+                  <div
+                    className="rounded-xl px-4 py-3"
+                    style={{ background: inputBg, border: `1px dashed ${inputBdr}` }}
+                  >
+                    <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMut }}>
+                      Cancellation policy
+                    </p>
+                    <ul className="space-y-1">
+                      {tiers.map((t, i) => (
+                        <li key={i} className="flex justify-between text-xs">
+                          <span style={{ color: textSec }}>
+                            {t.hours_before === 0
+                              ? "Less than 1 hour before"
+                              : `${t.hours_before}+ hours before`}
+                          </span>
+                          <span className="font-bold" style={{ color: t.refund_pct > 0 ? "#10B981" : textMut }}>
+                            {t.refund_pct}% refund
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
+
               {paymentMode === "full" && (
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
