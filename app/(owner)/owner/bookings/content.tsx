@@ -98,7 +98,7 @@ export function BookingsContent({
   });
 
   const { data: locations } = useQuery({
-    queryKey: ["locations"],
+    queryKey: ["locations", "active"],
     queryFn: async () => {
       const { data } = await supabase
         .from("locations")

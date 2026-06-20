@@ -76,7 +76,7 @@ export function CouponsContent({
   const [editError, setEditError]     = useState<string | null>(null);
 
   const { data: locations } = useQuery({
-    queryKey: ["locations"],
+    queryKey: ["locations", "active"],
     queryFn: async () => {
       // Admin-backed — see /api/locations comment. Browser-side reads
       // here hit RLS and silently drop rows.

@@ -71,7 +71,7 @@ export function TablesContent({
   const [showCustomInput, setShowCustomInput] = useState(false);
 
   const { data: locations } = useQuery({
-    queryKey: ["locations"],
+    queryKey: ["locations", "active"],
     queryFn: async () => {
       // Admin-backed — see the comment on /api/locations. Browser-side
       // queries here hit RLS and silently drop locations the owner

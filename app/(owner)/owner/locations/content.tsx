@@ -22,7 +22,7 @@ const supabase = createClient();
 
 function useLocations(initialLocations: Location[]) {
   return useQuery({
-    queryKey: ["locations"],
+    queryKey: ["locations", "all"],
     queryFn: async () => {
       // Admin-backed API — bypasses RLS so the owner sees every location,
       // not only those a browser-side query happens to be allowed to read.
@@ -79,9 +79,9 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
     },
     onMutate: async (values) => {
       if (!values.editId) return undefined;
-      await qc.cancelQueries({ queryKey: ["locations"] });
-      const prev = qc.getQueryData<Location[]>(["locations"]);
-      qc.setQueryData<Location[]>(["locations"], (old) =>
+      await qc.cancelQueries({ queryKey: ["locations", "all"] });
+      const prev = qc.getQueryData<Location[]>(["locations", "all"]);
+      qc.setQueryData<Location[]>(["locations", "all"], (old) =>
         (old ?? []).map((l) =>
           l.id === values.editId
             ? {
@@ -129,9 +129,9 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
     },
     onMutate: async (id) => {
       setDeleteConfirm(null);
-      await qc.cancelQueries({ queryKey: ["locations"] });
-      const prev = qc.getQueryData<Location[]>(["locations"]);
-      qc.setQueryData<Location[]>(["locations"], (old) =>
+      await qc.cancelQueries({ queryKey: ["locations", "all"] });
+      const prev = qc.getQueryData<Location[]>(["locations", "all"]);
+      qc.setQueryData<Location[]>(["locations", "all"], (old) =>
         (old ?? []).map((l) => l.id === id ? { ...l, is_active: false } : l)
       );
       return { prev };
@@ -151,9 +151,9 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
       if (!json.success) throw new Error(json.error);
     },
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: ["locations"] });
-      const prev = qc.getQueryData<Location[]>(["locations"]);
-      qc.setQueryData<Location[]>(["locations"], (old) =>
+      await qc.cancelQueries({ queryKey: ["locations", "all"] });
+      const prev = qc.getQueryData<Location[]>(["locations", "all"]);
+      qc.setQueryData<Location[]>(["locations", "all"], (old) =>
         (old ?? []).map((l) => l.id === id ? { ...l, is_active: true } : l)
       );
       return { prev };
@@ -177,9 +177,9 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
     },
     onMutate: async (id) => {
       setPermanentDeleteConfirm(null);
-      await qc.cancelQueries({ queryKey: ["locations"] });
-      const prev = qc.getQueryData<Location[]>(["locations"]);
-      qc.setQueryData<Location[]>(["locations"], (old) =>
+      await qc.cancelQueries({ queryKey: ["locations", "all"] });
+      const prev = qc.getQueryData<Location[]>(["locations", "all"]);
+      qc.setQueryData<Location[]>(["locations", "all"], (old) =>
         (old ?? []).filter((l) => l.id !== id)
       );
       return { prev };
