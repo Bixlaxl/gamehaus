@@ -47,7 +47,7 @@ type LocationForm = {
   opening_time: string;
   closing_time: string;
   timezone: string;
-  image_url: string;
+  image_urls: string[];
 };
 
 const defaultForm: LocationForm = {
@@ -58,8 +58,28 @@ const defaultForm: LocationForm = {
   opening_time: "10:00",
   closing_time: "23:00",
   timezone: "Asia/Kolkata",
-  image_url: "",
+  image_urls: [],
 };
+
+async function uploadFiles(locationId: string, files: File[]): Promise<string[]> {
+  const urls: string[] = [];
+  for (const file of files) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("locationId", locationId);
+    const res = await fetch("/api/locations/upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const errJson = await res.json();
+      throw new Error(errJson.error || "Failed to upload image");
+    }
+    const json = await res.json();
+    urls.push(json.data.url);
+  }
+  return urls;
+}
 
 export function LocationsContent({ initialLocations }: { initialLocations: Location[] }) {
   const qc = useQueryClient();
@@ -67,22 +87,99 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Location | null>(null);
   const [form, setForm] = useState<LocationForm>(defaultForm);
+  const [newFiles, setNewFiles] = useState<{ id: string; file: File; preview: string }[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<Location | null>(null);
   const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<Location | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const handleOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+      setNewFiles([]);
+      setEditing(null);
+      setForm(defaultForm);
+      setFormError(null);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files).map(file => ({
+        id: crypto.randomUUID(),
+        file,
+        preview: URL.createObjectURL(file)
+      }));
+      setNewFiles(prev => [...prev, ...filesArray]);
+    }
+  };
+
+  const removeNewFile = (id: string, preview: string) => {
+    setNewFiles(prev => prev.filter(f => f.id !== id));
+    URL.revokeObjectURL(preview);
+  };
+
   const upsertMutation = useMutation({
-    mutationFn: async (values: LocationForm & { editId?: string }) => {
-      const payload = {
-        ...values,
-        phone: values.phone || null,
-        image_url: values.image_url || null,
-      };
-      const res = values.editId
-        ? await fetch(`/api/locations/${values.editId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
-        : await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+    mutationFn: async (values: LocationForm & { editId?: string; filesToUpload: File[] }) => {
+      const { editId, filesToUpload, ...formValues } = values;
+      let finalUrls = [...formValues.image_urls];
+
+      if (editId) {
+        if (filesToUpload.length > 0) {
+          const uploadedUrls = await uploadFiles(editId, filesToUpload);
+          finalUrls = [...finalUrls, ...uploadedUrls];
+        }
+
+        const payload = {
+          name: formValues.name,
+          address: formValues.address,
+          phone: formValues.phone || null,
+          opening_time: formValues.opening_time,
+          closing_time: formValues.closing_time,
+          timezone: formValues.timezone,
+          image_urls: finalUrls,
+        };
+
+        const res = await fetch(`/api/locations/${editId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error);
+      } else {
+        const payload = {
+          name: formValues.name,
+          address: formValues.address,
+          phone: formValues.phone || null,
+          slug: formValues.slug,
+          opening_time: formValues.opening_time,
+          closing_time: formValues.closing_time,
+          timezone: formValues.timezone,
+          image_urls: [],
+        };
+
+        const res = await fetch("/api/locations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error);
+
+        const newId = json.data.id;
+
+        if (filesToUpload.length > 0) {
+          const uploadedUrls = await uploadFiles(newId, filesToUpload);
+          const patchRes = await fetch(`/api/locations/${newId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_urls: uploadedUrls }),
+          });
+          const patchJson = await patchRes.json();
+          if (!patchJson.success) throw new Error(patchJson.error);
+        }
+      }
     },
     onMutate: async (values) => {
       if (!values.editId) return undefined;
@@ -99,11 +196,12 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                 opening_time: values.opening_time,
                 closing_time: values.closing_time,
                 timezone:     values.timezone,
-                image_url:    values.image_url || null,
               }
             : l
         )
       );
+      newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+      setNewFiles([]);
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
@@ -113,12 +211,12 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
     onSuccess: (_, values) => {
       qc.invalidateQueries({ queryKey: ["locations"] });
       toast.success(values.editId ? "Location updated" : "Location created");
-      if (!values.editId) {
-        setDialogOpen(false);
-        setEditing(null);
-        setForm(defaultForm);
-        setFormError(null);
-      }
+      newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+      setNewFiles([]);
+      setDialogOpen(false);
+      setEditing(null);
+      setForm(defaultForm);
+      setFormError(null);
     },
     onError: (err, values, ctx) => {
       if (values.editId && ctx?.prev) {
@@ -203,6 +301,8 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
   function openAdd() {
     setEditing(null);
     setForm(defaultForm);
+    newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+    setNewFiles([]);
     setFormError(null);
     setDialogOpen(true);
   }
@@ -217,15 +317,17 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
       opening_time: loc.opening_time,
       closing_time: loc.closing_time,
       timezone: loc.timezone,
-      image_url: loc.image_url ?? "",
+      image_urls: loc.image_urls || [],
     });
+    newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+    setNewFiles([]);
     setFormError(null);
     setDialogOpen(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    upsertMutation.mutate({ ...form, editId: editing?.id });
+    upsertMutation.mutate({ ...form, editId: editing?.id, filesToUpload: newFiles.map(f => f.file) });
   }
 
   return (
@@ -247,9 +349,9 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start justify-between gap-4"
           >
             <div className="flex items-start gap-4">
-              {loc.image_url ? (
+              {loc.image_urls && loc.image_urls.length > 0 ? (
                 <img
-                  src={loc.image_url}
+                  src={loc.image_urls[0]}
                   alt={loc.name}
                   className="w-16 h-16 rounded-xl object-cover border border-gray-100 shrink-0"
                 />
@@ -312,7 +414,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
       </div>
 
       {/* Add / Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -339,13 +441,49 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="image_url">Image URL</Label>
-              <Input
-                id="image_url"
-                value={form.image_url}
-                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                placeholder="https://images.unsplash.com/photo-..."
-              />
+              <Label>Location Images</Label>
+              <div className="grid grid-cols-4 gap-2 border border-dashed border-gray-200 rounded-lg p-3">
+                {form.image_urls.map((url, idx) => (
+                  <div key={`existing-${idx}`} className="relative aspect-square group rounded-md overflow-hidden border border-gray-100">
+                    <img src={url} alt="Existing" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm(prev => ({
+                          ...prev,
+                          image_urls: prev.image_urls.filter((_, i) => i !== idx)
+                        }));
+                      }}
+                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    >
+                      <Trash2 className="h-4 w-4 text-white" />
+                    </button>
+                  </div>
+                ))}
+                {newFiles.map((f) => (
+                  <div key={f.id} className="relative aspect-square group rounded-md overflow-hidden border border-gray-100">
+                    <img src={f.preview} alt="New preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeNewFile(f.id, f.preview)}
+                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    >
+                      <Trash2 className="h-4 w-4 text-white" />
+                    </button>
+                  </div>
+                ))}
+                <label className="relative aspect-square flex flex-col items-center justify-center border border-dashed border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+                  <Plus className="h-6 w-6 text-gray-400" />
+                  <span className="text-[10px] text-gray-400 mt-1 font-medium">Add Image</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                </label>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>

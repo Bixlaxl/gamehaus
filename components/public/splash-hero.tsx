@@ -14,7 +14,7 @@ interface Location {
   opening_time: string;
   closing_time: string;
   slug: string;
-  image_url: string | null;
+  image_urls: string[];
 }
 
 interface Coupon {
@@ -45,6 +45,52 @@ function formatTime(t: string): string {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}${m > 0 ? `:${String(m).padStart(2, "0")}` : ""} ${ampm}`;
+}
+
+function LocationSlideshow({ image_urls, alt, accent }: { image_urls: string[]; alt: string; accent: string }) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  useEffect(() => {
+    if (!image_urls || image_urls.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % image_urls.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [image_urls]);
+
+  if (!image_urls || image_urls.length === 0) {
+    return (
+      <div 
+        className="w-full h-full flex flex-col items-center justify-center gap-2"
+        style={{
+          background: `linear-gradient(135deg, ${accent}15, ${accent}25)`
+        }}
+      >
+        <span className="text-4xl">🎱🎮</span>
+        <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Gamehaus</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full">
+      {image_urls.map((url, index) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={url}
+          src={url}
+          alt={`${alt} - image ${index + 1}`}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 group-hover:scale-105"
+          style={{
+            opacity: index === currentIdx ? 1 : 0,
+            zIndex: index === currentIdx ? 1 : 0,
+            transitionProperty: "opacity, transform",
+            transitionDuration: "1000ms, 500ms",
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function SplashHero({ locations, coupons = [] }: { locations: Location[]; coupons?: Coupon[] }) {
@@ -224,26 +270,10 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
 
                       {/* Image Area */}
                       <div className="relative h-48 sm:h-56 w-full overflow-hidden bg-gray-100 dark:bg-gray-900 border-b border-[#E8E3D9]/60 dark:border-[#272727]/60">
-                        {loc.image_url ? (
-                          <img
-                            src={loc.image_url}
-                            alt={loc.name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div 
-                            className="w-full h-full flex flex-col items-center justify-center gap-2"
-                            style={{
-                              background: `linear-gradient(135deg, ${accent}15, ${accent}25)`
-                            }}
-                          >
-                            <span className="text-4xl">🎱🎮</span>
-                            <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Gamehaus</span>
-                          </div>
-                        )}
+                        <LocationSlideshow image_urls={loc.image_urls} alt={loc.name} accent={accent} />
                         
                         {/* Floating open/closed badge */}
-                        <div className="absolute top-4 right-4">
+                        <div className="absolute top-4 right-4 z-20">
                           <span className={open
                             ? "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/90 text-white backdrop-blur-sm shadow-sm"
                             : "text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-950/85 text-gray-200 backdrop-blur-sm shadow-sm"

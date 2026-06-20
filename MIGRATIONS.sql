@@ -186,5 +186,6 @@ ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT 
 -- ============================================================
 -- LOCATION IMAGES
 -- ============================================================
-ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url text;
+ALTER TABLE locations DROP COLUMN IF EXISTS image_url;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_urls text[] NOT NULL DEFAULT '{}';
 

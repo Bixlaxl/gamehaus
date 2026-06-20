@@ -20,7 +20,7 @@ export interface Database {
           closing_time: string;
           slug: string;
           is_active: boolean;
-          image_url: string | null;
+          image_urls: string[];
           created_at: string;
         };
         Insert: {
@@ -33,7 +33,7 @@ export interface Database {
           closing_time?: string;
           slug: string;
           is_active?: boolean;
-          image_url?: string | null;
+          image_urls?: string[];
           created_at?: string;
         };
         Update: {
@@ -46,7 +46,7 @@ export interface Database {
           closing_time?: string;
           slug?: string;
           is_active?: boolean;
-          image_url?: string | null;
+          image_urls?: string[];
           created_at?: string;
         };
         Relationships: [];
