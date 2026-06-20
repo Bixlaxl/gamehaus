@@ -10,6 +10,7 @@ export type TableWithStatus = Table & {
 export interface POSOrder extends Order {
   items: (OrderItem & { table: Table })[];
   extras: OrderExtra[];
+  customer_points?: number;
 }
 
 interface POSStore {

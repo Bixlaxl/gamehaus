@@ -30,7 +30,7 @@ function fmtName(name: string) {
 // fine — staff can re-upload later.
 function TableThumb({ table, size = 28 }: { table: { image_url: string | null; name: string; type: string }; size?: number }) {
   if (!table.image_url) {
-    return <span className="text-base shrink-0">{typeIcon[table.type] ?? "🎯"}</span>;
+    return <span className="shrink-0" style={{ fontSize: `${size * 0.7}px`, lineHeight: 1 }}>{typeIcon[table.type] ?? "🎯"}</span>;
   }
   return (
     <NextImage
@@ -60,7 +60,7 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
   return (
     <div
       onClick={onClick}
-      className={`group rounded-xl flex flex-col min-h-[300px] overflow-hidden cursor-pointer select-none
+      className={`group rounded-xl flex flex-col min-h-[440px] overflow-hidden cursor-pointer select-none
         bg-white hover:bg-gray-50
         dark:bg-[#111] dark:hover:bg-[#1c1c1c]
         transition-colors duration-150 ease-out
@@ -69,13 +69,12 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
       style={{ border: isSelected ? undefined : "1px solid rgba(255,255,255,0.07)" }}
     >
       <div style={{ height: 4, background: accentTop, flexShrink: 0 }} />
-      {/* Image banner — fills a 4:3 aspect area, object-contain so the WHOLE
-          table photo is visible regardless of orientation (a tall PS5 console
-          shot doesn't get its top chopped off). Soft dark background fills any
+      {/* Image banner — fills a 16:9 aspect area, object-contain so the WHOLE
+          table photo is visible regardless of orientation. Soft dark background fills any
           letterboxed area so the card still looks deliberate. */}
       <div
         className="relative w-full bg-gray-100 dark:bg-[#0a0a0a] overflow-hidden shrink-0"
-        style={{ aspectRatio: "4 / 3" }}
+        style={{ aspectRatio: "16 / 9" }}
       >
         {table.image_url ? (
           <NextImage
@@ -86,33 +85,33 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
             className="object-contain"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-6xl opacity-30">
+          <div className="absolute inset-0 flex items-center justify-center text-7xl opacity-30">
             {typeIcon[table.type] ?? "🎯"}
           </div>
         )}
-        <span className="absolute top-2 right-2 text-[10px] font-extrabold px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white uppercase tracking-wide">
+        <span className="absolute top-3 right-3 text-xs font-black px-2.5 py-1 rounded bg-black/60 backdrop-blur-sm text-white uppercase tracking-wider">
           Idle
         </span>
       </div>
-      <div className="flex flex-col flex-1 p-4">
-        <p className="font-bold text-gray-900 dark:text-white text-base leading-tight mb-1">
+      <div className="flex flex-col flex-1 p-5 gap-4">
+        <p className="font-extrabold text-gray-900 dark:text-white text-2xl leading-tight mb-0.5">
           {fmtName(table.name)}
         </p>
-        <p className="text-sm font-semibold text-gray-600 dark:text-[#bbb] flex-1">
+        <p className="text-lg font-bold text-gray-500 dark:text-[#bbb] flex-1">
           {formatCurrency(table.hourly_rate)}/hr
         </p>
         {upcomingBooking ? (
           <div className="mt-3 flex items-center justify-between gap-1">
             <span
-              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full truncate"
+              className="inline-flex items-center gap-1.5 text-xs font-extrabold px-3 py-1 rounded-full truncate"
               style={{ background: "rgba(245,158,11,0.18)", color: "#f59e0b" }}
             >
               Next {fmtTime(upcomingBooking.scheduled_start)} → {fmtTime(upcomingBooking.scheduled_end)}
             </span>
-            <span className="text-xs font-semibold text-gray-500 dark:text-[#888] shrink-0">Tap →</span>
+            <span className="text-sm font-bold text-gray-500 dark:text-[#888] shrink-0">Tap →</span>
           </div>
         ) : (
-          <p className="text-xs font-semibold mt-3 text-right" style={{ color: "#D4541A" }}>
+          <p className="text-sm font-extrabold mt-3 text-right" style={{ color: "#D4541A" }}>
             Tap to start →
           </p>
         )}
@@ -153,6 +152,23 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   const patchOrderItem = usePOSStore((s) => s.patchOrderItem);
   const qc             = useQueryClient();
   const [extending, setExtending] = useState<number | null>(null);
+
+  // Client-side query to always get the absolute freshest loyalty points balance
+  // directly from customer profiles, resolving any lag in pos-orders query updates.
+  const { data: customerInfo } = useQuery({
+    queryKey: ["customer-points", order?.customer_phone],
+    queryFn: async () => {
+      if (!order?.customer_phone) return null;
+      const res = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
+      if (!res.ok) return null;
+      const body = await res.json() as { found: boolean; customer: { points_balance: number } | null };
+      return body.found ? body.customer : null;
+    },
+    enabled: !!order?.customer_phone,
+    staleTime: 10000,
+  });
+
+  const points = customerInfo?.points_balance ?? order?.customer_points ?? 0;
 
   const liveBill = calculateBill([item], [], now).subtotal;
   const startedAt = item.actual_start
@@ -234,25 +250,25 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[220px] ${bgClass} overflow-hidden cursor-pointer select-none
+      className={`rounded-xl flex flex-col min-h-[440px] ${bgClass} overflow-hidden cursor-pointer select-none
         transition-colors duration-150 ease-out
         active:scale-[0.99]
         ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm"}`}
       style={{ border: isSelected ? undefined : `1px solid ${accentColor}22` }}
     >
       <div style={{ height: 4, background: accentColor, flexShrink: 0 }} />
-      <div className="flex flex-col flex-1 p-4 gap-2">
+      <div className="flex flex-col flex-1 p-5 gap-4">
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <TableThumb table={table} />
-            <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
+          <div className="flex items-center gap-2 min-w-0">
+            <TableThumb table={table} size={36} />
+            <span className="text-base font-black text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
-            className={`text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide ${
+            className={`text-xs font-black px-2.5 py-1 rounded text-white shrink-0 ml-1 uppercase tracking-wider ${
               isOvertime || isFiveMinWarning ? "animate-pulse" : ""
             }`}
             style={{ background: accentColor }}
@@ -261,29 +277,56 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
           </span>
         </div>
 
-        {/* Customer + live bill */}
-        <div className="flex items-baseline justify-between">
-          <p className="font-bold text-gray-900 dark:text-white text-base leading-tight truncate flex-1 mr-2">
-            {order?.customer_name ?? "—"}
-          </p>
-          <span className="font-bold text-lg tabular-nums shrink-0" style={{ color: "#D4541A" }}>
-            {formatCurrency(liveBill)}
-          </span>
+        {/* Customer, Live Bill & Loyalty Points */}
+        <div className="flex items-start justify-between gap-3 mt-1">
+          <div className="min-w-0 flex-1">
+            <p className="font-black text-gray-900 dark:text-white text-2xl leading-tight truncate">
+              {order?.customer_name ?? "—"}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              <span className="text-xs font-mono font-bold tabular-nums text-gray-500 dark:text-[#aaa]">
+                Started {startedAt}
+              </span>
+              {order?.customer_phone && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-black">
+                  ★ {points} pts
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <span className="font-black text-2xl tabular-nums block" style={{ color: "#D4541A" }}>
+              {formatCurrency(liveBill)}
+            </span>
+          </div>
         </div>
 
         {/* People / controller count badge (only when tier pricing applied) */}
         {item.num_people != null && (
           <span
-            className="inline-flex w-fit items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+            className="inline-flex w-fit items-center gap-1.5 text-xs font-black px-2 py-0.5 rounded uppercase tracking-wider"
             style={{ background: "rgba(212,84,26,0.12)", color: "#D4541A" }}
           >
             {item.num_people} {table.type === "ps5" ? "ctrl" : "ppl"}
           </span>
         )}
 
+        {/* Prominent centered Timer Box */}
+        <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+          <span
+            className="text-5xl lg:text-6xl font-black font-mono tracking-widest tabular-nums"
+            style={{ color: isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981" }}
+          >
+            {countdown ? `${countdown}` : "00:00"}
+          </span>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-[#aaa] mt-2">
+            {isOvertime ? "Overtime" : "Time Remaining"}
+          </span>
+        </div>
+
         {/* Progress bar */}
         <div
-          className="h-1.5 rounded-full overflow-hidden"
+          className="h-2 rounded-full overflow-hidden"
           style={{ background: isOvertime ? "rgba(239,68,68,0.18)" : "rgba(0,0,0,0.07)" }}
         >
           <div
@@ -296,24 +339,11 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
           />
         </div>
 
-        {/* Start time + countdown / overtime */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-mono font-semibold tabular-nums text-gray-700 dark:text-[#bbb]">
-            {startedAt}
-          </span>
-          <span
-            className="text-sm font-mono font-bold tabular-nums"
-            style={{ color: isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981" }}
-          >
-            {countdown}{isOvertime ? " over" : " left"}
-          </span>
-        </div>
-
         {/* Upcoming booking — name + slot + click-to-copy phone */}
         {table.upcomingBooking && (
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex flex-wrap items-center gap-2">
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+              className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
               style={{ background: "rgba(245,158,11,0.15)", color: "#d97706" }}
             >
               → {table.upcomingBooking.order?.customer_name ?? "Booking"} · {fmtTime(table.upcomingBooking.scheduled_start)}
@@ -328,11 +358,11 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
                     () => toast.error("Copy failed"),
                   );
                 }}
-                className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded
+                className="inline-flex items-center gap-1 text-xs font-mono font-semibold px-2 py-1 rounded
                   bg-gray-100 dark:bg-[#1f1f1f] hover:bg-[#f59e0b]/15 text-gray-700 dark:text-[#ddd] hover:text-[#f59e0b] transition"
                 title="Click to copy number"
               >
-                <Phone className="h-2.5 w-2.5" />
+                <Phone className="h-3 w-3" />
                 {table.upcomingBooking.order.customer_phone}
               </button>
             )}
@@ -340,12 +370,12 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
         )}
 
         {/* Action buttons */}
-        <div className="flex gap-1.5 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-2 mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
           {canExtend15 && (
             <button
               onClick={(e) => quickExtend(e, 15)}
               disabled={!!extending}
-              className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
+              className="flex-1 py-2.5 rounded-xl text-sm font-extrabold transition-all active:scale-95 disabled:opacity-40"
               style={{
                 background: "rgba(16,185,129,0.1)",
                 color:      "#10b981",
@@ -359,7 +389,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
             <button
               onClick={(e) => quickExtend(e, 30)}
               disabled={!!extending}
-              className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
+              className="flex-1 py-2.5 rounded-xl text-sm font-extrabold transition-all active:scale-95 disabled:opacity-40"
               style={{
                 background: "rgba(16,185,129,0.1)",
                 color:      "#10b981",
@@ -372,7 +402,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
           <button
             onClick={stopSession}
             disabled={!!extending}
-            className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40 hover:brightness-110"
+            className="flex-1 py-2.5 rounded-xl text-sm font-extrabold text-white transition-all active:scale-95 disabled:opacity-40 hover:brightness-110"
             style={{ background: "#ef4444" }}
           >
             ■ Stop
@@ -395,6 +425,7 @@ const RunningCard = memo(RunningCardImpl, (a, b) =>
   a.item.num_people === b.item.num_people &&
   a.item.rate_per_hour === b.item.rate_per_hour &&
   a.order?.customer_name === b.order?.customer_name &&
+  a.order?.customer_points === b.order?.customer_points &&
   // Live bill depends on extras length + total; cheap to compare counts/sum
   a.order?.extras?.length === b.order?.extras?.length &&
   a.table.upcomingBooking?.scheduled_start === b.table.upcomingBooking?.scheduled_start
@@ -484,7 +515,7 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[200px] overflow-hidden cursor-pointer select-none
+      className={`rounded-xl flex flex-col min-h-[380px] overflow-hidden cursor-pointer select-none
         bg-amber-50 hover:bg-amber-100
         dark:bg-[rgba(245,158,11,0.05)] dark:hover:bg-[rgba(245,158,11,0.13)]
         transition-colors duration-150 ease-out
@@ -493,71 +524,75 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
       style={{ border: isSelected ? undefined : "1px solid rgba(245,158,11,0.22)" }}
     >
       <div style={{ height: 4, background: "#f59e0b", flexShrink: 0 }} />
-      <div className="flex flex-col flex-1 p-4 gap-2">
+      <div className="flex flex-col flex-1 p-5 gap-4">
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <TableThumb table={table} />
-            <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
+          <div className="flex items-center gap-2 min-w-0">
+            <TableThumb table={table} size={36} />
+            <span className="text-base font-black text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
-            className="text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide"
+            className="text-xs font-black px-2.5 py-1 rounded text-white shrink-0 ml-1 uppercase tracking-wider"
             style={{ background: "#f59e0b" }}
           >
             Booked
           </span>
         </div>
 
-        {/* Customer */}
-        <p className="font-bold text-gray-900 dark:text-white text-base leading-tight truncate">
-          {booking.order?.customer_name}
-        </p>
-        {booking.order?.customer_phone && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              const ph = booking.order!.customer_phone!;
-              navigator.clipboard.writeText(ph).then(
-                () => toast.success(`Copied ${ph}`),
-                () => toast.error("Copy failed"),
-              );
-            }}
-            className="inline-flex items-center gap-1 -mt-1 self-start text-[11px] font-mono font-semibold text-gray-500 dark:text-[#aaa] hover:text-[#f59e0b] dark:hover:text-[#f59e0b] truncate"
-            title="Click to copy number"
-          >
-            <Phone className="h-3 w-3" />
-            {booking.order.customer_phone}
-          </button>
-        )}
-
-        {/* Time + countdown */}
-        <div>
-          <p className="font-mono text-sm font-bold tabular-nums" style={{ color: "#f59e0b" }}>
-            {fmtTime(booking.scheduled_start)} → {fmtTime(booking.scheduled_end)}
+        {/* Customer details */}
+        <div className="space-y-1">
+          <p className="font-black text-gray-900 dark:text-white text-2xl leading-tight truncate">
+            {booking.order?.customer_name}
           </p>
-          <p
-            className="text-xs font-semibold mt-0.5"
-            style={{ color: isOverdue ? "#ef4444" : isImminent ? "#f59e0b" : "#9ca3af" }}
-          >
+          <div className="flex flex-wrap items-center gap-2">
+            {booking.order?.customer_phone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const ph = booking.order!.customer_phone!;
+                  navigator.clipboard.writeText(ph).then(
+                    () => toast.success(`Copied ${ph}`),
+                    () => toast.error("Copy failed"),
+                  );
+                }}
+                className="inline-flex items-center gap-1 text-xs font-mono font-bold text-gray-500 dark:text-[#aaa] hover:text-[#f59e0b] dark:hover:text-[#f59e0b] truncate"
+                title="Click to copy number"
+              >
+                <Phone className="h-3 w-3" />
+                {booking.order.customer_phone}
+              </button>
+            )}
+            <span className="text-xs text-gray-400 font-bold">
+              Slot: {fmtTime(booking.scheduled_start)} – {fmtTime(booking.scheduled_end)}
+            </span>
+          </div>
+        </div>
+
+        {/* Big centered Booked countdown/timer */}
+        <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+          <span className="text-4xl lg:text-5xl font-black font-mono tracking-widest text-[#f59e0b] tabular-nums">
             {isOverdue
-              ? `${Math.abs(Math.ceil(diffMs / 60000))}m overdue`
+              ? `${Math.abs(Math.ceil(diffMs / 60000))}m late`
               : isImminent
               ? "Arriving now!"
-              : `in ${minsAway}m`}
-          </p>
+              : `${minsAway}m`}
+          </span>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-[#aaa] mt-2">
+            {isOverdue ? "Overdue" : isImminent ? "Status" : "Arriving In"}
+          </span>
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-1.5 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-2 mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
           {!confirmNoshow ? (
             <>
               <button
                 onClick={checkIn}
                 disabled={loadingCheckin || loadingNoshow}
-                className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+                className="flex-1 py-2.5 rounded-xl text-sm font-extrabold text-white transition-all active:scale-95 disabled:opacity-40"
                 style={{ background: "#f59e0b" }}
               >
                 {loadingCheckin ? "…" : "Check In"}
@@ -565,7 +600,7 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
               <button
                 onClick={(e) => { e.stopPropagation(); setConfirmNoshow(true); }}
                 disabled={loadingCheckin || loadingNoshow}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 disabled:opacity-40
+                className="px-4 py-2.5 rounded-xl text-sm font-extrabold transition-all active:scale-95 disabled:opacity-40
                   bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
                   text-gray-400 dark:text-[#555] hover:text-red-400 hover:border-red-200 dark:hover:border-red-900"
               >
@@ -577,7 +612,7 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
               <button
                 onClick={markNoShow}
                 disabled={loadingNoshow}
-                className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+                className="flex-1 py-2.5 rounded-xl text-sm font-extrabold text-white transition-all active:scale-95 disabled:opacity-40"
                 style={{ background: "#ef4444" }}
               >
                 {loadingNoshow ? "…" : "Confirm"}
@@ -585,7 +620,7 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
               <button
                 onClick={(e) => { e.stopPropagation(); setConfirmNoshow(false); }}
                 disabled={loadingNoshow}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all
+                className="px-4 py-2.5 rounded-xl text-sm font-extrabold transition-all
                   bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-[#2a2a2a]
                   text-gray-400 dark:text-[#555] hover:text-gray-700 dark:hover:text-white"
               >
@@ -629,23 +664,23 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl flex flex-col min-h-[200px] bg-orange-50 dark:bg-[rgba(212,84,26,0.07)] overflow-hidden cursor-pointer transition-all select-none
+      className={`rounded-xl flex flex-col min-h-[380px] bg-orange-50 dark:bg-[rgba(212,84,26,0.07)] overflow-hidden cursor-pointer transition-all select-none
         ${isSelected ? "ring-2 ring-[#D4541A] ring-offset-1 shadow-md" : "shadow-sm hover:shadow-md"}`}
       style={{ border: isSelected ? undefined : "1px solid rgba(212,84,26,0.22)" }}
     >
       <div style={{ height: 4, background: "#D4541A", flexShrink: 0 }} />
-      <div className="flex flex-col flex-1 p-4 gap-2">
+      <div className="flex flex-col flex-1 p-5 gap-4">
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <TableThumb table={table} />
-            <span className="text-sm font-bold text-gray-800 dark:text-[#ddd] truncate">
+          <div className="flex items-center gap-2 min-w-0">
+            <TableThumb table={table} size={36} />
+            <span className="text-base font-black text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
-            className="text-[10px] font-extrabold px-2 py-0.5 rounded text-white shrink-0 ml-1 uppercase tracking-wide"
+            className="text-xs font-black px-2.5 py-1 rounded text-white shrink-0 ml-1 uppercase tracking-wider"
             style={{ background: "#D4541A" }}
           >
             Bill Ready
@@ -653,23 +688,27 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
         </div>
 
         {/* Customer */}
-        <p className="font-bold text-gray-900 dark:text-white text-base leading-tight">
-          {order.customer_name}
-        </p>
-        <p className="text-xs font-semibold text-gray-600 dark:text-[#aaa]">Session ended</p>
+        <div>
+          <p className="font-black text-gray-900 dark:text-white text-2xl leading-tight truncate">
+            {order.customer_name}
+          </p>
+          <p className="text-xs font-bold text-gray-600 dark:text-[#aaa]">Session ended</p>
+        </div>
 
-        {/* Amount */}
-        <p
-          className="font-extrabold tabular-nums flex-1"
-          style={{ fontSize: 28, color: "#D4541A", lineHeight: 1.1 }}
-        >
-          {formatCurrency(billDue)}
-        </p>
+        {/* Big centered Bill amount */}
+        <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-orange-100/30 dark:bg-orange-950/20 border border-orange-500/10">
+          <span className="text-4xl lg:text-5xl font-black font-mono tracking-widest tabular-nums" style={{ color: "#D4541A" }}>
+            {formatCurrency(billDue)}
+          </span>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-[#aaa] mt-2">
+            Amount Due
+          </span>
+        </div>
 
         {/* Quick collect — goes straight to finalize modal */}
         <button
           onClick={(e) => { e.stopPropagation(); setFinalizeOrderId(order.id); }}
-          className="w-full py-2 rounded-lg text-sm font-bold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
+          className="w-full py-2.5 rounded-xl text-sm font-extrabold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
           style={{ background: "#D4541A" }}
         >
           Collect Bill
@@ -832,7 +871,7 @@ function TableGridInner({ locationId }: TableGridProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
           {tables.map((table) => {
             const item              = table.activeOrderItem;
             const isRunning         = !!item && item.status === "running";

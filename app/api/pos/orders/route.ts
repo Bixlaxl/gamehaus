@@ -25,5 +25,25 @@ export async function GET(request: Request) {
     .eq("status", "open");
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
-  return NextResponse.json(ok(data ?? []));
+
+  const orders = data ?? [];
+  const phones = Array.from(new Set(orders.map((o) => o.customer_phone).filter((p): p is string => !!p)));
+
+  let profileMap: Record<string, number> = {};
+  if (phones.length > 0) {
+    const { data: profiles } = await admin
+      .from("customer_profiles")
+      .select("phone, points_balance")
+      .in("phone", phones);
+    if (profiles) {
+      profileMap = Object.fromEntries(profiles.map((p) => [p.phone, p.points_balance]));
+    }
+  }
+
+  const ordersWithPoints = orders.map((o) => ({
+    ...o,
+    customer_points: o.customer_phone ? (profileMap[o.customer_phone] ?? 0) : 0,
+  }));
+
+  return NextResponse.json(ok(ordersWithPoints));
 }
