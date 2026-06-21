@@ -184,3 +184,12 @@ export const createStaffSchema = z.object({
   password: z.string().min(8),
   location_id: z.string().uuid(),
 });
+
+// Staff update
+export const updateStaffSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(8).optional(),
+  location_id: z.string().uuid().nullable().optional(),
+  is_active: z.boolean().optional(),
+});

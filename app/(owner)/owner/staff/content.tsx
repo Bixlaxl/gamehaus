@@ -49,7 +49,7 @@ export function StaffContent({
 
   // Edit dialog
   const [editTarget, setEditTarget]   = useState<StaffRow | null>(null);
-  const [editForm, setEditForm]       = useState({ name: "", location_id: "" });
+  const [editForm, setEditForm]       = useState({ name: "", email: "", password: "", location_id: "" });
   const [editError, setEditError]     = useState<string | null>(null);
 
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
@@ -115,36 +115,52 @@ export function StaffContent({
 
   // ── Edit ─────────────────────────────────────────────────────────────────
   const editMutation = useMutation({
-    mutationFn: async ({ id, name, location_id }: { id: string; name: string; location_id: string }) => {
-      const { error } = await supabase
-        .from("users")
-        .update({ name, location_id: location_id || null })
-        .eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, name, email, password, location_id }: { id: string; name: string; email: string; password?: string; location_id: string }) => {
+      const payload: any = {
+        name,
+        email,
+        location_id: location_id || null,
+      };
+      if (password) {
+        payload.password = password;
+      }
+      const res = await fetch(`/api/staff/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error ?? "Failed to update staff member");
     },
-    onMutate: async ({ id, name, location_id }) => {
+    onMutate: async ({ id, name, email, password, location_id }) => {
       await qc.cancelQueries({ queryKey: ["staff"] });
       const prev = qc.getQueryData<StaffRow[]>(["staff"]);
       const loc  = locations?.find((l) => l.id === location_id);
       qc.setQueryData<StaffRow[]>(["staff"], (old) =>
         (old ?? []).map((s) =>
           s.id === id
-            ? { ...s, name, location_id: location_id || null, locations: loc ? { name: loc.name } : null }
+            ? {
+                ...s,
+                name,
+                email,
+                location_id: location_id || null,
+                locations: loc ? { name: loc.name } : null,
+                login_password: password || s.login_password
+              }
             : s
         )
       );
-      setEditTarget(null);
       return { prev };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff"] });
       toast.success("Staff member updated");
+      setEditTarget(null);
       setEditError(null);
     },
     onError: (err, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["staff"], ctx.prev);
       setEditError((err as Error).message);
-      setEditTarget((prev) => prev);
     },
   });
 
@@ -201,7 +217,7 @@ export function StaffContent({
 
   function openEdit(s: StaffRow) {
     setEditTarget(s);
-    setEditForm({ name: s.name, location_id: s.location_id ?? "" });
+    setEditForm({ name: s.name, email: s.email, password: "", location_id: s.location_id ?? "" });
     setEditError(null);
   }
 
@@ -417,6 +433,25 @@ export function StaffContent({
               />
             </div>
             <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>New Password (optional)</Label>
+              <Input
+                type="password"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                placeholder="Leave blank to keep unchanged"
+                minLength={8}
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Location</Label>
               <Select
                 value={editForm.location_id}
@@ -432,9 +467,6 @@ export function StaffContent({
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-gray-400">
-              To reset password, delete and re-create the staff account.
-            </p>
             {editError && <p className="text-sm text-destructive">{editError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>

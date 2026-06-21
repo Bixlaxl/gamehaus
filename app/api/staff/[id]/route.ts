@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { ok, err, friendlyDbError } from "@/lib/validators/schemas";
+import { ok, err, friendlyDbError, updateStaffSchema } from "@/lib/validators/schemas";
 
 export const runtime = "edge";
 
@@ -21,11 +21,7 @@ async function requireOwner() {
 }
 
 /**
- * Toggle is_active on a staff member.
- *
- * Previously the owner UI was writing this directly via the browser Supabase
- * client (anon role). Depending on RLS that silently failed and the optimistic
- * cache drifted out of sync with the DB. Route it through the admin client.
+ * Update a staff member's details, including auth credentials (email/password).
  */
 export async function PATCH(
   request: Request,
@@ -35,15 +31,38 @@ export async function PATCH(
   if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status });
 
   const { id } = await params;
-  const body = await request.json() as { is_active?: boolean };
-  if (typeof body.is_active !== "boolean") {
-    return NextResponse.json(err("is_active boolean is required", "VALIDATION_ERROR"), { status: 400 });
+  const body: unknown = await request.json();
+  const parsed = updateStaffSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
+  const { name, email, password, location_id, is_active } = parsed.data;
   const admin = createAdminClient();
+
+  // 1. Update Auth credentials if email/password changed
+  const authUpdate: any = {};
+  if (email) authUpdate.email = email;
+  if (password) authUpdate.password = password;
+
+  if (Object.keys(authUpdate).length > 0) {
+    const { error: authError } = await admin.auth.admin.updateUserById(id, authUpdate);
+    if (authError) {
+      return NextResponse.json(err(authError.message, "AUTH_ERROR"), { status: 400 });
+    }
+  }
+
+  // 2. Update DB profile in public.users
+  const updatePayload: any = {};
+  if (name !== undefined) updatePayload.name = name;
+  if (email !== undefined) updatePayload.email = email;
+  if (location_id !== undefined) updatePayload.location_id = location_id;
+  if (password !== undefined) updatePayload.login_password = password;
+  if (is_active !== undefined) updatePayload.is_active = is_active;
+
   const { data, error } = await admin
     .from("users")
-    .update({ is_active: body.is_active })
+    .update(updatePayload)
     .eq("id", id)
     .select()
     .single();
