@@ -71,7 +71,7 @@ export function InventoryContent({
     },
     initialData: selectedLocation === "all" ? initialItems : undefined,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 

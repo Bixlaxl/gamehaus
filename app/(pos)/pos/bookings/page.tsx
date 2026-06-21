@@ -19,17 +19,16 @@ export default async function StaffBookingsPage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("role, name, location_id")
+    .select(`
+      role, name, location_id,
+      location:locations(id, name, opening_time, closing_time)
+    `)
     .eq("id", session.user.id)
     .single();
-  if (!profile?.location_id) redirect("/pos");
+  if (!profile?.location_id || !profile.location) redirect("/pos");
 
+  const location = profile.location as any;
   const admin = createAdminClient();
-  const { data: location } = await admin
-    .from("locations")
-    .select("id, name, opening_time, closing_time")
-    .eq("id", profile.location_id)
-    .single();
 
   const opening = location?.opening_time ?? "10:00";
   const closing = location?.closing_time ?? "23:00";

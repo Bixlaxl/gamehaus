@@ -86,7 +86,7 @@ export function TablesContent({
     },
     initialData: initialLocations,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: tables, isLoading } = useQuery({
@@ -107,7 +107,7 @@ export function TablesContent({
     },
     initialData: selectedLocation === "all" ? initialTables : undefined,
     initialDataUpdatedAt: Date.now(),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 

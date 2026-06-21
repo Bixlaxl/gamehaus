@@ -133,7 +133,7 @@ export function ReportsContent({
     // instead of TanStack treating the stale initialData as still-fresh.
     initialData: from === initialFrom && to === initialTo ? initialReportData : undefined,
     initialDataUpdatedAt: from === initialFrom && to === initialTo ? Date.now() : undefined,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 
@@ -168,7 +168,7 @@ export function ReportsContent({
 
       return (orders ?? []) as unknown as ReportOrder[];
     },
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
   });
 
   const monthlyData = useMemo(() => {
