@@ -9,9 +9,13 @@ export const dynamic = 'force-dynamic';
 export default async function CancelBookingPage({
   params,
 }: {
-  params: Promise<{ locationSlug: string; orderId: string }>;
+  params: Promise<{ orderId: string }>;
 }) {
-  const { locationSlug, orderId } = await params;
+  const { orderId } = await params;
+  
+  // Clean orderId from any URL-encoded or raw "{{1}}" template placeholders
+  let cleanOrderId = decodeURIComponent(orderId).replace("{{1}}", "").trim();
+
   const admin = createAdminClient();
 
   // 1. Fetch Order and Location details
@@ -33,13 +37,13 @@ export default async function CancelBookingPage({
         timezone
       )
     `)
-    .eq("id", orderId)
+    .eq("id", cleanOrderId)
     .single();
 
   const locationInfo = order?.locations as unknown as { id: string; name: string; slug: string; timezone: string } | null;
 
-  // Validate that order exists, is open, and matches the URL location slug
-  if (!order || order.status !== "open" || locationInfo?.slug !== locationSlug) {
+  // Validate that order exists and is open
+  if (!order || order.status !== "open") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F7F5F2] dark:bg-[#0A0A0A] p-4 font-sans">
         <div className="text-center space-y-4 max-w-sm">
@@ -75,7 +79,7 @@ export default async function CancelBookingPage({
         type
       )
     `)
-    .eq("order_id", orderId)
+    .eq("order_id", cleanOrderId)
     .eq("is_deleted", false);
 
   const scheduledStarts = (items ?? [])
@@ -178,7 +182,7 @@ export default async function CancelBookingPage({
 
   return (
     <ClientCancelPage
-      orderId={orderId}
+      orderId={cleanOrderId}
       locationName={locationInfo?.name || "Gamehaus"}
       customerName={order.customer_name || "Valued Customer"}
       advancePaid={amountPaidVal}
