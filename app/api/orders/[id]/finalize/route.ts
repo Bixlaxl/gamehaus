@@ -19,7 +19,7 @@ const paymentSplit = z.object({
 });
 
 const schema = z.object({
-  payments:        z.array(paymentSplit).min(1).max(4),
+  payments:        z.array(paymentSplit).min(0).max(4),
   coupon_code:     z.string().optional(),
   points_redeemed: z.number().int().min(0).optional().default(0),
   customer_phone:  z.string().optional(),
@@ -168,6 +168,21 @@ export async function POST(
     );
   }
 
+  const toInsert = payments
+    .filter((p) => p.amount > 0)
+    .map((p) => ({
+      order_id:     orderId,
+      amount:       Math.round(p.amount * 100) / 100,
+      method:       p.method,
+      status:       "completed" as const,
+      collected_by: user.id,
+      collected_at: now.toISOString(),
+    }));
+
+  const paymentInsertPromise = toInsert.length > 0
+    ? admin.from("payments").insert(toInsert)
+    : Promise.resolve({ error: null });
+
   // All four writes/reads are independent — run them in parallel (4 round trips → 1)
   const [
     { error: finalizeError },
@@ -188,19 +203,7 @@ export async function POST(
         coupon_id:       coupon?.id ?? order.coupon_id,
       })
       .eq("id", orderId),
-    // One row per split — a single-method payment is just a 1-row insert.
-    admin.from("payments").insert(
-      payments
-        .filter((p) => p.amount > 0)
-        .map((p) => ({
-          order_id:     orderId,
-          amount:       Math.round(p.amount * 100) / 100,
-          method:       p.method,
-          status:       "completed" as const,
-          collected_by: user.id,
-          collected_at: now.toISOString(),
-        }))
-    ),
+    paymentInsertPromise,
     coupon
       ? admin.from("coupons").update({ used_count: coupon.used_count + 1 }).eq("id", coupon.id)
       : Promise.resolve(null),

@@ -487,90 +487,96 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
           </div>
 
           {/* Payment method — single or split */}
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
-                Payment method
-              </p>
-              <button
-                type="button"
-                onClick={splitMode ? exitSplit : enterSplit}
-                className="text-[11px] font-bold text-[#D4541A] hover:opacity-80"
-              >
-                {splitMode ? "← Single method" : "Split between Cash + UPI"}
-              </button>
-            </div>
-
-            {!splitMode ? (
-              <div className="grid grid-cols-2 gap-2">
-                {paymentMethods.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setMethod(opt.value)}
-                    className={`flex flex-col items-center gap-2 py-3 rounded-xl transition-all ${
-                      method === opt.value
-                        ? ""
-                        : "bg-gray-100 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] text-gray-500 dark:text-[#888]"
-                    }`}
-                    style={
-                      method === opt.value
-                        ? { background: "rgba(212,84,26,0.1)", border: "1px solid #D4541A", color: "#D4541A" }
-                        : {}
-                    }
-                  >
-                    {opt.icon}
-                    <span className="text-xs font-semibold">{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl p-3 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A]">
-                    <div className="flex items-center gap-1.5 mb-1.5 text-gray-500 dark:text-[#888]">
-                      <Banknote className="h-3.5 w-3.5" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide">Cash</span>
-                    </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xs text-gray-500 dark:text-[#888]">₹</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={cashInput}
-                        onChange={(e) => changeCash(e.target.value)}
-                        placeholder="0"
-                        className="w-full bg-transparent outline-none text-lg font-bold tabular-nums text-gray-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-                  <div className="rounded-xl p-3 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A]">
-                    <div className="flex items-center gap-1.5 mb-1.5 text-gray-500 dark:text-[#888]">
-                      <Smartphone className="h-3.5 w-3.5" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide">UPI</span>
-                    </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xs text-gray-500 dark:text-[#888]">₹</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={upiInput}
-                        onChange={(e) => changeUpi(e.target.value)}
-                        placeholder="0"
-                        className="w-full bg-transparent outline-none text-lg font-bold tabular-nums text-gray-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <p
-                  className="text-[11px] font-semibold text-right tabular-nums"
-                  style={{ color: splitOk ? "#10b981" : "#ef4444" }}
-                >
-                  Split sum: {formatCurrency(splitSum)} / {formatCurrency(finalDue)}
-                  {!splitOk && ` (off by ${formatCurrency(Math.abs(splitSum - finalDue))})`}
+          {finalDue > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#444]">
+                  Payment method
                 </p>
+                <button
+                  type="button"
+                  onClick={splitMode ? exitSplit : enterSplit}
+                  className="text-[11px] font-bold text-[#D4541A] hover:opacity-80"
+                >
+                  {splitMode ? "← Single method" : "Split between Cash + UPI"}
+                </button>
               </div>
-            )}
-          </div>
+
+              {!splitMode ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {paymentMethods.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setMethod(opt.value)}
+                      className={`flex flex-col items-center gap-2 py-3 rounded-xl transition-all ${
+                        method === opt.value
+                          ? ""
+                          : "bg-gray-100 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] text-gray-500 dark:text-[#888]"
+                      }`}
+                      style={
+                        method === opt.value
+                          ? { background: "rgba(212,84,26,0.1)", border: "1px solid #D4541A", color: "#D4541A" }
+                          : {}
+                      }
+                    >
+                      {opt.icon}
+                      <span className="text-xs font-semibold">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl p-3 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A]">
+                      <div className="flex items-center gap-1.5 mb-1.5 text-gray-500 dark:text-[#888]">
+                        <Banknote className="h-3.5 w-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-wide">Cash</span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xs text-gray-500 dark:text-[#888]">₹</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={cashInput}
+                          onChange={(e) => changeCash(e.target.value)}
+                          placeholder="0"
+                          className="w-full bg-transparent outline-none text-lg font-bold tabular-nums text-gray-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-xl p-3 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A]">
+                      <div className="flex items-center gap-1.5 mb-1.5 text-gray-500 dark:text-[#888]">
+                        <Smartphone className="h-3.5 w-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-wide">UPI</span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xs text-gray-500 dark:text-[#888]">₹</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={upiInput}
+                          onChange={(e) => changeUpi(e.target.value)}
+                          placeholder="0"
+                          className="w-full bg-transparent outline-none text-lg font-bold tabular-nums text-gray-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <p
+                    className="text-[11px] font-semibold text-right tabular-nums"
+                    style={{ color: splitOk ? "#10b981" : "#ef4444" }}
+                  >
+                    Split sum: {formatCurrency(splitSum)} / {formatCurrency(finalDue)}
+                    {!splitOk && ` (off by ${formatCurrency(Math.abs(splitSum - finalDue))})`}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl p-3.5 text-center bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-400 font-medium text-xs">
+              ✓ Fully covered. No outstanding balance due.
+            </div>
+          )}
 
           {error && (
             <p
@@ -583,7 +589,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
           <button
             onClick={confirmPayment}
-            disabled={loading || lookupPending || (splitMode ? !splitOk : !method)}
+            disabled={loading || lookupPending || (finalDue > 0 ? (splitMode ? !splitOk : !method) : false)}
             className="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-30"
             style={{ background: "#D4541A" }}
           >
@@ -591,6 +597,8 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               ? "Processing..."
               : lookupPending
               ? "Loading customer…"
+              : finalDue === 0
+              ? "Finalize Bill"
               : `Collect ${formatCurrency(finalDue)}`}
           </button>
         </div>
