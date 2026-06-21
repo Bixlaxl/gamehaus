@@ -111,10 +111,9 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       .eq("location_id", order.location_id)
       .lte("created_at", order.created_at);
 
-    // Parameter 2: Reference Code (e.g. GM001 or NT001)
-    const prefix = slug === "nerf-turf" ? "NT" : "GM";
+    // Parameter 2: Reference Code (e.g. GM001 or NT-001)
     const seqStr = String(count || 1).padStart(3, "0");
-    const refCode = `${prefix}${seqStr}`;
+    const refCode = slug === "nerf-turf" ? `NT-${seqStr}` : `GM${seqStr}`;
 
     // Format booking date (using the first item's scheduled start date)
     const firstItem = items[0];
@@ -238,6 +237,134 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     return true;
   } catch (error) {
     console.error(`[WhatsApp] Unexpected error during notification sending:`, error);
+    return false;
+  }
+}
+
+/**
+ * Sends a booking cancellation WhatsApp message via Meta Cloud API using location-based templates.
+ * 
+ * Templates:
+ * - Gamehaus locations (slug: 'gamehaus') -> gamehaus_booking_cancellation
+ * - Nerf Turf locations (slug: 'nerf-turf') -> nerfturf_booking_cancellation
+ * 
+ * Body Parameters Mapping:
+ * 1. Customer Name (e.g. John)
+ * 2. Booking Reference ID (e.g. GM001 or NT-001)
+ * 3. Refund Percentage (e.g. 100%)
+ * 4. Refund Amount (e.g. 250)
+ */
+export async function sendWhatsAppCancellation(
+  orderId: string,
+  refundPct: number,
+  refundAmount: number
+): Promise<boolean> {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!accessToken || !phoneNumberId) {
+    console.warn(
+      `[WhatsApp] Skipped sending cancellation for order ${orderId} because WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID is missing.`
+    );
+    return false;
+  }
+
+  try {
+    const admin = createAdminClient();
+
+    // 1. Fetch Order and Location details
+    const { data: order, error: orderError } = await admin
+      .from("orders")
+      .select(`
+        customer_name,
+        customer_phone,
+        location_id,
+        created_at,
+        locations (
+          slug
+        )
+      `)
+      .eq("id", orderId)
+      .single();
+
+    if (orderError || !order) {
+      console.error(`[WhatsApp] Order ${orderId} not found or query error:`, orderError);
+      return false;
+    }
+
+    if (!order.customer_phone) {
+      console.warn(`[WhatsApp] Skipped sending cancellation for order ${orderId}: no customer phone number.`);
+      return false;
+    }
+
+    const locationInfo = order.locations as unknown as { slug: string } | null;
+    const slug = locationInfo?.slug || "gamehaus";
+
+    // Count how many orders were created at this location on or before this order
+    const { count } = await admin
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("location_id", order.location_id)
+      .lte("created_at", order.created_at);
+
+    // Reference Code (e.g. GM001 or NT-001)
+    const seqStr = String(count || 1).padStart(3, "0");
+    const refCode = slug === "nerf-turf" ? `NT-${seqStr}` : `GM${seqStr}`;
+
+    const customerName = order.customer_name || "Valued Customer";
+
+    // Clean phone number: remove non-digits, prepend "91" if exactly 10 digits
+    let cleanedPhone = order.customer_phone.replace(/\D/g, "");
+    if (cleanedPhone.length === 10) {
+      cleanedPhone = "91" + cleanedPhone;
+    }
+
+    const templateName = slug === "nerf-turf" ? "nerfturf_booking_cancellation" : "gamehaus_booking_cancellation";
+
+    const components = [
+      {
+        type: "body",
+        parameters: [
+          { type: "text", text: customerName },
+          { type: "text", text: refCode },
+          { type: "text", text: `${refundPct}%` },
+          { type: "text", text: refundAmount.toString() },
+        ],
+      }
+    ];
+
+    const payload = {
+      messaging_product: "whatsapp",
+      to: cleanedPhone,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: "en" },
+        components,
+      },
+    };
+
+    console.log(`[WhatsApp] Sending cancellation template '${templateName}' to '${cleanedPhone}' for order '${refCode}'...`);
+
+    const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error(`[WhatsApp] Failed to send cancellation message. Meta API response status: ${response.status}`, responseText);
+      return false;
+    }
+
+    console.log(`[WhatsApp] Cancellation message sent successfully. Response:`, responseText);
+    return true;
+  } catch (error) {
+    console.error(`[WhatsApp] Unexpected error during cancellation notification sending:`, error);
     return false;
   }
 }
