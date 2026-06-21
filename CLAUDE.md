@@ -13,6 +13,7 @@ Snooker & gaming café booking + POS system. Two physical locations (Bandra, And
 - **State**: Zustand (cart: `persist` to localStorage; POS: in-memory with realtime)
 - **Server state**: TanStack Query (POS data fetching, 60s refetch interval — Realtime handles live updates)
 - **Payments**: Razorpay (create-order → checkout UI → webhook confirms)
+- **Notifications**: Meta WhatsApp Cloud API (booking confirmations/reservations)
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Theme**: next-themes (light/dark, `dark` class on `<html>`)
 - **Validation**: Zod schemas in `lib/validators/schemas.ts`
@@ -35,7 +36,7 @@ Auth flows through Supabase + middleware (`middleware.ts`). JWT role claim used 
 
 | Table | Key Columns | Notes |
 |-------|-------------|-------|
-| `locations` | id, name, slug, address, phone, opening_time, closing_time, timezone, is_active | Two locations |
+| `locations` | id, name, slug, address, phone, timezone, image_urls, is_active | Two locations, holds multiple image URLs |
 | `users` | id, name, email, role, location_id | staff has location_id, owner has null |
 | `tables` | id, location_id, name, type, hourly_rate, sort_order, is_active, people_pricing | type: snooker/pool/ps5/foosball |
 | `orders` | id, location_id, type, customer_name, customer_phone, status, advance_paid, points_redeemed | type: walk_in/online, status: open/finalized/cancelled |
@@ -103,6 +104,14 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 - **POS walk-in**: debounced lookup after ≥6 digits typed — phone only, no name required, auto-fills name if field empty
 - **Website checkout**: requires full Indian phone (10 digits, starts with 6/7/8/9) AND matching name before showing points balance; no name auto-fill
 
+### WhatsApp Notifications
+- **Status-based template selection**: Sends `nerfturf_booking_confirmation` / `gamehaus_booking_confirmation` (5 parameters + dynamic URL button) for fully paid bookings. Sends `nerfturf_table_reservation` / `gamehaus_table_reservation` (6 parameters) for reservations.
+- **Dynamic Button Parameter**: The booking confirmation templates feature a dynamic "Cancel Booking" URL button which requires the `orderId` to be passed as a template parameter.
+- **Net Cost Calculation**: Correctly factors in `discount_amount` alongside `advance_paid` to determine if a booking is fully paid.
+
+### Local Timezones
+- All date calculations (e.g. "today") use `getLocalDateString(timezone, date)` helper to extract local dates in `Asia/Kolkata` time to avoid shifting UTC dates causing incorrect date assignments on early morning bookings.
+
 ---
 
 ## Pages & Components
@@ -158,6 +167,7 @@ ALTER TABLE orders ADD COLUMN points_redeemed INTEGER NOT NULL DEFAULT 0;
 | POST | `/api/payments/create-order` | public | Create Razorpay order |
 | POST | `/api/payments/webhook` | Razorpay | Confirm payment, update advance_paid |
 | GET/POST | `/api/locations` | owner | List/create locations |
+| POST | `/api/locations/upload` | owner | Upload location images to table-images bucket |
 | PATCH/DELETE | `/api/locations/[id]` | owner | Update/delete location |
 | GET/POST | `/api/tables` | owner | List/create tables |
 | PATCH/DELETE | `/api/tables/[id]` | owner | Update/delete table |

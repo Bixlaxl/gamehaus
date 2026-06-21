@@ -64,6 +64,8 @@ RAZORPAY_KEY_ID
 RAZORPAY_KEY_SECRET
 RAZORPAY_WEBHOOK_SECRET
 NEXT_PUBLIC_RAZORPAY_KEY_ID
+WHATSAPP_ACCESS_TOKEN
+WHATSAPP_PHONE_NUMBER_ID
 ```
 
 ---
@@ -185,6 +187,7 @@ The two physical sites.
 | `slug` | text | URL slug — `/{slug}` |
 | `address`, `phone`, `timezone` | text | |
 | `opening_time`, `closing_time` | `time` (HH:MM) | Business hours. Walk-in API + slot grid enforce these. Midnight-crossing supported. |
+| `image_urls` | `text[]` | Multiple image URLs for the location landing/carousel |
 | `is_active` | bool | Soft-hide |
 
 #### `users` (Supabase Auth + `public.users` profile row)
@@ -485,6 +488,7 @@ All routes use `export const runtime = 'edge'`. All responses use `ok(data)` / `
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | GET/POST | `/api/locations` | owner | List/create locations |
+| POST | `/api/locations/upload` | owner | Image upload to `table-images` bucket |
 | PATCH/DELETE | `/api/locations/[id]` | owner | Update/delete location |
 | GET/POST | `/api/tables` | owner | List/create tables |
 | PATCH/DELETE | `/api/tables/[id]` | owner | Update/delete table |
@@ -954,11 +958,27 @@ Honest list of things that exist but aren't ideal:
 3. **`free_hrs` on membership plans not honoured** — schema exists, billing engine doesn't subtract.
 4. **`order_panel.tsx` is legacy** — duplicates much of `context-panel.tsx` for less common flows (post-checkin OrderPanel view, session history). Could be consolidated.
 5. **`GRACE_MINS = 5`** still exported from billing engine for OrderPanel's benefit. Dead in the main flow.
-6. **No customer-facing email/SMS** — confirmations are screen-only; cancellation link is via WhatsApp (manual).
+6. **WhatsApp Notification Integration** — confirmations are sent automatically via the Meta WhatsApp Cloud API. Dynamic cancellation button in template references the order.
 7. **No customer cancellation enforced on the back end** — `/api/bookings/[id]/cancel` doesn't exist yet. Cancellation happens by phone or staff side.
 8. **Loyalty points double-award guard** — if the webhook fires AND the finalize runs both award points. Currently safe because the webhook subtracts `points_redeemed` and finalize awards based on `finalDue`. But if logic changes, recheck.
 
+---
+
+## 17. WhatsApp Notification Flow
+
+WhatsApp notifications are sent automatically upon order confirmation (either online payment capture via Razorpay webhook or staff demo checkout).
+
+### Template Rules & Parameters:
+- **Fully Paid Confirmation**:
+  - Sent when the booking has zero balance due (`advance_paid >= net_cost`).
+  - Template: `nerfturf_booking_confirmation` or `gamehaus_booking_confirmation`
+  - Parameters (5): Customer Name, Booking Reference ID, Date, Table/Slot info, Amount Paid.
+  - Interactive Action: A dynamic URL button **"Cancel Booking"** that passes the order's UUID (`orderId`) to dynamic templates.
+- **Partial/Advance Reservation**:
+  - Sent when the booking has an outstanding balance due.
+  - Template: `nerfturf_table_reservation` or `gamehaus_table_reservation`
+  - Parameters (6): Customer Name, Booking Reference ID, Date, Table/Slot info, Amount Paid, Amount Due.
 
 ---
 
-*Last updated to reflect commit `3801179` (POS bundle pass: -19 KB).*
+*Last updated to reflect commit `13505bc` (booking confirmations & image upload fixes).*
