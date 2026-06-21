@@ -325,21 +325,31 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
                           const globCoupons = coupons.filter(c => c.location_id === null);
                           const activeCoupon = locCoupons.length > 0 ? locCoupons[0] : (globCoupons.length > 0 ? globCoupons[0] : null);
                           if (!activeCoupon) return null;
+                          
+                          const discountText = activeCoupon.discount_type === "percent"
+                            ? `${activeCoupon.discount_value}% OFF`
+                            : `₹${activeCoupon.discount_value} OFF`;
+
                           return (
-                            <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl border animate-pulse"
-                              style={{
-                                background: "rgba(212,84,26,0.06)",
-                                borderColor: "rgba(212,84,26,0.25)",
-                                color: "#D4541A",
-                              }}
-                            >
-                              <span>🏷️</span>
-                              <span>
-                                {activeCoupon.discount_type === "percent"
-                                  ? `${activeCoupon.discount_value}% off`
-                                  : `₹${activeCoupon.discount_value} off`}
-                                {" — online full pay only"}
-                              </span>
+                            <div className="mt-3 flex items-center justify-between bg-gradient-to-r from-orange-500/[0.07] to-amber-500/[0.03] border border-dashed border-[#D4541A]/30 rounded-xl p-3 relative overflow-hidden group/deal">
+                              {/* Glowing hover state */}
+                              <div className="absolute inset-0 bg-[#D4541A]/[0.02] opacity-0 group-hover/deal:opacity-100 transition-opacity duration-300" />
+                              
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-lg animate-bounce" style={{ animationDuration: '2.5s' }}>🏷️</span>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-extrabold tracking-wider uppercase text-[#D4541A]">
+                                    Special Online Deal
+                                  </p>
+                                  <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
+                                    Pay full online to save instantly
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="bg-[#D4541A] text-white font-black text-[10px] px-2.5 py-1.5 rounded-lg tracking-wider shrink-0 shadow-md shadow-orange-500/10 uppercase">
+                                {discountText}
+                              </div>
                             </div>
                           );
                         })()}
