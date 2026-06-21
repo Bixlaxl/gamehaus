@@ -35,6 +35,7 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
         customer_name,
         customer_phone,
         advance_paid,
+        discount_amount,
         location_id,
         created_at,
         locations (
@@ -92,10 +93,12 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
 
     const roundedTotalCost = Math.round(totalCost);
     const amountPaidVal = Math.round(order.advance_paid);
+    const discountVal = Math.round(Number(order.discount_amount) || 0);
+    const netCost = roundedTotalCost - discountVal;
     
-    // We consider it fully paid if the amount paid is at least the total cost (within a 1 rupee buffer)
-    const isFullyPaid = amountPaidVal >= roundedTotalCost - 1;
-    const amountDueVal = Math.max(0, roundedTotalCost - amountPaidVal);
+    // We consider it fully paid if the amount paid is at least the net cost (within a 1 rupee buffer)
+    const isFullyPaid = amountPaidVal >= netCost - 1;
+    const amountDueVal = Math.max(0, netCost - amountPaidVal);
 
     // 3. Prepare parameters
     // Parameter 1: Customer Name
@@ -180,12 +183,26 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       ];
     }
 
-    const components = [
+    const components: any[] = [
       {
         type: "body",
         parameters,
       }
     ];
+
+    if (isFullyPaid) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [
+          {
+            type: "text",
+            text: orderId,
+          }
+        ]
+      });
+    }
 
     // 5. Construct payload
     const payload = {
