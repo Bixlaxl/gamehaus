@@ -5,6 +5,19 @@ import { LocationBrowse } from "@/components/public/location-browse";
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 
+function getLocalDateString(timezone: string = "Asia/Kolkata", dateInput: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(dateInput);
+  } catch (e) {
+    return new Date(dateInput.getTime() - dateInput.getTimezoneOffset() * 60_000).toISOString().split("T")[0];
+  }
+}
+
 export default async function LocationPage({
   params,
 }: {
@@ -22,8 +35,8 @@ export default async function LocationPage({
 
   if (!location) notFound();
 
-  // Today in UTC ISO format — matches client-side `new Date().toISOString().split("T")[0]`
-  const todayDate = new Date().toISOString().split("T")[0];
+  // Today in local timezone format — matches client-side local date calculation
+  const todayDate = getLocalDateString(location.timezone);
   const dayStartIso = new Date(`${todayDate}T00:00:00+05:30`).toISOString();
   const dayEndIso   = new Date(`${todayDate}T23:59:59+05:30`).toISOString();
 

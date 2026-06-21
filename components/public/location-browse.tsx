@@ -23,6 +23,19 @@ function cfg(type: string) {
 }
 
 /* ── Helpers ─────────────────────────────── */
+function getLocalDateString(timezone: string = "Asia/Kolkata", dateInput: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(dateInput);
+  } catch (e) {
+    return new Date(dateInput.getTime() - dateInput.getTimezoneOffset() * 60_000).toISOString().split("T")[0];
+  }
+}
+
 function isOpen(opening: string, closing: string) {
   const now = new Date();
   const cur = now.getHours() * 60 + now.getMinutes();
@@ -51,7 +64,7 @@ function slotEndTime(slotStart: string): string {
 }
 
 /* 15-min slots from opening to (closing - 15), filtered to current time on today */
-function visibleSlots(opening: string, closing: string, dateStr: string): string[] {
+function visibleSlots(opening: string, closing: string, dateStr: string, timezone: string): string[] {
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
   const openMins  = oh * 60 + om;
@@ -60,7 +73,7 @@ function visibleSlots(opening: string, closing: string, dateStr: string): string
   const crossesMidnight = end < openMins;
   if (crossesMidnight) end += 24 * 60;
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString(timezone);
   const filterByTime = dateStr === today;
   const now    = new Date();
   const curRaw = now.getHours() * 60 + now.getMinutes();
@@ -85,14 +98,14 @@ function visibleSlots(opening: string, closing: string, dateStr: string): string
 }
 
 /* 7-day date strip */
-function buildDays() {
+function buildDays(timezone: string) {
   const days = [];
   const now = new Date();
   for (let i = 0; i < 7; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     days.push({
-      iso: d.toISOString().split("T")[0],
+      iso: getLocalDateString(timezone, d),
       label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" }),
     });
   }
@@ -113,7 +126,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted]         = useState(false);
   const [filter, setFilter]           = useState("all");
-  const [date, setDate]               = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate]               = useState(() => getLocalDateString(location.timezone));
   const [booking, setBooking]         = useState<Table | null>(null);
   const [selectedSlots, setSelected]  = useState<string[]>([]);
   const [step, setStep]               = useState<"when" | "players">("when");
@@ -211,12 +224,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const open      = isOpen(location.opening_time, location.closing_time);
   const types     = ["all", ...new Set(tables.map(t => t.type))];
   const shown     = filter === "all" ? tables : tables.filter(t => t.type === filter);
-  const days      = useMemo(buildDays, []);
+  const days      = useMemo(() => buildDays(location.timezone), [location.timezone]);
   const cartCount = cart.items.length;
 
   /* All slots for the current sheet date */
   const allSlots = booking
-    ? visibleSlots(location.opening_time, location.closing_time, date)
+    ? visibleSlots(location.opening_time, location.closing_time, date, location.timezone)
     : [];
 
   /* People/controller pricing options for the current booking */
@@ -629,7 +642,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                 const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("en-IN", {
                   weekday: "short", day: "numeric", month: "short",
                 }).toUpperCase();
-                const isToday   = date === new Date().toISOString().split("T")[0];
+                const isToday   = date === getLocalDateString(location.timezone);
 
                 const startBg  = sheetType.accent;
                 const stopBg   = "#10B981";  // distinct green for the end slot, matches the legend
