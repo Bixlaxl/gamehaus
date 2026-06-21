@@ -156,18 +156,34 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     }
 
     // 4. Select correct template and construct payload components
-    const templateName = slug === "nerf-turf" ? "nerfturf_table_reservation" : "gamehaus_table_reservation";
+    let templateName = "";
+    let parameters: { type: string; text: string }[] = [];
+
+    if (isFullyPaid) {
+      templateName = slug === "nerf-turf" ? "nerfturf_booking_confirmation" : "gamehaus_booking_confirmation";
+      parameters = [
+        { type: "text", text: customerName },
+        { type: "text", text: refCode },
+        { type: "text", text: formattedDate },
+        { type: "text", text: resourceAndTime },
+        { type: "text", text: amountPaidVal.toString() },
+      ];
+    } else {
+      templateName = slug === "nerf-turf" ? "nerfturf_table_reservation" : "gamehaus_table_reservation";
+      parameters = [
+        { type: "text", text: customerName },
+        { type: "text", text: refCode },
+        { type: "text", text: formattedDate },
+        { type: "text", text: resourceAndTime },
+        { type: "text", text: amountPaidVal.toString() },
+        { type: "text", text: amountDueVal.toString() },
+      ];
+    }
+
     const components = [
       {
         type: "body",
-        parameters: [
-          { type: "text", text: customerName },
-          { type: "text", text: refCode },
-          { type: "text", text: formattedDate },
-          { type: "text", text: resourceAndTime },
-          { type: "text", text: amountPaidVal.toString() },
-          { type: "text", text: amountDueVal.toString() },
-        ],
+        parameters,
       }
     ];
 
