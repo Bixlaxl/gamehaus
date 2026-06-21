@@ -200,12 +200,6 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
             : l
         )
       );
-      newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
-      setNewFiles([]);
-      setDialogOpen(false);
-      setEditing(null);
-      setForm(defaultForm);
-      setFormError(null);
       return { prev };
     },
     onSuccess: (_, values) => {
@@ -223,7 +217,6 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
         qc.setQueryData(["locations"], ctx.prev);
       }
       setFormError((err as Error).message);
-      if (values.editId) setDialogOpen(true);
     },
   });
 

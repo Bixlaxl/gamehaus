@@ -16,7 +16,7 @@ import type { InventoryItem } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 import { compressImage } from "@/lib/image-compress";
 import NextImage from "next/image";
-import { Plus, Pencil, Trash2, Package, Image } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Image as ImageIcon } from "lucide-react";
 import { StockBadge, StockControls } from "@/components/inventory/stock-controls";
 
 type LocationLite = { id: string; name: string };
@@ -171,24 +171,19 @@ export function InventoryContent({
             : i
         )
       );
+      return { prev };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
-      return { prev };
-    },
-    onSuccess: (_, values) => {
-      qc.invalidateQueries({ queryKey: ["inventory"] });
-      if (!values.editId) {
-        setDialogOpen(false);
-        setEditing(null);
-        setForm(defaultForm);
-      }
     },
     onError: (e, values, ctx) => {
       if (values.editId && ctx?.prev) {
         qc.setQueryData(["inventory", selectedLocation], ctx.prev);
-        alert((e as Error).message);
       }
+      alert((e as Error).message);
     },
   });
 
@@ -342,7 +337,7 @@ export function InventoryContent({
                         sizes="(max-width: 768px) 50vw, 25vw"
                       />
                     ) : (
-                      <Image className="h-7 w-7 text-gray-300" />
+                      <ImageIcon className="h-7 w-7 text-gray-300" />
                     )}
                   </div>
                   <div className="p-4 space-y-1.5">

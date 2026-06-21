@@ -19,8 +19,9 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Missing file, itemId, or locationId", "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const ext    = file.name.split(".").pop();
-  const path   = `inventory/${locationId}/${itemId}/image.${ext}`;
+  const fileId = crypto.randomUUID();
+  const ext    = file.name.split(".").pop() || "jpg";
+  const path   = `inventory/${locationId}/${itemId}/${fileId}.${ext}`;
   const bytes  = await file.arrayBuffer();
   const buffer = new Uint8Array(bytes);
 

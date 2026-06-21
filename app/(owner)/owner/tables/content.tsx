@@ -25,7 +25,7 @@ import {
 import NextImage from "next/image";
 import type { Table, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, Trash2, Image } from "lucide-react";
+import { Plus, Pencil, Trash2, Image as ImageIcon } from "lucide-react";
 
 const supabase = createClient();
 
@@ -207,24 +207,19 @@ export function TablesContent({
             : t
         )
       );
+      return { prev };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tables"] });
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
-      return { prev };
-    },
-    onSuccess: (_, values) => {
-      qc.invalidateQueries({ queryKey: ["tables"] });
-      if (!values.editId) {
-        setDialogOpen(false);
-        setEditing(null);
-        setForm(defaultForm);
-      }
     },
     onError: (err, values, ctx) => {
       if (values.editId && ctx?.prev) {
         qc.setQueryData(["tables", selectedLocation], ctx.prev);
-        alert((err as Error).message);
       }
+      alert((err as Error).message);
     },
   });
 
@@ -385,7 +380,7 @@ export function TablesContent({
                     sizes="(max-width: 768px) 100vw, 33vw"
                   />
                 ) : (
-                  <Image className="h-8 w-8 text-gray-300" />
+                  <ImageIcon className="h-8 w-8 text-gray-300" />
                 )}
               </div>
               <div className="p-4 space-y-2">
