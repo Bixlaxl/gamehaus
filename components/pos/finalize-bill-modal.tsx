@@ -179,7 +179,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
         ? [{ method, amount: finalDue }]
         : [];
 
-    if (paymentsPayload.length === 0) return;
+    if (finalDue > 0 && paymentsPayload.length === 0) return;
     if (splitMode && !splitOk) {
       setError(`Split total ₹${splitSum} must equal ₹${finalDue}`);
       return;
