@@ -100,11 +100,22 @@ export function StockAlertsBell({
     }
   }, [items, scope]);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click, ignoring clicks inside portals (dialogs, toasts, select dropdowns)
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest("[data-radix-portal]") ||
+        target.closest("[data-sonner-toaster]") ||
+        target.closest('[role="dialog"]')
+      ) {
+        return;
+      }
+      if (wrapRef.current && !wrapRef.current.contains(target)) {
+        setOpen(false);
+      }
     };
     window.addEventListener("mousedown", onDocClick);
     return () => window.removeEventListener("mousedown", onDocClick);
