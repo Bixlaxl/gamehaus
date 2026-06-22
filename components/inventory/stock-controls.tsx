@@ -43,18 +43,17 @@ export function StockControls({ item, invalidateKeys = [], theme = "light" }: St
   const [logOpen,    setLogOpen]    = useState(false);
   const [direction,  setDirection]  = useState<"add" | "remove">("add");
   const [qty,        setQty]        = useState("");
-  const [reason,     setReason]     = useState<"restock" | "adjustment">("restock");
-  const [note,       setNote]       = useState("");
 
   const adjust = useMutation({
     mutationFn: async () => {
       const n = parseInt(qty);
       if (!Number.isFinite(n) || n <= 0) throw new Error("Enter a positive quantity");
       const change = direction === "add" ? n : -n;
+      const reason = direction === "add" ? "restock" : "adjustment";
       const res = await fetch(`/api/inventory/${item.id}/stock`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ change, reason, note: note.trim() || undefined }),
+        body:    JSON.stringify({ change, reason }),
       });
       const body = await res.json() as { success: true; data: { stock_count: number } } | { success: false; error: string };
       if (!body.success) throw new Error(body.error);
@@ -68,16 +67,13 @@ export function StockControls({ item, invalidateKeys = [], theme = "light" }: St
       }
       setAdjustOpen(false);
       setQty("");
-      setNote("");
     },
     onError: (err) => toast.error((err as Error).message),
   });
 
   function openAdjust(dir: "add" | "remove") {
     setDirection(dir);
-    setReason(dir === "add" ? "restock" : "adjustment");
     setQty("");
-    setNote("");
     setAdjustOpen(true);
   }
 
@@ -138,46 +134,6 @@ export function StockControls({ item, invalidateKeys = [], theme = "light" }: St
                 onChange={(e) => setQty(e.target.value)}
                 placeholder="e.g. 12"
                 autoFocus
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Reason
-              </label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setReason("restock")}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
-                    reason === "restock"
-                      ? "bg-[#D4541A] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Restock
-                </button>
-                <button
-                  onClick={() => setReason("adjustment")}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
-                    reason === "adjustment"
-                      ? "bg-[#D4541A] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Adjustment
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Note (optional)
-              </label>
-              <Input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. supplier invoice #1234"
-                maxLength={200}
               />
             </div>
           </div>
