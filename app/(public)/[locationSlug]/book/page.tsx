@@ -357,6 +357,7 @@ export default function CheckoutPage() {
         customer_name:   name.trim(),
         customer_phone:  phone.trim(),
         points_redeemed: clampedRedeem,
+        payment_mode:    paymentMode,
         items: cart.items.map(i => ({
           table_id:               i.tableId,
           scheduled_start:        i.scheduledStart,
@@ -455,6 +456,7 @@ export default function CheckoutPage() {
         customer_name:   name.trim(),
         customer_phone:  phone.trim(),
         points_redeemed: clampedRedeem,
+        payment_mode:    paymentMode,
         coupon_code:     (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
         items: cart.items.map(i => ({
           table_id:                i.tableId,
