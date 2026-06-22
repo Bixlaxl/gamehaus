@@ -158,9 +158,7 @@ export function ReportsContent({
         .from("orders")
         .select(`
           id, amount_due, advance_paid, finalized_at, location_id,
-          location:locations(id, name),
-          items:order_items(status, rate_per_hour),
-          extras:order_extras(price, cost_price, quantity, is_deleted)
+          location:locations(id, name)
         `)
         .eq("status", "finalized")
         .gte("finalized_at", fromISO)
