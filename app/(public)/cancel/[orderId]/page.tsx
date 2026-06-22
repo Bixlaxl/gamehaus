@@ -26,6 +26,7 @@ export default async function CancelBookingPage({
       status,
       advance_paid,
       discount_amount,
+      points_redeemed,
       customer_name,
       customer_phone,
       location_id,
@@ -152,7 +153,10 @@ export default async function CancelBookingPage({
   const roundedTotalCost = Math.round(totalCost);
   const amountPaidVal = Number(order.advance_paid) || 0;
   const discountVal = Number(order.discount_amount) || 0;
-  const netCost = roundedTotalCost - discountVal;
+  const pointsRedeemed = Number(order.points_redeemed) || 0;
+  const pointsDiscountVal = pointsRedeemed * (settings.loyalty.redeem_rupees_per_point || 0);
+  const totalDiscountVal = discountVal + pointsDiscountVal;
+  const netCost = Math.max(0, roundedTotalCost - totalDiscountVal);
   const isFullyPaid = amountPaidVal >= netCost - 1;
 
   const policyTiers = isFullyPaid

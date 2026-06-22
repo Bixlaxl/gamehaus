@@ -90,6 +90,18 @@ export async function POST(request: Request) {
     }
   }
 
+  // Calculate total cost of scheduled items
+  const totalCost = scheduledItems.reduce((sum, item) => {
+    const start = new Date(item.scheduled_start!);
+    const end = new Date(item.scheduled_end!);
+    const hrs = (end.getTime() - start.getTime()) / (3600 * 1000);
+    const itemRate = Number(item.rate_per_hour) || 0;
+    return sum + (itemRate * hrs);
+  }, 0);
+
+  const roundedSubtotal = Math.round(totalCost * 100) / 100;
+  let discountAmount = 0;
+
   // ── Validate coupon (if provided) and resolve coupon_id to attach ────────
   // Server is the source of truth — UI may have validated, but we re-check
   // every rule here so a tampered request can't sneak through.
@@ -122,6 +134,14 @@ export async function POST(request: Request) {
       return NextResponse.json(err("Coupon is not valid at this location", "INVALID_COUPON"), { status: 400 });
     }
     resolvedCouponId = coupon.id;
+
+    // Calculate coupon discount
+    if (coupon.discount_type === "flat") {
+      discountAmount = Math.min(Number(coupon.discount_value), roundedSubtotal);
+    } else {
+      discountAmount = (roundedSubtotal * Number(coupon.discount_value)) / 100;
+    }
+    discountAmount = Math.round(discountAmount * 100) / 100;
   }
 
   // Create order
@@ -134,6 +154,9 @@ export async function POST(request: Request) {
       customer_phone:  customer_phone ?? null,
       points_redeemed: points_redeemed ?? 0,
       coupon_id:       resolvedCouponId,
+      subtotal:        roundedSubtotal > 0 ? roundedSubtotal : null,
+      discount_amount: discountAmount,
+      total_amount:    roundedSubtotal > 0 ? Math.max(0, Math.round((roundedSubtotal - discountAmount) * 100) / 100) : null,
       created_by:      createdBy,
     })
     .select()

@@ -22,6 +22,7 @@ export async function POST(
         status,
         advance_paid,
         discount_amount,
+        points_redeemed,
         location_id,
         customer_name,
         customer_phone,
@@ -87,7 +88,10 @@ export async function POST(
     const roundedTotalCost = Math.round(totalCost);
     const amountPaidVal = Number(order.advance_paid) || 0;
     const discountVal = Number(order.discount_amount) || 0;
-    const netCost = roundedTotalCost - discountVal;
+    const pointsRedeemed = Number(order.points_redeemed) || 0;
+    const pointsDiscountVal = pointsRedeemed * (settings.loyalty.redeem_rupees_per_point || 0);
+    const totalDiscountVal = discountVal + pointsDiscountVal;
+    const netCost = Math.max(0, roundedTotalCost - totalDiscountVal);
     const isFullyPaid = amountPaidVal >= netCost - 1;
 
     const policyTiers = isFullyPaid
@@ -162,6 +166,28 @@ export async function POST(
       admin.from("order_items").update({ status: "cancelled" }).eq("order_id", orderId).eq("is_deleted", false),
       admin.from("bookings").update({ status: "cancelled" }).eq("order_id", orderId),
     ]);
+
+    // 6.5. Restore redeemed points and revoke earned points on the customer profile
+    if (order.customer_phone) {
+      const pointsRedeemed = Number(order.points_redeemed) || 0;
+      const pointsEarned = Math.floor(amountPaidVal / settings.loyalty.earn_rupees_per_point);
+
+      if (pointsRedeemed > 0 || pointsEarned > 0) {
+        const { data: profile } = await admin
+          .from("customer_profiles")
+          .select("points_balance")
+          .eq("phone", order.customer_phone)
+          .single();
+
+        if (profile) {
+          const newBalance = Math.max(0, profile.points_balance + pointsRedeemed - pointsEarned);
+          await admin
+            .from("customer_profiles")
+            .update({ points_balance: newBalance })
+            .eq("phone", order.customer_phone);
+        }
+      }
+    }
 
     // 7. Trigger WhatsApp Cancellation Notification
     await sendWhatsAppCancellation(orderId, refundPct, refundAmount);

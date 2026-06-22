@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAppSettings } from "@/lib/settings";
 
 /**
  * Sends a booking confirmation WhatsApp message via Meta Cloud API using location-based templates.
@@ -36,6 +37,7 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
         customer_phone,
         advance_paid,
         discount_amount,
+        points_redeemed,
         location_id,
         created_at,
         locations (
@@ -91,10 +93,17 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       return sum + (itemRate * hrs);
     }, 0);
 
+    // Fetch active settings for the loyalty point redemption rate
+    const settings = await getAppSettings(admin);
+    const pointsRedeemed = Number(order.points_redeemed) || 0;
+    const redeemRate = settings.loyalty.redeem_rupees_per_point;
+    const pointsDiscountVal = pointsRedeemed * redeemRate;
+
     const roundedTotalCost = Math.round(totalCost);
     const amountPaidVal = Math.round(order.advance_paid);
     const discountVal = Math.round(Number(order.discount_amount) || 0);
-    const netCost = roundedTotalCost - discountVal;
+    const totalDiscountVal = discountVal + pointsDiscountVal;
+    const netCost = Math.max(0, roundedTotalCost - totalDiscountVal);
     
     // We consider it fully paid if the amount paid is at least the net cost (within a 1 rupee buffer)
     const isFullyPaid = amountPaidVal >= netCost - 1;
