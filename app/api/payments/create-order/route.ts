@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 const schema = z.object({
   amount: z.number().positive(), // in paise
@@ -23,7 +23,9 @@ export async function POST(request: Request) {
 
   let rpOrder: { id: string; amount: number };
   try {
-    const credentials = btoa(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`);
+    const keyId = (process.env.RAZORPAY_KEY_ID || "").trim();
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
     const res = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {

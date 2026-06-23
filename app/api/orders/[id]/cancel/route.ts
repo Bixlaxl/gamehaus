@@ -4,7 +4,7 @@ import { getAppSettings, computeRefund } from "@/lib/settings";
 import { sendWhatsAppCancellation } from "@/lib/whatsapp";
 import { err, ok } from "@/lib/validators/schemas";
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function POST(
   request: Request,
@@ -120,7 +120,9 @@ export async function POST(
       if (paymentRow?.razorpay_payment_id) {
         // Live Razorpay payment -> call Razorpay refund API
         const refundAmountPaise = Math.round(refundAmount * 100);
-        const credentials = btoa(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`);
+        const keyId = (process.env.RAZORPAY_KEY_ID || "").trim();
+        const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+        const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
 
         console.log(`[Cancellation API] Processing real Razorpay refund of paise ${refundAmountPaise} for payment ${paymentRow.razorpay_payment_id}...`);
 
