@@ -35,6 +35,13 @@ export async function POST(request: Request) {
     if (!res.ok) throw new Error(await res.text());
     rpOrder = await res.json() as { id: string; amount: number };
   } catch (e) {
+    console.error("[Create Order API Error]", e);
+    console.log("[Create Order Debug Info]", {
+      hasKeyId: !!process.env.RAZORPAY_KEY_ID,
+      keyIdStart: process.env.RAZORPAY_KEY_ID ? process.env.RAZORPAY_KEY_ID.substring(0, 8) : "none",
+      hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET,
+      secretLength: process.env.RAZORPAY_KEY_SECRET ? process.env.RAZORPAY_KEY_SECRET.length : 0,
+    });
     const msg = e instanceof Error ? e.message : "Razorpay error";
     return NextResponse.json(err(msg, "RAZORPAY_ERROR"), { status: 502 });
   }
