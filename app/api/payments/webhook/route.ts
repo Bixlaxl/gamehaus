@@ -43,11 +43,16 @@ export async function POST(request: Request) {
     // Find our payment row by razorpay_order_id
     const { data: paymentRow } = await admin
       .from("payments")
-      .select("id, order_id, amount")
+      .select("id, order_id, amount, status")
       .eq("razorpay_order_id", payment.order_id)
       .single();
 
     if (paymentRow) {
+      if (paymentRow.status === "completed") {
+        console.log(`[Webhook] Payment ${payment.id} for order ${payment.order_id} is already completed. Skipping duplicate execution.`);
+        return NextResponse.json({ received: true, already_processed: true });
+      }
+
       const now = new Date().toISOString();
 
       // All three are independent — run in parallel
