@@ -135,11 +135,6 @@ export async function POST(
           },
           body: JSON.stringify({
             amount: refundAmountPaise,
-            speed: "normal",
-            notes: {
-              order_id: orderId,
-              reason: "Customer self-cancellation via page",
-            },
           }),
         });
 
