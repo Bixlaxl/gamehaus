@@ -644,9 +644,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                 }).toUpperCase();
                 const isToday   = date === getLocalDateString(location.timezone);
 
-                const startBg  = sheetType.accent;
-                const stopBg   = "#10B981";  // distinct green for the end slot, matches the legend
-                const middleBg = `${sheetType.accent}26`; // ~15% accent — soft outline for interior
+                const startBg  = "#10B981"; // Green for start
+                const stopBg   = "#EF4444"; // Red for stop
+                const middleBg = dark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.08)"; // Soft green for interior
 
                 return (
                   <>
@@ -730,6 +730,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                               Stop
                             </span>
                             <span className="inline-flex items-center gap-1">
+                              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#4F46E5" }} />
+                              In Cart
+                            </span>
+                            <span className="inline-flex items-center gap-1">
                               <span className="w-2.5 h-2.5 rounded-sm" style={{
                                 background: `repeating-linear-gradient(45deg, ${inputBdr}, ${inputBdr} 2px, transparent 2px, transparent 4px)`,
                               }} />
@@ -783,14 +787,14 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                 );
                               }
 
-                              // In customer's own cart — green check
+                              // In customer's own cart — blue check
                               if (cartOccupied) {
                                 return (
                                   <div
                                     key={s}
                                     title="Already in your cart"
                                     className="flex flex-col items-center justify-center py-3 rounded-xl select-none pointer-events-none gap-0.5"
-                                    style={{ background: "#10B981", border: "1.5px solid #059669" }}
+                                    style={{ background: "#4F46E5", border: "1.5px solid #3730A3" }}
                                   >
                                     <Check className="h-3 w-3 text-white" />
                                     <span className="text-[10px] font-bold text-white leading-tight">{display}</span>
@@ -799,7 +803,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                               }
 
                               const bg = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? middleBg : inputBg;
-                              const borderColor = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? `${sheetType.accent}66` : inputBdr;
+                              const borderColor = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? (dark ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)") : inputBdr;
                               const fg = (isStartSlot || isStopSlot) ? "#fff" : textPri;
                               const labelText = isStartSlot ? "START" : isStopSlot ? "STOP" : "";
 
