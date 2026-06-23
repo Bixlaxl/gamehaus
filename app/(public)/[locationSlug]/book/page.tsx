@@ -446,65 +446,7 @@ export default function CheckoutPage() {
     }
   }
 
-  async function demoPay() {
-    if (submitting.current) return;
-    if (hasExpired) { setError("Some selected slots have already started. Please remove them and pick fresh slots."); return; }
-    if (!name.trim() || name.trim().length < 2) { setError("Please enter a valid name"); return; }
-    if (phone.length !== 10) { setError("Phone must be exactly 10 digits"); return; }
-    if (cart.items.length === 0) { setError("Cart is empty"); return; }
-    if (coupon.trim() && couponState.status !== "valid" && paymentMode === "full") {
-      setError(couponState.status === "invalid" ? couponState.reason : "Please wait — checking your coupon");
-      return;
-    }
-    submitting.current = true;
-    setLoading(true);
-    setError(null);
 
-    const orderRes = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location_id:     cart.locationId,
-        type:            "online",
-        customer_name:   name.trim(),
-        customer_phone:  phone.trim(),
-        points_redeemed: clampedRedeem,
-        payment_mode:    paymentMode,
-        coupon_code:     (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
-        items: cart.items.map(i => ({
-          table_id:                i.tableId,
-          scheduled_start:         i.scheduledStart,
-          scheduled_end:           i.scheduledEnd,
-          scheduled_duration_mins: i.durationMins,
-          rate_per_hour:           i.ratePerHour,
-          num_people:              i.numPeople,
-        })),
-      }),
-    });
-
-    const orderBody = await orderRes.json() as
-      | { success: true;  data: { order_id: string } }
-      | { success: false; error: string };
-
-    if (!orderBody.success) { setError(orderBody.error); setLoading(false); submitting.current = false; return; }
-
-    const { order_id } = orderBody.data;
-
-    // Warm the confirmation route while the demo-confirm round-trip runs
-    router.prefetch(`/booking/${order_id}`);
-
-    const confirmRes = await fetch("/api/payments/demo-confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order_id, amount: amountToPay, points_redeemed: clampedRedeem }),
-    });
-
-    const confirmBody = await confirmRes.json() as { success: boolean; error?: string };
-    if (!confirmBody.success) { setError(confirmBody.error ?? "Demo confirm failed"); setLoading(false); submitting.current = false; return; }
-
-    cart.clearCart();
-    router.push(`/booking/${order_id}?demo=1`);
-  }
 
   return (
     <>
@@ -1057,14 +999,7 @@ export default function CheckoutPage() {
             )}
           </button>
 
-          <button
-            onClick={demoPay}
-            disabled={loading || cart.items.length === 0 || hasExpired}
-            className="w-full py-3 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 border"
-            style={{ color: textSec, borderColor: border, background: "transparent" }}
-          >
-            Demo Pay (skip Razorpay)
-          </button>
+
 
           <p className="text-center text-xs pb-6" style={{ color: textMut }}>
             Secured by Razorpay · UPI, Cards, Netbanking accepted

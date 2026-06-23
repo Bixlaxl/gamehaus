@@ -158,8 +158,8 @@ export async function POST(
           return NextResponse.json(err(errorMsg, "REFUND_FAILED"), { status: 502 });
         }
       } else {
-        // Demo Pay / Simulated payment -> log the refund
-        console.log(`[Cancellation API] Simulating refund of ₹${refundAmount} for order ${orderId} (Demo Pay)...`);
+        // Offline / Manual / Free payment -> log the simulated refund
+        console.log(`[Cancellation API] Simulating refund of ₹${refundAmount} for order ${orderId} (Offline/Manual payment)...`);
       }
 
       // Insert negative payment row to balance out accounts
