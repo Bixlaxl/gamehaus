@@ -32,7 +32,15 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({ amount, currency, receipt, notes: { order_id } }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error("[Razorpay HTTP Response Failure]", {
+        status: res.status,
+        statusText: res.statusText,
+        body: errBody
+      });
+      throw new Error(`Razorpay returned ${res.status}: ${errBody}`);
+    }
     rpOrder = await res.json() as { id: string; amount: number };
   } catch (e) {
     console.error("[Create Order API Error]", e);
