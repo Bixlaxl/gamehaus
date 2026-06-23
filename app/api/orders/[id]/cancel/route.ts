@@ -129,6 +129,7 @@ export async function POST(
           headers: {
             "Authorization": `Basic ${credentials}`,
             "Content-Type": "application/json",
+            "Accept": "application/json",
           },
           body: JSON.stringify({
             amount: refundAmountPaise,

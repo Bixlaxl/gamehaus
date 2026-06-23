@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       headers: {
         "Authorization": `Basic ${credentials}`,
         "Content-Type": "application/json",
+        "Accept": "application/json",
       },
       body: JSON.stringify({ amount, currency, receipt, notes: { order_id } }),
     });
