@@ -124,18 +124,25 @@ export async function POST(
         const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
         const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
 
-        console.log(`[Cancellation API] Processing real Razorpay refund of paise ${refundAmountPaise} for payment ${paymentRow.razorpay_payment_id}...`);
+        const targetUrl = `https://api.razorpay.com/v1/payments/${paymentRow.razorpay_payment_id}/refund`;
+        const payload = { amount: refundAmountPaise };
 
-        const rpRes = await fetch(`https://api.razorpay.com/v1/payments/${paymentRow.razorpay_payment_id}/refund`, {
+        console.log(`[Cancellation API] Processing real Razorpay refund...`, {
+          keyIdStart: keyId ? keyId.substring(0, 8) : "none",
+          secretLength: keySecret.length,
+          paymentId: paymentRow.razorpay_payment_id,
+          targetUrl,
+          payload
+        });
+
+        const rpRes = await fetch(targetUrl, {
           method: "POST",
           headers: {
             "Authorization": `Basic ${credentials}`,
             "Content-Type": "application/json",
             "Accept": "application/json",
           },
-          body: JSON.stringify({
-            amount: refundAmountPaise,
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!rpRes.ok) {
