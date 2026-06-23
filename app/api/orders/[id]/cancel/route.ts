@@ -146,7 +146,14 @@ export async function POST(
         if (!rpRes.ok) {
           const rpErrorText = await rpRes.text();
           console.error("[Cancellation API] Razorpay refund failed:", rpErrorText);
-          return NextResponse.json(err("Failed to process refund with payment processor", "REFUND_FAILED"), { status: 502 });
+          let errorMsg = "Failed to process refund with payment processor";
+          try {
+            const parsedError = JSON.parse(rpErrorText);
+            if (parsedError.error?.description) {
+              errorMsg = `Razorpay: ${parsedError.error.description}`;
+            }
+          } catch {}
+          return NextResponse.json(err(errorMsg, "REFUND_FAILED"), { status: 502 });
         }
       } else {
         // Demo Pay / Simulated payment -> log the refund
