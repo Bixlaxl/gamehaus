@@ -49,8 +49,8 @@ export async function POST(request: Request) {
 
     if (paymentRow) {
       if (paymentRow.status === "completed") {
-        console.log(`[Webhook] Payment ${payment.id} for order ${payment.order_id} is already completed. Skipping duplicate execution.`);
-        return NextResponse.json({ received: true, already_processed: true });
+        console.log(`[Webhook] Payment ${paymentRow.id} already completed. Skipping duplicate processing.`);
+        return NextResponse.json({ received: true });
       }
 
       const now = new Date().toISOString();
