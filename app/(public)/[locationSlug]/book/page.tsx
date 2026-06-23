@@ -412,25 +412,38 @@ export default function CheckoutPage() {
       return;
     }
 
-    const options: RazorpayOptions = {
-      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-      amount: rpBody.data.amount,
-      currency: "INR",
-      order_id: rpBody.data.razorpay_order_id,
-      name: "Gamehaus",
-      description: paymentMode === "advance" ? "Advance booking" : "Full payment",
-      prefill: { name: name.trim(), contact: phone.trim() },
-      theme: { color: "#D4541A" },
-      handler: async (response) => {
-        cart.clearCart();
-        router.push(`/booking/${order_id}?payment_id=${response.razorpay_payment_id}`);
-      },
-    };
+    try {
+      if (typeof window === "undefined" || !window.Razorpay) {
+        throw new Error("Payment gateway script is still loading. Please wait a few seconds and try again.");
+      }
+      if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+        throw new Error("Razorpay Client Key (NEXT_PUBLIC_RAZORPAY_KEY_ID) is not configured.");
+      }
 
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-    setLoading(false);
-    submitting.current = false;
+      const options: RazorpayOptions = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: rpBody.data.amount,
+        currency: "INR",
+        order_id: rpBody.data.razorpay_order_id,
+        name: "Gamehaus",
+        description: paymentMode === "advance" ? "Advance booking" : "Full payment",
+        prefill: { name: name.trim(), contact: phone.trim() },
+        theme: { color: "#D4541A" },
+        handler: async (response) => {
+          cart.clearCart();
+          router.push(`/booking/${order_id}?payment_id=${response.razorpay_payment_id}`);
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err: any) {
+      console.error("[Razorpay Checkout Error]", err);
+      setError(err?.message || "Failed to open payment gateway. Please try again.");
+    } finally {
+      setLoading(false);
+      submitting.current = false;
+    }
   }
 
   async function demoPay() {
