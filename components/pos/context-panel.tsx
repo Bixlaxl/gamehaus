@@ -672,11 +672,23 @@ function PeoplePicker({
   const [saving, setSaving] = useState<number | null>(null);
 
   const pricing  = (item.table?.people_pricing ?? {}) as Record<string, number>;
-  const options  = Object.keys(pricing).sort((a, b) => Number(a) - Number(b));
-  if (options.length === 0) return null;
+  let options    = Object.keys(pricing).sort((a, b) => Number(a) - Number(b));
   const label    = item.table?.type === "ps5" ? "controller" : "player";
   const current  = item.num_people ?? null;
   const baseRate = item.table?.hourly_rate ?? item.rate_per_hour;
+
+  if (options.length === 0) {
+    const isPs5 = item.table?.type === "ps5";
+    const maxDefault = isPs5 ? 4 : 6;
+    const defaults: string[] = [];
+    for (let i = 1; i <= maxDefault; i++) {
+      defaults.push(String(i));
+    }
+    if (current !== null && !defaults.includes(String(current))) {
+      defaults.push(String(current));
+    }
+    options = defaults.sort((a, b) => Number(a) - Number(b));
+  }
 
   async function pick(n: number) {
     if (saving) return;
@@ -719,7 +731,7 @@ function PeoplePicker({
                   : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
               }`}
               style={selected ? { background: "#D4541A" } : {}}
-              title={`₹${pricing[n]}/hr`}
+              title={`₹${pricing[n] ?? baseRate}/hr`}
             >
               {saving === num ? "…" : n}
             </button>
@@ -1147,12 +1159,9 @@ function PanelSession({
                 </div>
               </div>
 
-              {/* Players / controllers — only when the table has tiered pricing
-                  AND the session is still adjustable (not yet finalized). */}
-              {(item.status === "running" || item.status === "scheduled") &&
-                item.table?.people_pricing &&
-                Object.keys(item.table.people_pricing).length > 0 && (
-                  <PeoplePicker item={item} locationId={locationId} />
+              {/* Players / controllers — allowed for all active sessions to adjust count. */}
+              {(item.status === "running" || item.status === "scheduled") && (
+                <PeoplePicker item={item} locationId={locationId} />
               )}
 
               {/* Bill-ready: show full session timings (Started → Ended) */}
