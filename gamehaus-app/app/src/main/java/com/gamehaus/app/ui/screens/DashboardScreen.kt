@@ -7,6 +7,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -102,17 +106,20 @@ fun DashboardScreen(
                     fontSize = 14.sp,
                     color = Color(0xFF888888),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.width(420.dp)
+                    modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(0.9f)
                 )
             }
         } else {
             // ACTIVE HUD SCREEN
             val session = status.session!!
 
+            val configuration = LocalConfiguration.current
+            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp)
+                    .padding(20.dp)
             ) {
                 // Header (Table name & Settings cog)
                 Row(
@@ -123,7 +130,7 @@ fun DashboardScreen(
                     Column {
                         Text(
                             text = status.table.name,
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White
                         )
@@ -131,7 +138,7 @@ fun DashboardScreen(
                             text = if (session.num_people != null) {
                                 "${session.num_people} " + if (status.table.type == "ps5") "controllers active" else "players active"
                             } else "Flat table rate",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = Color.Gray
                         )
                     }
@@ -145,178 +152,62 @@ fun DashboardScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Split Layout: Countdown on Left, Details & Actions on Right
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    // LEFT: Countdown Card
-                    val isNearEnd = remainingSeconds < 300 // Under 5 minutes
-                    val pulseInfiniteTransition = rememberInfiniteTransition(label = "pulse")
-                    val pulseScale by pulseInfiniteTransition.animateFloat(
-                        initialValue = 1f,
-                        targetValue = if (isNearEnd) 1.05f else 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1000, easing = EaseInOutQuad),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "scale"
-                    )
-
-                    Card(
+                if (isLandscape) {
+                    Row(
                         modifier = Modifier
-                            .weight(1.2f)
-                            .fillMaxHeight(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isNearEnd) Color(0x1AEF4444) else Color(0xFF1E1E1E)
-                        ),
-                        shape = RoundedCornerShape(24.dp),
-                        border = BorderStroke(
-                            1.5.dp,
-                            if (isNearEnd) Color(0xFFEF4444).copy(alpha = 0.5f) else Color(0xFF2C2C2C)
-                        )
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        Column(
+                        CountdownCard(
+                            remainingSeconds = remainingSeconds,
+                            remainingTime = remainingTime,
+                            session = session,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "REMAINING TIME",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isNearEnd) Color(0xFFEF4444) else Color.Gray,
-                                letterSpacing = 1.5.sp
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = remainingTime,
-                                fontSize = 54.sp,
-                                fontWeight = FontWeight.Black,
-                                color = if (isNearEnd) Color(0xFFEF4444) else Color.White,
-                                modifier = Modifier.scale(pulseScale)
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black.copy(alpha = 0.2f))
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayCircleFilled,
-                                    contentDescription = null,
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "Started at ${formatTime(session.actual_start)}",
-                                    fontSize = 13.sp,
-                                    color = Color.Gray,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
+                                .weight(1.2f)
+                                .fillMaxHeight()
+                        )
 
-                    // RIGHT: Bill Display & Actions
+                        BillAndActions(
+                            status = status,
+                            session = session,
+                            onExtendClick = { showExtendDialog = true },
+                            onBeverageClick = { showBeverageDialog = true },
+                            onPlayerClick = { showPlayerDialog = true },
+                            onStopClick = { showStopDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
+                } else {
                     Column(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .weight(1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Current Bill Card
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "CURRENT BILL",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Gray,
-                                        letterSpacing = 1.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = String.format("₹%.2f", session.current_bill),
-                                        fontSize = 32.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color.White
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.ReceiptLong,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
+                        CountdownCard(
+                            remainingSeconds = remainingSeconds,
+                            remainingTime = remainingTime,
+                            session = session,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                        )
 
-                        // Kiosk Action Buttons
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                ActionCard(
-                                    title = "Extend Time",
-                                    subtitle = "Add more minutes",
-                                    icon = Icons.Default.AddAlarm,
-                                    modifier = Modifier.weight(1f)
-                                ) { showExtendDialog = true }
-
-                                ActionCard(
-                                    title = "Order Snacks",
-                                    subtitle = "Drinks & beverages",
-                                    icon = Icons.Default.LocalPizza,
-                                    modifier = Modifier.weight(1f)
-                                ) { showBeverageDialog = true }
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                val hasTiers = status.table.people_pricing != null && status.table.people_pricing.isNotEmpty()
-                                ActionCard(
-                                    title = if (status.table.type == "ps5") "Controllers" else "Add Players",
-                                    subtitle = "Change group count",
-                                    icon = Icons.Default.People,
-                                    enabled = hasTiers,
-                                    modifier = Modifier.weight(1f)
-                                ) { showPlayerDialog = true }
-
-                                ActionCard(
-                                    title = "Finish Session",
-                                    subtitle = "Alert staff to checkout",
-                                    icon = Icons.Default.Stop,
-                                    modifier = Modifier.weight(1f)
-                                ) { showStopDialog = true }
-                            }
-                        }
+                        BillAndActions(
+                            status = status,
+                            session = session,
+                            onExtendClick = { showExtendDialog = true },
+                            onBeverageClick = { showBeverageDialog = true },
+                            onPlayerClick = { showPlayerDialog = true },
+                            onStopClick = { showStopDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -436,7 +327,8 @@ fun ExtendDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .width(400.dp)
+                .widthIn(max = 400.dp)
+                .fillMaxWidth(0.9f)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             shape = RoundedCornerShape(16.dp)
@@ -531,7 +423,8 @@ fun PlayerCountDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .width(400.dp)
+                .widthIn(max = 400.dp)
+                .fillMaxWidth(0.9f)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             shape = RoundedCornerShape(16.dp)
@@ -623,8 +516,9 @@ fun BeverageOrderDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .width(550.dp)
-                .fillMaxHeight(0.75f)
+                .widthIn(max = 550.dp)
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.8f)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             shape = RoundedCornerShape(16.dp)
@@ -776,7 +670,7 @@ fun ConfirmStopDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.width(360.dp),
+            modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth(0.9f),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -851,7 +745,7 @@ fun AdminDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.width(440.dp).padding(16.dp),
+            modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth(0.92f).padding(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -1029,6 +923,182 @@ fun AdminDialog(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun CountdownCard(
+    remainingSeconds: Long,
+    remainingTime: String,
+    session: com.gamehaus.app.data.SessionData,
+    modifier: Modifier = Modifier
+) {
+    val isNearEnd = remainingSeconds < 300
+    val pulseInfiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by pulseInfiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isNearEnd) 1.05f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = EaseInOutQuad),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isNearEnd) Color(0x1AEF4444) else Color(0xFF1E1E1E)
+        ),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(
+            1.5.dp,
+            if (isNearEnd) Color(0xFFEF4444).copy(alpha = 0.5f) else Color(0xFF2C2C2C)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "REMAINING TIME",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isNearEnd) Color(0xFFEF4444) else Color.Gray,
+                letterSpacing = 1.5.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = remainingTime,
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Black,
+                color = if (isNearEnd) Color(0xFFEF4444) else Color.White,
+                modifier = Modifier.scale(pulseScale)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.2f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayCircleFilled,
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "Started at ${formatTime(session.actual_start)}",
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BillAndActions(
+    status: com.gamehaus.app.data.TabletStatus,
+    session: com.gamehaus.app.data.SessionData,
+    onExtendClick: () -> Unit,
+    onBeverageClick: () -> Unit,
+    onPlayerClick: () -> Unit,
+    onStopClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "CURRENT BILL",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = String.format("₹%.2f", session.current_bill),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ReceiptLong,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ActionCard(
+                    title = "Extend Time",
+                    subtitle = "Add more minutes",
+                    icon = Icons.Default.AddAlarm,
+                    modifier = Modifier.weight(1f)
+                ) { onExtendClick() }
+
+                ActionCard(
+                    title = "Order Snacks",
+                    subtitle = "Drinks & beverages",
+                    icon = Icons.Default.LocalPizza,
+                    modifier = Modifier.weight(1f)
+                ) { onBeverageClick() }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val hasTiers = status.table.people_pricing != null && status.table.people_pricing.isNotEmpty()
+                ActionCard(
+                    title = if (status.table.type == "ps5") "Controllers" else "Add Players",
+                    subtitle = "Change group count",
+                    icon = Icons.Default.People,
+                    enabled = hasTiers,
+                    modifier = Modifier.weight(1f)
+                ) { onPlayerClick() }
+
+                ActionCard(
+                    title = "Finish Session",
+                    subtitle = "Alert staff to checkout",
+                    icon = Icons.Default.Stop,
+                    modifier = Modifier.weight(1f)
+                ) { onStopClick() }
             }
         }
     }

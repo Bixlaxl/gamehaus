@@ -47,7 +47,8 @@ fun PairingScreen(
     ) {
         Card(
             modifier = Modifier
-                .width(480.dp)
+                .widthIn(max = 480.dp)
+                .fillMaxWidth(0.9f)
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))
