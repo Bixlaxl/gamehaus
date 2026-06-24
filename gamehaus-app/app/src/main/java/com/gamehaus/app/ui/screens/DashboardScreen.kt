@@ -73,41 +73,56 @@ fun DashboardScreen(
             }
         } else if (!isSessionActive) {
             // IDLE SCREEN
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SportsEsports,
-                    contentDescription = null,
-                    modifier = Modifier.size(100.dp),
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = status.table.name.uppercase(),
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Welcome to Gamehaus!",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Please scan the QR code at the reception desk to start a session on this table.",
-                    fontSize = 14.sp,
-                    color = Color(0xFF888888),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(0.9f)
-                )
+            Box(modifier = Modifier.fillMaxSize()) {
+                IconButton(
+                    onClick = { showAdminDialog = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.Gray
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SportsEsports,
+                        contentDescription = null,
+                        modifier = Modifier.size(100.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = status.table.name.uppercase(),
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Welcome to Gamehaus!",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Please scan the QR code at the reception desk to start a session on this table.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF888888),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(0.9f)
+                    )
+                }
             }
         } else {
             // ACTIVE HUD SCREEN
