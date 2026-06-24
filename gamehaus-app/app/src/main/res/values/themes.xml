@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.Gamehaus" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/dark_gray</item>
+        <item name="android:windowBackground">@color/dark_gray</item>
+    </style>
+</resources>
