@@ -82,7 +82,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _errorMessage.value = loginRes.error ?: "Invalid credentials"
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Authentication failed"
+                _errorMessage.value = getErrorMessage(e)
             } finally {
                 _isLoading.value = false
             }
@@ -108,7 +108,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onError(loginRes.error ?: "Invalid password")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Validation failed")
+                onError(getErrorMessage(e))
             } finally {
                 _isLoading.value = false
             }
@@ -133,7 +133,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onError(tablesRes.error ?: "Failed to fetch tables")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Failed to fetch tables")
+                onError(getErrorMessage(e))
             } finally {
                 _isLoading.value = false
             }
@@ -243,7 +243,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onError(res.error ?: "Cannot extend session")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Network error")
+                onError(getErrorMessage(e))
             } finally {
                 _isLoading.value = false
             }
@@ -263,7 +263,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onError(res.error ?: "Cannot change player count")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Network error")
+                onError(getErrorMessage(e))
             } finally {
                 _isLoading.value = false
             }
@@ -291,7 +291,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onError(res.error ?: "Failed to order item")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Network error")
+                onError(getErrorMessage(e))
             } finally {
                 _isLoading.value = false
             }
@@ -311,7 +311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onError(res.error ?: "Failed to stop session")
                 }
             } catch (e: Exception) {
-                onError(e.message ?: "Network error")
+                onError(getErrorMessage(e))
             } finally {
                 _isLoading.value = false
             }
@@ -353,6 +353,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val m = (totalSeconds % 3600) / 60
         val s = totalSeconds % 60
         return String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
+    }
+
+    private fun getErrorMessage(e: Throwable): String {
+        if (e is retrofit2.HttpException) {
+            try {
+                val errorBody = e.response()?.errorBody()?.string()
+                val parsedError = com.google.gson.Gson().fromJson<BaseResponse<Any>>(
+                    errorBody,
+                    object : com.google.gson.reflect.TypeToken<BaseResponse<Any>>() {}.type
+                )
+                return parsedError?.error ?: "HTTP ${e.code()}: ${e.message()}"
+            } catch (ex: Exception) {
+                return "HTTP ${e.code()}: ${e.message()}"
+            }
+        }
+        return e.message ?: "An unexpected error occurred"
     }
 
     override fun onCleared() {
