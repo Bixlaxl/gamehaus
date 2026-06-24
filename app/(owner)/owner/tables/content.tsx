@@ -69,6 +69,7 @@ export function TablesContent({
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [customType, setCustomType] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customPricingBasis, setCustomPricingBasis] = useState<"none" | "player" | "controller">("none");
 
   const { data: locations } = useQuery({
     queryKey: ["locations", "active"],
@@ -294,6 +295,7 @@ export function TablesContent({
     setForm({ ...defaultForm, location_id: locations?.[0]?.id ?? "" });
     setCustomType("");
     setShowCustomInput(false);
+    setCustomPricingBasis("none");
     setDialogOpen(true);
   }
 
@@ -319,13 +321,63 @@ export function TablesContent({
     });
     setCustomType(isDefault ? "" : t.type);
     setShowCustomInput(!isDefault);
+
+    // Determine custom pricing basis
+    let basis: "none" | "player" | "controller" = "none";
+    if (t.people_pricing && Object.keys(t.people_pricing).length > 0) {
+      if (t.people_pricing["1"] !== undefined) {
+        basis = "controller";
+      } else {
+        basis = "player";
+      }
+    }
+    setCustomPricingBasis(basis);
+
     setDialogOpen(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const typeValue = showCustomInput ? customType.toLowerCase().trim() : form.type;
-    upsertMutation.mutate({ ...form, type: typeValue, editId: editing?.id });
+
+    let finalPeoplePricing = { ...form.people_pricing };
+    if (showCustomInput) {
+      if (customPricingBasis === "none") {
+        finalPeoplePricing = {};
+      } else if (customPricingBasis === "player") {
+        finalPeoplePricing = {
+          "4": form.people_pricing["4"] ?? "",
+          "5": form.people_pricing["5"] ?? "",
+          "6": form.people_pricing["6"] ?? "",
+        };
+      } else if (customPricingBasis === "controller") {
+        finalPeoplePricing = {
+          "1": form.people_pricing["1"] ?? "",
+          "2": form.people_pricing["2"] ?? "",
+          "3": form.people_pricing["3"] ?? "",
+          "4": form.people_pricing["4"] ?? "",
+        };
+      }
+    } else {
+      if (typeValue === "snooker" || typeValue === "pool") {
+        finalPeoplePricing = {
+          "4": form.people_pricing["4"] ?? "",
+          "5": form.people_pricing["5"] ?? "",
+          "6": form.people_pricing["6"] ?? "",
+        };
+      } else if (typeValue === "ps5") {
+        finalPeoplePricing = {
+          "1": form.people_pricing["1"] ?? "",
+          "2": form.people_pricing["2"] ?? "",
+          "3": form.people_pricing["3"] ?? "",
+          "4": form.people_pricing["4"] ?? "",
+        };
+      } else {
+        finalPeoplePricing = {};
+      }
+    }
+
+    upsertMutation.mutate({ ...form, type: typeValue, people_pricing: finalPeoplePricing, editId: editing?.id });
   }
 
   const typeIcon: Record<string, string> = {
@@ -511,20 +563,38 @@ export function TablesContent({
               </div>
             </div>
             {showCustomInput && (
-              <div className="space-y-2">
-                <Label htmlFor="customType">Custom Type Name</Label>
-                <Input
-                  id="customType"
-                  value={customType}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCustomType(val);
-                    setForm({ ...form, type: val });
-                  }}
-                  placeholder="e.g. simulator"
-                  required
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="customType">Custom Type Name</Label>
+                  <Input
+                    id="customType"
+                    value={customType}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomType(val);
+                      setForm({ ...form, type: val });
+                    }}
+                    placeholder="e.g. simulator"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Pricing Basis</Label>
+                  <Select
+                    value={customPricingBasis}
+                    onValueChange={(v: "none" | "player" | "controller") => setCustomPricingBasis(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Flat Hourly Rate Only</SelectItem>
+                      <SelectItem value="player">Per-Player Hourly Rate</SelectItem>
+                      <SelectItem value="controller">Per-Controller Hourly Rate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -554,7 +624,7 @@ export function TablesContent({
               </div>
             </div>
             {/* Per-person / per-controller hourly rate */}
-            {(form.type === "snooker" || form.type === "pool") && (
+            {(form.type === "snooker" || form.type === "pool" || (showCustomInput && customPricingBasis === "player")) && (
               <div className="space-y-2">
                 <Label>Per-Player Hourly Rate (₹/hr) — optional</Label>
                 <p className="text-xs text-gray-400">Override the flat hourly rate based on group size. Leave blank to use the flat rate above.</p>
@@ -579,7 +649,7 @@ export function TablesContent({
                 </div>
               </div>
             )}
-            {form.type === "ps5" && (
+            {(form.type === "ps5" || (showCustomInput && customPricingBasis === "controller")) && (
               <div className="space-y-2">
                 <Label>Per-Controller Hourly Rate (₹/hr) — optional</Label>
                 <p className="text-xs text-gray-400">Override the flat hourly rate based on controller count. Leave blank to use the flat rate above.</p>

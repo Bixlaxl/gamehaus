@@ -868,18 +868,32 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                         </div>
 
                         <div className="space-y-2">
-                          {pricingOptions.map((n) => {
-                            const active = numPeople === n;
-                            const rate   = booking.people_pricing?.[n] ?? 0;
-                            const total  = formatCurrency((selMins / 60) * rate);
+                          {pricingOptions.map((n, idx) => {
+                            const num = Number(n);
+                            let active = numPeople === n;
+                            let circleText = n;
+
                             const isPs5  = booking.type === "ps5";
-                            const noun   = isPs5
+                            let noun = isPs5
                               ? (n === "1" ? "controller" : "controllers")
                               : `${n} player${n === "1" ? "" : "s"}`;
-                            const heading = isPs5 ? `${n} ${noun}` : noun;
-                            const sub = isPs5
+                            let heading = isPs5 ? `${n} ${noun}` : noun;
+                            let sub = isPs5
                               ? `${n} controller${n === "1" ? "" : "s"} ready`
                               : `${n} cues & full rack set out`;
+
+                            if (idx === 0 && num > 1) {
+                              circleText = `1-${n}`;
+                              active = numPeople !== null && Number(numPeople) <= num;
+                              noun = isPs5 ? "controllers" : "players";
+                              heading = isPs5 ? `1-${n} ${noun}` : `1-${n} ${noun}`;
+                              sub = isPs5
+                                ? `1-${n} controllers ready`
+                                : `1-${n} cues & full rack set out`;
+                            }
+
+                            const rate   = booking.people_pricing?.[n] ?? 0;
+                            const total  = formatCurrency((selMins / 60) * rate);
                             return (
                               <button
                                 key={n}
@@ -892,14 +906,14 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                 }}
                               >
                                 <div
-                                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm"
+                                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shrink-0"
                                   style={{
                                     background: active ? "rgba(255,255,255,0.20)" : surface,
                                     color:      active ? "#fff" : textPri,
                                     border:     active ? "none" : `1.5px solid ${inputBdr}`,
                                   }}
                                 >
-                                  {n}
+                                  {circleText}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-bold leading-tight" style={{ color: active ? "#fff" : textPri }}>

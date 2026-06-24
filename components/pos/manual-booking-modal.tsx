@@ -177,8 +177,16 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                 {chosenTable?.type === "ps5" ? "Controllers" : "Players"}
               </Label>
               <div className="flex flex-wrap gap-2">
-                {peopleOptions.map((n) => {
-                  const active = numPeople === n;
+                {peopleOptions.map((n, idx) => {
+                  const num = Number(n);
+                  let active = numPeople === n;
+                  let labelText = n;
+
+                  if (idx === 0 && num > 1) {
+                    labelText = `1-${n}`;
+                    active = numPeople !== null && Number(numPeople) <= num;
+                  }
+
                   const rate   = chosenTable!.people_pricing?.[n] ?? 0;
                   return (
                     <button
@@ -190,7 +198,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                           : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
-                      {n} · ₹{rate}/hr
+                      {labelText} · ₹{rate}/hr
                     </button>
                   );
                 })}
