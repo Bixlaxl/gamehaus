@@ -116,7 +116,7 @@ export async function POST(request: Request) {
     if (maxExtendMins <= 0) {
       return NextResponse.json(
         err(
-          `Cannot extend — next booking in ${Math.ceil((nextStart.getTime() - Date.now()) / 60000)} mins (${BUFFER_MINS}-min buffer required)`,
+          `Cannot extend — there is a next booking in ${Math.ceil((nextStart.getTime() - Date.now()) / 60000)} mins`,
           "EXTEND_BLOCKED"
         ),
         { status: 409 }
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     if (extend_mins > maxExtendMins) {
       return NextResponse.json(
         err(
-          `Only ${maxExtendMins} mins available before next booking (${BUFFER_MINS}-min buffer required)`,
+          `Only ${maxExtendMins} mins available before the next booking`,
           "EXTEND_PARTIAL"
         ),
         { status: 409 }
