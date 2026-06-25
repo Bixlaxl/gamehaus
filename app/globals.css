@@ -136,56 +136,106 @@
 
 /* ── Global Dark Mode overrides for light-themed tailwind classes ── */
 .dark body {
-  background-color: #0a0a0a !important;
+  background-color: #060606 !important;
+  background-image: 
+    radial-gradient(circle at 40% -20%, rgba(212, 84, 26, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 80% 85%, rgba(212, 84, 26, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 10% 40%, rgba(255, 255, 255, 0.01) 0%, transparent 35%) !important;
+  background-attachment: fixed !important;
 }
+
+/* Make sure container layouts are transparent so the body background gradient is visible */
+.dark .bg-\[\#F7F6F3\] {
+  background-color: transparent !important;
+}
+
+/* Glassmorphism for side rail navbar */
+.dark nav {
+  background: rgba(10, 10, 10, 0.55) !important;
+  backdrop-filter: blur(24px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(120%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Glassmorphism for top header */
+.dark header {
+  background: rgba(10, 10, 10, 0.45) !important;
+  backdrop-filter: blur(24px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(120%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Glossy glassmorphism card / panels */
 .dark .bg-white {
-  background-color: #111111 !important;
+  background-color: rgba(20, 20, 20, 0.55) !important;
+  backdrop-filter: blur(16px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(120%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.04) !important;
 }
+
+/* Minor gray layers */
 .dark .bg-gray-50,
 .dark .bg-gray-50\/50,
 .dark .bg-gray-50\/80 {
-  background-color: #161616 !important;
-}
-.dark .bg-gray-100 {
-  background-color: #1d1d1d !important;
-}
-.dark .hover\:bg-gray-50:hover,
-.dark .hover\:bg-gray-50\/50:hover {
-  background-color: #1d1d1d !important;
-}
-.dark .hover\:bg-gray-100:hover {
-  background-color: #222222 !important;
+  background-color: rgba(30, 30, 30, 0.35) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
+.dark .bg-gray-100 {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Hover highlights with a subtle orange aura */
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-50\/50:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(212, 84, 26, 0.2) !important;
+  box-shadow: 0 0 15px 1px rgba(212, 84, 26, 0.05) !important;
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* Selected active table aura */
+.dark .ring-2.ring-\[\#D4541A\] {
+  box-shadow: 0 0 25px 4px rgba(212, 84, 26, 0.35), 0 0 0 2px #D4541A !important;
+  border-color: transparent !important;
+}
+
+/* High contrast glass text colors */
 .dark .text-gray-900 {
   color: #ffffff !important;
 }
 .dark .text-gray-800 {
-  color: #ededed !important;
+  color: #f3f3f3 !important;
 }
 .dark .text-gray-700 {
-  color: #d4d4d4 !important;
+  color: #e5e5e5 !important;
 }
 .dark .text-gray-600 {
-  color: #a3a3a3 !important;
+  color: #a8a8a8 !important;
 }
 .dark .text-gray-500 {
-  color: #737373 !important;
+  color: #858585 !important;
 }
 .dark .text-gray-400 {
-  color: #525252 !important;
+  color: #616161 !important;
 }
 
 .dark .border-gray-100 {
-  border-color: #1f1f1f !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
 }
 .dark .border-gray-200 {
-  border-color: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
 }
 .dark .divide-gray-50 > * + *,
 .dark .divide-gray-100 > * + *,
 .dark .divide-gray-200 > * + * {
-  border-color: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 /* Inputs / select fields / dialogs in dark mode */
@@ -194,21 +244,38 @@
 .dark button[role="combobox"],
 .dark [data-slot="select-trigger"],
 .dark select {
-  background-color: #1a1a1a !important;
-  border-color: #2a2a2a !important;
-  color: #f5f5f5 !important;
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  color: #fafafa !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
 }
+
+.dark input:focus,
+.dark textarea:focus,
+.dark button[role="combobox"]:focus,
+.dark [data-slot="select-trigger"]:focus {
+  border-color: rgba(212, 84, 26, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(212, 84, 26, 0.15) !important;
+}
+
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #666 !important;
+  color: #555 !important;
 }
+
+/* Beautiful glossy dialog overlays */
 .dark [role="dialog"],
 .dark .bg-popover,
 .dark [data-slot="popover"] {
-  background-color: #111111 !important;
-  border-color: #2a2a2a !important;
+  background-color: rgba(18, 18, 18, 0.8) !important;
+  backdrop-filter: blur(24px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(120%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
   color: #ffffff !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 45px rgba(212, 84, 26, 0.07) !important;
 }
+
 .dark [role="dialog"] h2,
 .dark [role="dialog"] h1,
 .dark [role="dialog"] p,
