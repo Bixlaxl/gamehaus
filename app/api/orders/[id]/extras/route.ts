@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { addExtraSchema, ok, err } from "@/lib/validators/schemas";
 
 export const runtime = 'edge';
+export const dynamic = "force-dynamic";
 
 
 export async function POST(

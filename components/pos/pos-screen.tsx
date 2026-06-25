@@ -54,6 +54,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   const qc                    = useQueryClient();
   const setTables             = usePOSStore((s) => s.setTables);
   const setOpenOrders         = usePOSStore((s) => s.setOpenOrders);
+  const setBookings           = usePOSStore((s) => s.setBookings);
   const handleOrderItemChange = usePOSStore((s) => s.handleOrderItemChange);
   const handleOrderChange     = usePOSStore((s) => s.handleOrderChange);
   const handleTableChange     = usePOSStore((s) => s.handleTableChange);
@@ -182,45 +183,12 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     return unsubscribe;
   }, [locationId, handleOrderItemChange, handleOrderChange, handleTableChange, qc]);
 
-  // ── Build table status from the STORE, not the network cache ─────────────
-  // store.openOrders is the unified source of truth — patchOrderItem,
-  // optimistic check-in / walk-in flips, and Supabase Realtime all write to
-  // it. Previously buildTableStatus read from rawOrders (the useQuery cache),
-  // so every patch only reached cards after the next /api/pos/orders refetch.
-  // That's the visible lag staff complained about. Now any store update
-  // (optimistic, realtime, manual patch) makes the grid re-render on the
-  // very next tick — instant card flip without waiting on the network.
-  const buildTableStatus = useCallback(() => {
-    if (!rawTables) return;
-    const activeItems = openOrders.flatMap((o) =>
-      (o.items ?? []).filter(
-        (i) => (i.status === "running" || i.status === "scheduled") && !i.is_deleted
-      )
-    );
-    const tablesWithStatus: TableWithStatus[] = rawTables.map((table) => {
-      const activeItem =
-        activeItems.find((i) => i.table_id === table.id && i.status === "running") ?? null;
-      const upcomingBooking =
-        rawBookings?.find((b) => {
-          const oi = b.order_item as Pick<OrderItem, "table_id" | "status"> | null;
-          return oi?.table_id === table.id && oi?.status === "scheduled";
-        }) ?? null;
-      return {
-        ...table,
-        activeOrderItem: activeItem as OrderItem | null,
-        upcomingBooking: upcomingBooking
-          ? { ...upcomingBooking, order: upcomingBooking.order }
-          : null,
-      };
-    });
-    setTables(tablesWithStatus);
-  }, [rawTables, openOrders, rawBookings, setTables]);
-
-  useEffect(() => { buildTableStatus(); }, [buildTableStatus]);
   // Hydrate the store from the network cache whenever a refetch lands.
-  // patchOrderItem / realtime / optimistic updates keep openOrders fresh
-  // between refetches.
+  // Zustand store actions and realtime handlers automatically derive tables status internally,
+  // preventing cascading render loops and ensuring instant card flips.
+  useEffect(() => { if (rawTables) setTables(rawTables); }, [rawTables, setTables]);
   useEffect(() => { if (rawOrders) setOpenOrders(rawOrders); }, [rawOrders, setOpenOrders]);
+  useEffect(() => { if (rawBookings) setBookings(rawBookings); }, [rawBookings, setBookings]);
 
   // Upcoming bookings header badge — uses Date.now() inline since POSScreen
   // doesn't subscribe to the 1s clock. The thresholds (30 min) are coarse

@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -398,9 +399,10 @@ fun ExtendDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                     }
 
                     Button(
@@ -412,9 +414,10 @@ fun ExtendDialog(
                             )
                         },
                         modifier = Modifier.weight(1.2f),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Confirm", fontWeight = FontWeight.Bold)
+                        Text("Confirm", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                     }
                 }
             }
@@ -493,9 +496,10 @@ fun PlayerCountDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                     }
 
                     Button(
@@ -507,9 +511,10 @@ fun PlayerCountDialog(
                             )
                         },
                         modifier = Modifier.weight(1.2f),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Update", fontWeight = FontWeight.Bold)
+                        Text("Update", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                     }
                 }
             }
@@ -547,9 +552,14 @@ fun BeverageOrderDialog(
                 Text("Order Beverages & Snacks", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
                 if (selectedItem == null) {
+                    val configuration = LocalConfiguration.current
+                    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    val isTablet = configuration.screenWidthDp >= 600
+                    val columns = if (isTablet || isLandscape) 2 else 1
+
                     // Display Catalog list
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Fixed(columns),
                         modifier = Modifier.weight(1f),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -578,9 +588,28 @@ fun BeverageOrderDialog(
                                             .clip(RoundedCornerShape(8.dp))
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(drink.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
-                                        Text("₹${drink.selling_price}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                                        Text("Stock: ${drink.stock_count}", fontSize = 10.sp, color = Color.Gray)
+                                        Text(
+                                            text = drink.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "₹${drink.selling_price}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "Stock: ${drink.stock_count}",
+                                            fontSize = 10.sp,
+                                            color = Color.Gray,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
@@ -645,9 +674,10 @@ fun BeverageOrderDialog(
                         OutlinedButton(
                             onClick = { selectedItem = null },
                             modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                         ) {
-                            Text("Back")
+                            Text("Back", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                         }
 
                         Button(
@@ -664,9 +694,10 @@ fun BeverageOrderDialog(
                                 )
                             },
                             modifier = Modifier.weight(1.2f),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Place Order", fontWeight = FontWeight.Bold)
+                            Text("Place Order", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                         }
                     }
                 }
@@ -707,9 +738,10 @@ fun ConfirmStopDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                     ) {
-                        Text("No, cancel")
+                        Text("No, cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                     }
 
                     Button(
@@ -720,9 +752,10 @@ fun ConfirmStopDialog(
                             )
                         },
                         modifier = Modifier.weight(1.2f),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Yes, Finish", fontWeight = FontWeight.Bold)
+                        Text("Yes, Finish", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                     }
                 }
             }
@@ -799,9 +832,10 @@ fun AdminDialog(
                         OutlinedButton(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                         ) {
-                            Text("Cancel")
+                            Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                         }
 
                         Button(
@@ -821,12 +855,13 @@ fun AdminDialog(
                             },
                             enabled = !isLoading,
                             modifier = Modifier.weight(1.2f),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                             } else {
-                                Text("Verify PIN", fontWeight = FontWeight.Bold)
+                                Text("Verify PIN", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                             }
                         }
                     }
@@ -901,9 +936,10 @@ fun AdminDialog(
                             OutlinedButton(
                                 onClick = onDismiss,
                                 modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                             ) {
-                                Text("Close")
+                                Text("Close", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                             }
 
                             Button(
@@ -918,9 +954,10 @@ fun AdminDialog(
                                 },
                                 enabled = selectedTable != null && !isLoading,
                                 modifier = Modifier.weight(1.2f),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("Save & Switch", fontWeight = FontWeight.Bold)
+                                Text("Save & Switch", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                             }
                         }
 

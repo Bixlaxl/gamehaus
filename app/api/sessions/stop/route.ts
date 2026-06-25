@@ -6,6 +6,7 @@ import { calculateBill } from "@/lib/billing/engine";
 import type { OrderItem } from "@/lib/supabase/types";
 
 export const runtime = 'edge';
+export const dynamic = "force-dynamic";
 
 
 export async function POST(request: Request) {

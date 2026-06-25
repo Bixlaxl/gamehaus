@@ -20,6 +20,7 @@ interface POSStore {
   // Data
   tables: TableWithStatus[];
   openOrders: POSOrder[];
+  bookings: any[];
   selectedOrderId: string | null;
 
   // UI state
@@ -41,8 +42,9 @@ interface POSStore {
   setNow: (now: Date) => void;
   setOpeningTime: (openingTime: string) => void;
   setClosingTime: (closingTime: string) => void;
-  setTables: (tables: TableWithStatus[]) => void;
+  setTables: (tables: Table[]) => void;
   setOpenOrders: (orders: POSOrder[]) => void;
+  setBookings: (bookings: any[]) => void;
   selectOrder: (orderId: string | null) => void;
   setWalkInOpen: (open: boolean) => void;
   setWalkInWithTable: (tableId: string) => void;
@@ -70,10 +72,39 @@ interface POSStore {
   handleTableChange: (payload: RealtimePostgresChangesPayload<Table>) => void;
 }
 
+function computeTablesWithStatus(
+  rawTables: Table[],
+  openOrders: POSOrder[],
+  bookings: any[]
+): TableWithStatus[] {
+  const activeItems = openOrders.flatMap((o) =>
+    (o.items ?? []).filter(
+      (i) => (i.status === "running" || i.status === "scheduled") && !i.is_deleted
+    )
+  );
+  return rawTables.map((table) => {
+    const activeItem =
+      activeItems.find((i) => i.table_id === table.id && i.status === "running") ?? null;
+    const upcomingBooking =
+      bookings?.find((b) => {
+        const oi = b.order_item as any;
+        return oi?.table_id === table.id && oi?.status === "scheduled";
+      }) ?? null;
+    return {
+      ...table,
+      activeOrderItem: activeItem,
+      upcomingBooking: upcomingBooking
+        ? { ...upcomingBooking, order: upcomingBooking.order as any }
+        : null,
+    };
+  });
+}
+
 export const usePOSStore = create<POSStore>((set, get) => ({
   now: new Date(),
   tables: [],
   openOrders: [],
+  bookings: [],
   selectedOrderId: null,
   walkInOpen: false,
   walkInPrefilledTableId: null,
@@ -90,8 +121,21 @@ export const usePOSStore = create<POSStore>((set, get) => ({
   setNow: (now) => set({ now }),
   setOpeningTime: (openingTime) => set({ openingTime }),
   setClosingTime: (closingTime) => set({ closingTime }),
-  setTables: (tables) => set({ tables }),
-  setOpenOrders: (openOrders) => set({ openOrders }),
+
+  setTables: (rawTables) => set((state) => ({
+    tables: computeTablesWithStatus(rawTables, state.openOrders, state.bookings)
+  })),
+
+  setOpenOrders: (openOrders) => set((state) => ({
+    openOrders,
+    tables: computeTablesWithStatus(state.tables, openOrders, state.bookings)
+  })),
+
+  setBookings: (bookings) => set((state) => ({
+    bookings,
+    tables: computeTablesWithStatus(state.tables, state.openOrders, bookings)
+  })),
+
   selectOrder: (selectedOrderId) => set({ selectedOrderId }),
   setWalkInOpen: (walkInOpen) => set({ walkInOpen, walkInPrefilledTableId: walkInOpen ? null : null }),
   setWalkInWithTable: (tableId) => set({ walkInOpen: true, walkInPrefilledTableId: tableId }),
@@ -105,14 +149,16 @@ export const usePOSStore = create<POSStore>((set, get) => ({
     set((state) => ({ pointsToRedeem: { ...state.pointsToRedeem, [orderId]: points } })),
 
   patchOrderItem: (itemId, patch) =>
-    set((state) => ({
-      openOrders: state.openOrders.map((order) => ({
+    set((state) => {
+      const openOrders = state.openOrders.map((order) => ({
         ...order,
         items: order.items.map((item) =>
           item.id === itemId ? { ...item, ...patch } : item
         ),
-      })),
-    })),
+      }));
+      const tables = computeTablesWithStatus(state.tables, openOrders, state.bookings);
+      return { openOrders, tables };
+    }),
 
   addOrderExtra: (orderId, extra) =>
     set((state) => ({
@@ -162,19 +208,23 @@ export const usePOSStore = create<POSStore>((set, get) => ({
       const orderId = eventType === "DELETE" ? (oldRow as any)?.order_id : (newRow as any)?.order_id;
       if (!orderId) return {};
       const hasOrder = state.openOrders.some((o) => o.id === orderId);
-      if (!hasOrder) return {}; // Skip state update and prevent React re-renders!
+      if (!hasOrder) return {};
 
       const orders = state.openOrders.map((order) => {
         let items = order.items;
         if (eventType === "INSERT") {
-          const item = newRow as OrderItem & { table: Table };
+          const rawItem = newRow as OrderItem;
+          const table = state.tables.find((t) => t.id === rawItem.table_id);
+          const item = { ...rawItem, table } as OrderItem & { table: Table };
           if (item.order_id === order.id) {
             items = [...items, item];
           }
         } else if (eventType === "UPDATE") {
+          const rawItem = newRow as OrderItem;
+          const table = state.tables.find((t) => t.id === rawItem.table_id);
           items = items.map((i) =>
-            i.id === (newRow as OrderItem).id
-               ? { ...i, ...(newRow as OrderItem) }
+            i.id === rawItem.id
+               ? { ...i, ...rawItem, table: table || i.table }
                : i
           );
         } else if (eventType === "DELETE") {
@@ -182,32 +232,49 @@ export const usePOSStore = create<POSStore>((set, get) => ({
         }
         return { ...order, items };
       });
-      return { openOrders: orders };
+
+      const tables = computeTablesWithStatus(state.tables, orders, state.bookings);
+      return { openOrders: orders, tables };
     });
   },
 
   handleOrderChange: (payload) => {
-    const { eventType, new: newRow } = payload;
+    const { eventType, new: newRow, old: oldRow } = payload;
     set((state) => {
-      if (eventType === "UPDATE") {
-        const updated = newRow as Order;
-        // If finalized/cancelled, remove from open orders
-        if (updated.status !== "open") {
-          return {
-            openOrders: state.openOrders.filter((o) => o.id !== updated.id),
-            selectedOrderId:
-              state.selectedOrderId === updated.id
-                ? null
-                : state.selectedOrderId,
-          };
+      let orders = state.openOrders;
+      let selectedOrderId = state.selectedOrderId;
+      if (eventType === "INSERT") {
+        const inserted = newRow as Order;
+        if (inserted.status === "open") {
+          const exists = state.openOrders.some((o) => o.id === inserted.id);
+          if (!exists) {
+            const newOrder: POSOrder = {
+              ...inserted,
+              items: [],
+              extras: [],
+            };
+            orders = [...orders, newOrder];
+          }
         }
-        return {
-          openOrders: state.openOrders.map((o) =>
+      } else if (eventType === "UPDATE") {
+        const updated = newRow as Order;
+        if (updated.status !== "open") {
+          orders = state.openOrders.filter((o) => o.id !== updated.id);
+          selectedOrderId = state.selectedOrderId === updated.id ? null : state.selectedOrderId;
+        } else {
+          orders = state.openOrders.map((o) =>
             o.id === updated.id ? { ...o, ...updated } : o
-          ),
-        };
+          );
+        }
+      } else if (eventType === "DELETE") {
+        const deletedId = (oldRow as any)?.id;
+        if (deletedId) {
+          orders = state.openOrders.filter((o) => o.id !== deletedId);
+          selectedOrderId = state.selectedOrderId === deletedId ? null : state.selectedOrderId;
+        }
       }
-      return {};
+      const tables = computeTablesWithStatus(state.tables, orders, state.bookings);
+      return { openOrders: orders, tables, selectedOrderId };
     });
   },
 
@@ -215,11 +282,13 @@ export const usePOSStore = create<POSStore>((set, get) => ({
     const { eventType, new: newRow } = payload;
     if (eventType === "UPDATE") {
       const updated = newRow as Table;
-      set((state) => ({
-        tables: state.tables.map((t) =>
+      set((state) => {
+        const rawTables = state.tables.map((t) =>
           t.id === updated.id ? { ...t, ...updated } : t
-        ),
-      }));
+        );
+        const tables = computeTablesWithStatus(rawTables, state.openOrders, state.bookings);
+        return { tables };
+      });
     }
   },
 }));

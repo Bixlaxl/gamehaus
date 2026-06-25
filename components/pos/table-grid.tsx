@@ -139,6 +139,66 @@ const IdleCard = memo(IdleCardImpl, (a, b) =>
 
 // ── Running card ──────────────────────────────────────────────────────────────
 
+// ── Running card ──────────────────────────────────────────────────────────────
+
+function RunningCountdown({ expectedEnd, actualStart }: { expectedEnd: string | null; actualStart: string | null }) {
+  const now = useNowSampled(1000); // Ticks locally every second for precise visual countdown
+
+  let countdown = "";
+  let isFiveMinWarning = false;
+  let isOvertime = false;
+  let progressPct = 0;
+
+  if (expectedEnd) {
+    const exp = new Date(expectedEnd);
+    const diffMs = exp.getTime() - now.getTime();
+    const signed = formatSignedCountdown(exp, now);
+    countdown = signed.text;
+    isOvertime = signed.isOvertime;
+    isFiveMinWarning = diffMs > 0 && diffMs < 5 * 60 * 1000;
+    if (actualStart && diffMs > 0) {
+      progressPct = Math.min(100, Math.max(0,
+        (now.getTime() - new Date(actualStart).getTime()) /
+        (exp.getTime() - new Date(actualStart).getTime()) * 100
+      ));
+    }
+  }
+
+  const timerColor = isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981";
+
+  return (
+    <>
+      {/* Prominent centered Timer Box */}
+      <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+        <span
+          className="text-5xl lg:text-6xl font-black font-mono tracking-widest tabular-nums"
+          style={{ color: timerColor }}
+        >
+          {countdown ? `${countdown}` : "00:00"}
+        </span>
+        <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-[#aaa] mt-2">
+          {isOvertime ? "Overtime" : "Time Remaining"}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div
+        className="h-2 rounded-full overflow-hidden"
+        style={{ background: isOvertime ? "rgba(239,68,68,0.18)" : "rgba(0,0,0,0.07)" }}
+      >
+        <div
+          className="h-full rounded-full"
+          style={{
+            width:      isOvertime ? "100%" : `${progressPct}%`,
+            background: isOvertime ? "#ef4444" : progressPct > 90 ? "#f59e0b" : "#10b981",
+            transition: "width 1s linear",
+          }}
+        />
+      </div>
+    </>
+  );
+}
+
 function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }: {
   table: TableWithStatus;
   item: OrderItem;
@@ -147,7 +207,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const now            = usePOSStore((s) => s.now);
+  const now            = useNowSampled(10000); // 10-second tick beats global 1Hz store subscription
   const closingTime    = usePOSStore((s) => s.closingTime);
   const patchOrderItem = usePOSStore((s) => s.patchOrderItem);
   const qc             = useQueryClient();
@@ -175,24 +235,14 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
     ? new Date(item.actual_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
     : "";
 
-  let countdown        = "";
   let isFiveMinWarning = false;
   let isOvertime       = false;
-  let progressPct      = 0;
 
   if (item.expected_end) {
     const exp    = new Date(item.expected_end);
     const diffMs = exp.getTime() - now.getTime();
-    const signed = formatSignedCountdown(exp, now);
-    countdown    = signed.text;
-    isOvertime   = signed.isOvertime;
+    isOvertime   = now.getTime() > exp.getTime();
     isFiveMinWarning = diffMs > 0 && diffMs < 5 * 60 * 1000;
-    if (item.actual_start && diffMs > 0) {
-      progressPct = Math.min(100, Math.max(0,
-        (now.getTime() - new Date(item.actual_start).getTime()) /
-        (exp.getTime()  - new Date(item.actual_start).getTime()) * 100
-      ));
-    }
   }
 
   // Today's shop closing in ms. Treat closings <6am as next-day (midnight cross).
@@ -311,33 +361,8 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
           </span>
         )}
 
-        {/* Prominent centered Timer Box */}
-        <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
-          <span
-            className="text-5xl lg:text-6xl font-black font-mono tracking-widest tabular-nums"
-            style={{ color: isOvertime ? "#ef4444" : isFiveMinWarning ? "#f59e0b" : "#10b981" }}
-          >
-            {countdown ? `${countdown}` : "00:00"}
-          </span>
-          <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-[#aaa] mt-2">
-            {isOvertime ? "Overtime" : "Time Remaining"}
-          </span>
-        </div>
-
-        {/* Progress bar */}
-        <div
-          className="h-2 rounded-full overflow-hidden"
-          style={{ background: isOvertime ? "rgba(239,68,68,0.18)" : "rgba(0,0,0,0.07)" }}
-        >
-          <div
-            className="h-full rounded-full"
-            style={{
-              width:      isOvertime ? "100%" : `${progressPct}%`,
-              background: isOvertime ? "#ef4444" : progressPct > 90 ? "#f59e0b" : "#10b981",
-              transition: "width 1s linear",
-            }}
-          />
-        </div>
+        {/* Prominent centered Timer Box & Progress bar */}
+        <RunningCountdown expectedEnd={item.expected_end} actualStart={item.actual_start} />
 
         {/* Upcoming booking — name + slot + click-to-copy phone */}
         {table.upcomingBooking && (

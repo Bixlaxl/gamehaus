@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { setPeopleSchema, ok, err } from "@/lib/validators/schemas";
 
 export const runtime = "edge";
+export const dynamic = "force-dynamic";
 
 /**
  * Change the player / controller count on a running order_item.

@@ -189,3 +189,11 @@ ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT 
 ALTER TABLE locations DROP COLUMN IF EXISTS image_url;
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_urls text[] NOT NULL DEFAULT '{}';
 
+
+-- ============================================================
+-- REALTIME RLS FIX (008_realtime_rls_fix.sql)
+-- ============================================================
+-- Split RLS policies for order_items, order_extras, and bookings.
+-- Uses subquery-free SELECT filters for staff to enable Supabase Realtime broadcast.
+-- WRITE operations (INSERT, UPDATE, DELETE) remain securely location-validated.
+

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extendSessionSchema, ok, err } from "@/lib/validators/schemas";
 
 export const runtime = 'edge';
+export const dynamic = "force-dynamic";
 
 
 // No buffer — the gap from a session's expected_end to the next booking's

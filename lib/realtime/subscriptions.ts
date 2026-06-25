@@ -50,7 +50,12 @@ export function subscribeToPOS(
       { event: "*", schema: "public", table: "order_extras" },
       (payload) => handlers.onExtrasChange?.(payload as any)
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log(`[Realtime POS] Subscription status for location ${locationId}:`, status);
+      if (err) {
+        console.error(`[Realtime POS] Subscription error for location ${locationId}:`, err);
+      }
+    });
 
   return () => { supabase.removeChannel(channel); };
 }
