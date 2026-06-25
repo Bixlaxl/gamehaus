@@ -34,17 +34,34 @@ export async function GET(request: Request) {
   }
 
   // 2. Fetch active session running or scheduled on this table
-  const { data: item, error: itemErr } = await admin
+  // Prioritize running sessions over scheduled sessions so that active sessions are not interrupted by future bookings.
+  let { data: item, error: itemErr } = await admin
     .from("order_items")
     .select("*, order:orders(*)")
     .eq("table_id", tableId)
-    .in("status", ["running", "scheduled"])
-    .order("created_at", { ascending: false })
+    .eq("status", "running")
     .limit(1)
     .maybeSingle();
 
   if (itemErr) {
     return NextResponse.json(err(itemErr.message, "DB_ERROR"), { status: 500 });
+  }
+
+  if (!item) {
+    // If no running session exists, look for the next scheduled session (ordered by scheduled_start ascending to get the nearest upcoming session)
+    const { data: schedItem, error: schedErr } = await admin
+      .from("order_items")
+      .select("*, order:orders(*)")
+      .eq("table_id", tableId)
+      .eq("status", "scheduled")
+      .order("scheduled_start", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (schedErr) {
+      return NextResponse.json(err(schedErr.message, "DB_ERROR"), { status: 500 });
+    }
+    item = schedItem;
   }
 
   if (!item) {
