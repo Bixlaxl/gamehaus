@@ -6,12 +6,16 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 
 // Bump when the cache shape changes (query keys, response shapes) — old
 // caches with this buster mismatch will be discarded.
 const CACHE_BUSTER = "v1";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isPanel = pathname?.startsWith("/pos") || pathname?.startsWith("/owner");
+  const forcedTheme = isPanel ? undefined : "light";
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -44,7 +48,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   if (!persister) {
     // SSR path — render children with no provider; client will hydrate.
     return (
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} forcedTheme={forcedTheme}>
         <PersistQueryClientProvider
           client={queryClient}
           persistOptions={{ persister: noopPersister }}
@@ -57,7 +61,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} forcedTheme={forcedTheme}>
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{
