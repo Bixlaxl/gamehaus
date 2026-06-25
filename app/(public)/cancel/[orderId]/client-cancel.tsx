@@ -48,7 +48,7 @@ export function ClientCancelPage({
     setMounted(true);
   }, []);
 
-  const dark = !mounted ? false : resolvedTheme === "dark";
+  const dark = false;
   const bg = dark ? "#0A0A0A" : "#F7F5F2";
   const surface = dark ? "#111" : "#FFFFFF";
   const border = dark ? "#222" : "#EBEBEB";

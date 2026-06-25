@@ -220,7 +220,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, booking?.id, slotsTick]);
 
-  const dark      = !mounted ? false : resolvedTheme === "dark";
+  const dark      = false;
   const open      = isOpen(location.opening_time, location.closing_time);
   const types     = ["all", ...new Set(tables.map(t => t.type))];
   const shown     = filter === "all" ? tables : tables.filter(t => t.type === filter);

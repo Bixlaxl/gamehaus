@@ -183,7 +183,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Poll status every 5 seconds
+        // Poll status and beverages every 5 seconds
         pollJob = viewModelScope.launch {
             while (isActive) {
                 try {
@@ -200,6 +200,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (e: Exception) {
                     // silent retry
                 }
+
+                try {
+                    val res = client.getService().getBeverages(locationId)
+                    if (res.success && res.data != null) {
+                        _beverages.value = res.data
+                    }
+                } catch (e: Exception) {
+                    // silent retry
+                }
+
                 delay(5000)
             }
         }

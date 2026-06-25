@@ -244,7 +244,7 @@ export default function CheckoutPage() {
 
   const couponDiscount = couponState.status === "valid" ? couponState.discount_amount : 0;
 
-  const dark    = !mounted ? false : resolvedTheme === "dark";
+  const dark    = false;
   const bg      = dark ? "#0A0A0A" : "#F7F5F2";
   const surface = dark ? "#111"    : "#FFFFFF";
   const border  = dark ? "#222"    : "#EBEBEB";
