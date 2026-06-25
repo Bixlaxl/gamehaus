@@ -46,7 +46,7 @@ export default async function POSLayout({ children }: { children: React.ReactNod
     .single();
 
   return (
-    <div className="dark h-screen flex overflow-hidden bg-[#0a0a0a]">
+    <div className="h-screen flex overflow-hidden bg-[#F7F6F3] dark:bg-[#0a0a0a] text-gray-900 dark:text-[#eee]">
       <POSSideRail
         staffName={profile.name}
         locationName={location?.name ?? ""}

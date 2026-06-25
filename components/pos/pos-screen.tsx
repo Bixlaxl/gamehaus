@@ -257,10 +257,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
-        <header className="shrink-0 flex items-center justify-between px-5 h-14 bg-[#111] border-b border-[#1f1f1f]">
+        <header className="shrink-0 flex items-center justify-between px-5 h-14 bg-white dark:bg-[#111] border-b border-gray-200 dark:border-[#1f1f1f]">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-extrabold text-white text-sm tracking-tight">
+            <span className="font-extrabold text-gray-900 dark:text-white text-sm tracking-tight">
               {locationName}
             </span>
             <span className="text-[#555] font-bold">·</span>
@@ -269,14 +269,14 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCheckinOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all border border-[#333] hover:border-[#555] hover:bg-[#1e1e1e]"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
             >
               <QrCode className="h-3.5 w-3.5" />
               Check-in
             </button>
             <button
               onClick={() => setUpcomingDrawerOpen(true)}
-              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all border border-[#333] hover:border-[#555] hover:bg-[#1e1e1e]"
+              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
               title="Today's upcoming bookings"
             >
               <CalendarClock className="h-3.5 w-3.5" />
@@ -325,7 +325,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
 
           {/* Context panel — slides in only for idle/running/bill-ready tables */}
           <div
-            className="shrink-0 border-l border-[#1f1f1f] overflow-hidden flex flex-col bg-[#111]"
+            className="shrink-0 border-l border-gray-200 dark:border-[#1f1f1f] overflow-hidden flex flex-col bg-white dark:bg-[#111]"
             style={{
               width:      showContextPanel ? 380 : 0,
               transition: "width 0.25s ease",

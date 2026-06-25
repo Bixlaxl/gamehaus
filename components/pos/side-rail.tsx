@@ -1,10 +1,9 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, LayoutGrid, CalendarDays, Receipt } from "lucide-react";
+import { LogOut, LayoutGrid, CalendarDays, Receipt, Sun, Moon } from "lucide-react";
+import { useTheme } from "next-themes";
 
 // Inventory was removed from the staff side rail; owners still manage stock
 // via /owner/inventory. Bell + low-stock badge components stay in the repo
@@ -37,6 +36,12 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [signingOut, setSigningOut] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleSignOut() {
     if (signingOut) return;
@@ -56,9 +61,9 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
         </div>
       )}
 
-      <nav className="w-44 shrink-0 flex flex-col bg-[#161616] border-r border-[#222]">
+      <nav className="w-44 shrink-0 flex flex-col bg-white dark:bg-[#161616] border-r border-gray-200 dark:border-[#222]">
         {/* Brand */}
-        <div className="h-14 flex items-center gap-2 px-3 border-b border-[#222] shrink-0">
+        <div className="h-14 flex items-center gap-2 px-3 border-b border-gray-200 dark:border-[#222] shrink-0">
           <span className="flex-1 font-black text-lg tracking-tight" style={{ color: "#D4541A" }}>
             Gamehaus
           </span>
@@ -76,7 +81,7 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
                   isActive
                     ? "bg-[#D4541A] text-white"
-                    : "text-[#bbb] hover:bg-[#1f1f1f] hover:text-white"
+                    : "text-gray-600 dark:text-[#bbb] hover:bg-gray-100 dark:hover:bg-[#1f1f1f] hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -86,18 +91,37 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
           })}
         </div>
 
-        {/* Footer — identity + sign-out */}
-        <div className="shrink-0 px-2 pb-3 border-t border-[#222] pt-3 space-y-1">
+        {/* Footer — identity + theme-toggle + sign-out */}
+        <div className="shrink-0 px-2 pb-3 border-t border-gray-200 dark:border-[#222] pt-3 space-y-1">
+          {mounted && (
+            <button
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-600 dark:text-[#bbb] hover:bg-gray-100 dark:hover:bg-[#1f1f1f] hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              {resolvedTheme === "dark" ? (
+                <>
+                  <Sun className="h-3.5 w-3.5 shrink-0" />
+                  Light Mode
+                </>
+              ) : (
+                <>
+                  <Moon className="h-3.5 w-3.5 shrink-0" />
+                  Dark Mode
+                </>
+              )}
+            </button>
+          )}
+
           {(staffName || locationName) && (
             <div className="px-3 py-2 text-[11px] leading-tight">
-              {staffName && <p className="font-semibold text-[#ddd] truncate">{staffName}</p>}
-              {locationName && <p className="text-[#888] truncate">{locationName}</p>}
+              {staffName && <p className="font-semibold text-gray-700 dark:text-[#ddd] truncate">{staffName}</p>}
+              {locationName && <p className="text-gray-500 dark:text-[#888] truncate">{locationName}</p>}
             </div>
           )}
           <button
             onClick={() => void handleSignOut()}
             disabled={signingOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-white hover:bg-[#1f1f1f] transition-colors disabled:opacity-40"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-[#1f1f1f] transition-colors disabled:opacity-40"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             Sign out

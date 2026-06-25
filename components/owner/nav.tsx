@@ -10,7 +10,9 @@ import { StockAlertsBell } from "@/components/inventory/stock-alerts-bell";
 import {
   MapPin, Grid3X3, Users, BookOpen, BarChart2,
   Tag, Settings, LogOut, Home, UserRound, Package, CreditCard,
+  Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 
 const navItems = [
   { href: "/owner",              label: "Overview",    icon: Home,       exact: true },
@@ -39,10 +41,16 @@ export function OwnerNav({ userName }: OwnerNavProps) {
   const router     = useRouter();
   const supabase   = createClient();
   const [signingOut, setSigningOut] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   // Track first render to skip the initial refresh (server data is already fresh on mount)
   const hasMountedRef   = useRef(false);
   // Throttle refresh calls so rapid path changes or tab focus events don't spam.
   const lastRefreshRef  = useRef(0);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -163,8 +171,26 @@ export function OwnerNav({ userName }: OwnerNavProps) {
         })}
       </nav>
 
-      {/* User + Sign out */}
+      {/* User + theme-toggle + Sign out */}
       <div className="shrink-0 px-3 py-4 border-t border-[#1A1A1A] space-y-1">
+        {mounted && (
+          <button
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-[#999] hover:text-white hover:bg-[#111] transition-all"
+          >
+            {resolvedTheme === "dark" ? (
+              <>
+                <Sun className="h-3.5 w-3.5 shrink-0" />
+                Light Mode
+              </>
+            ) : (
+              <>
+                <Moon className="h-3.5 w-3.5 shrink-0" />
+                Dark Mode
+              </>
+            )}
+          </button>
+        )}
         <div className="flex items-center gap-3 px-3 py-2">
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
