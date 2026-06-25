@@ -2,7 +2,13 @@ export const runtime = 'edge';
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { POSScreen } from "@/components/pos/pos-screen";
+import dynamic from "next/dynamic";
+import Loading from "./loading";
+
+const POSScreen = dynamic(
+  () => import("@/components/pos/pos-screen").then((mod) => mod.POSScreen),
+  { ssr: false, loading: () => <Loading /> }
+);
 
 export default async function POSPage() {
   const supabase = await createClient();
