@@ -135,7 +135,14 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
     const realId = await resolveRealExtraId(extraId);
     if (!realId) return; // add failed, nothing to delete server-side
     const res = await fetch(`/api/orders/${orderId}/extras/${realId}`, { method: "DELETE" });
-    if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    if (!res.ok) {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
+    }
   }
 
   return (

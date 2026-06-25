@@ -175,6 +175,8 @@ export function InventoryContent({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
@@ -208,7 +210,11 @@ export function InventoryContent({
     onError: (_, __, ctx) => {
       if (ctx?.prev) qc.setQueryData(["inventory", selectedLocation], ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["inventory"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
+    },
   });
 
   // Permanent delete — only offered once item is already deactivated.
@@ -232,7 +238,11 @@ export function InventoryContent({
       if (ctx?.prev) qc.setQueryData(["inventory", selectedLocation], ctx.prev);
       alert((err as Error).message);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["inventory"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
+    },
   });
 
   function openAdd() {

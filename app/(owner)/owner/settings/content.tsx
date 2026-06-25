@@ -264,6 +264,7 @@ function ApplyDefaultThresholdButton() {
       }
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
     },
     onError: (e) => toast.error((e as Error).message),
   });

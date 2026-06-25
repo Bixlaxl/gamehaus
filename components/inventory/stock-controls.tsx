@@ -62,6 +62,8 @@ export function StockControls({ item, invalidateKeys = [], theme = "light" }: St
     onSuccess: () => {
       toast.success(direction === "add" ? "Stock added" : "Stock reduced");
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
       for (const key of invalidateKeys) {
         qc.invalidateQueries({ queryKey: Array.isArray(key) ? key : [key] });
       }

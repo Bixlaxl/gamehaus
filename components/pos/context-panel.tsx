@@ -884,6 +884,9 @@ function PanelSession({
       // Swap the tempId for the real DB id so subsequent PATCH/DELETE works
       replaceOrderExtraId(order.id, tempId, body.data.id);
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
       return body.data.id;
     })();
 
@@ -902,7 +905,14 @@ function PanelSession({
     const realId = await resolveRealExtraId(extraId).catch(() => null);
     if (!realId) return; // add itself failed → nothing to delete server-side
     const res = await fetch(`/api/orders/${order.id}/extras/${realId}`, { method: "DELETE" });
-    if (!res.ok) qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    if (!res.ok) {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+    } else {
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
+    }
   }
 
   // ─── Inventory quantity stepper helpers ───────────────────────────────────
@@ -925,6 +935,9 @@ function PanelSession({
       toast.error("Failed to update quantity");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory", locationId] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-list"] });
+      qc.invalidateQueries({ queryKey: ["inventory-low-count"] });
     }
   }
 
