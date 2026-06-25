@@ -52,7 +52,7 @@ VALUES (
   if (profile.role !== "owner") redirect("/pos");
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F7F6F3]">
+    <div className="flex h-screen overflow-hidden bg-[#F7F6F3] dark:bg-[#0a0a0a]">
       <OwnerNav userName={profile.name} />
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto px-8 py-8">
