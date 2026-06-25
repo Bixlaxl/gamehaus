@@ -14,7 +14,7 @@ drop policy if exists "Staff can delete order_items" on order_items;
 
 create policy "Staff can view order_items"
   on order_items for select to authenticated
-  using (auth.jwt() ->> 'role' = 'staff');
+  using (true);
 
 create policy "Staff can insert order_items"
   on order_items for insert to authenticated
@@ -67,7 +67,7 @@ drop policy if exists "Staff can delete order_extras" on order_extras;
 
 create policy "Staff can view order_extras"
   on order_extras for select to authenticated
-  using (auth.jwt() ->> 'role' = 'staff');
+  using (true);
 
 create policy "Staff can insert order_extras"
   on order_extras for insert to authenticated
@@ -120,7 +120,7 @@ drop policy if exists "Staff can delete bookings" on bookings;
 
 create policy "Staff can view bookings"
   on bookings for select to authenticated
-  using (auth.jwt() ->> 'role' = 'staff');
+  using (true);
 
 create policy "Staff can insert bookings"
   on bookings for insert to authenticated

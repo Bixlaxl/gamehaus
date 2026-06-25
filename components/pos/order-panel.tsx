@@ -39,6 +39,20 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
 
   const activeItems  = selectedOrder.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
   const activeExtras = selectedOrder.extras.filter((e) => !e.is_deleted);
+  const groupedExtras = Array.from(
+    activeExtras.reduce((acc, current) => {
+      const key = `${current.name}_${current.price}_${current.inventory_item_id || ""}`;
+      const existing = acc.get(key);
+      if (existing) {
+        existing.quantity += current.quantity;
+        existing.ids.push(current.id);
+      } else {
+        acc.set(key, { ...current, ids: [current.id] } as any);
+      }
+      return acc;
+    }, new Map<string, OrderExtra & { ids: string[] }>())
+    .values()
+  );
   const bill         = calculateBill(activeItems, activeExtras, now, null, selectedOrder.advance_paid ?? 0);
   const fullyPrePaid = bill.advancePaid > 0 && bill.advancePaid >= bill.scheduledSubtotal;
   const hasRunning   = activeItems.some((i) => i.status === "running");
@@ -376,10 +390,10 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
               )}
             </div>
             <div className="p-3 space-y-1">
-              {activeExtras.length === 0 && !addExtraOpen && (
+              {groupedExtras.length === 0 && !addExtraOpen && (
                 <p className="text-xs py-1.5 text-gray-400 dark:text-[#444]">None added</p>
               )}
-              {activeExtras.map((extra) => (
+              {groupedExtras.map((extra) => (
                 <div key={extra.id} className="flex items-center justify-between py-1 px-1">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm text-gray-900 dark:text-white truncate">{extra.name}</span>
@@ -389,7 +403,7 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
                     <span className="text-sm font-medium text-gray-900 dark:text-white">
                       {formatCurrency(extra.price * extra.quantity)}
                     </span>
-                    <button onClick={() => deleteExtra(extra.id)} className="text-gray-400 hover:text-red-400 transition-colors">
+                    <button onClick={() => deleteExtra(extra.ids[extra.ids.length - 1])} className="text-gray-400 hover:text-red-400 transition-colors">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

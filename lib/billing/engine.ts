@@ -88,15 +88,25 @@ export function calculateBill(
     });
   }
 
-  const extraLines: ExtraLineItem[] = extras
-    .filter((e) => !e.is_deleted)
-    .map((e) => ({
-      id: e.id,
-      name: e.name,
-      price: e.price,
-      quantity: e.quantity,
-      amount: Math.round(e.price * e.quantity * 100) / 100,
-    }));
+  const groupedExtras = new Map<string, ExtraLineItem>();
+  for (const e of extras) {
+    if (e.is_deleted) continue;
+    const key = `${e.name}_${e.price}`;
+    const existing = groupedExtras.get(key);
+    if (existing) {
+      existing.quantity += e.quantity;
+      existing.amount = Math.round(existing.price * existing.quantity * 100) / 100;
+    } else {
+      groupedExtras.set(key, {
+        id: e.id,
+        name: e.name,
+        price: e.price,
+        quantity: e.quantity,
+        amount: Math.round(e.price * e.quantity * 100) / 100,
+      });
+    }
+  }
+  const extraLines = Array.from(groupedExtras.values());
 
   const sessionTotal = Math.round(tableLines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100;
   const extraTotal   = Math.round(extraLines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100;

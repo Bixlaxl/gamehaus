@@ -795,6 +795,20 @@ function PanelSession({
 
   const activeItems  = order.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
+  const groupedExtras = Array.from(
+    activeExtras.reduce((acc, current) => {
+      const key = `${current.name}_${current.price}_${current.inventory_item_id || ""}`;
+      const existing = acc.get(key);
+      if (existing) {
+        existing.quantity += current.quantity;
+        existing.ids.push(current.id);
+      } else {
+        acc.set(key, { ...current, ids: [current.id] } as any);
+      }
+      return acc;
+    }, new Map<string, OrderExtra & { ids: string[] }>())
+    .values()
+  );
   const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
@@ -1361,9 +1375,9 @@ function PanelSession({
           )}
 
           {/* Catalogue items already added — summary list (always visible if any) */}
-          {activeExtras.filter((e) => e.inventory_item_id).length > 0 && (
+          {groupedExtras.filter((e) => e.inventory_item_id).length > 0 && (
             <div className="px-3 py-2 space-y-1 border-b border-gray-100 dark:border-[#1f1f1f]">
-              {activeExtras
+              {groupedExtras
                 .filter((e) => e.inventory_item_id)
                 .map((extra) => (
                   <div key={extra.id} className="flex items-center justify-between py-0.5">
@@ -1380,12 +1394,12 @@ function PanelSession({
           )}
 
           {/* Custom items list — only shown if any non-catalogue extras exist */}
-          {activeExtras.some((e) => !e.inventory_item_id) && (
+          {groupedExtras.some((e) => !e.inventory_item_id) && (
             <div className="border-b border-gray-100 dark:border-[#1f1f1f] px-3 pt-2 pb-3 space-y-1">
               <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#888] mb-1">
                 Custom items
               </p>
-              {activeExtras
+              {groupedExtras
                 .filter((e) => !e.inventory_item_id)
                 .map((extra) => (
                   <div key={extra.id} className="flex items-center justify-between py-1 px-1">
@@ -1398,7 +1412,7 @@ function PanelSession({
                         {formatCurrency(extra.price * extra.quantity)}
                       </span>
                       <button
-                        onClick={() => deleteExtra(extra.id)}
+                        onClick={() => deleteExtra(extra.ids[extra.ids.length - 1])}
                         className="text-gray-400 hover:text-red-400 transition-colors"
                         aria-label="Remove custom item"
                       >
