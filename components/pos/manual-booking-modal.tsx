@@ -62,6 +62,20 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   }, [tables, tableId]);
 
   const chosenTable = useMemo(() => tables.find((t) => t.id === tableId), [tables, tableId]);
+  const isSimulator = chosenTable?.type === "ps5" && chosenTable?.name.toLowerCase().includes("simulator");
+  const durationPresets = useMemo(() => {
+    const base = [
+      { mins: 30,  label: "30m" },
+      { mins: 60,  label: "1h"  },
+      { mins: 90,  label: "1.5h" },
+      { mins: 120, label: "2h"  },
+      { mins: 180, label: "3h"  },
+    ];
+    if (isSimulator) {
+      return [{ mins: 15, label: "15m" }, ...base];
+    }
+    return base;
+  }, [isSimulator]);
   // Default-pick num_people to the table's smallest tier if it has tiered pricing
   const peopleOptions = chosenTable?.people_pricing
     ? Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b))
@@ -174,7 +188,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           {peopleOptions.length > 0 && (
             <div className="space-y-1.5">
               <Label className="text-xs">
-                {chosenTable?.type === "ps5" ? "Controllers" : "Players"}
+                {isSimulator ? "Players" : chosenTable?.type === "ps5" ? "Controllers" : "Players"}
               </Label>
               <div className="flex flex-wrap gap-2">
                 {peopleOptions.map((n, idx) => {
@@ -220,7 +234,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           <div className="space-y-1.5">
             <Label className="text-xs">Duration</Label>
             <div className="flex flex-wrap gap-1.5">
-              {DURATION_PRESETS.map((p) => (
+              {durationPresets.map((p) => (
                 <button
                   key={p.mins}
                   onClick={() => setDuration(p.mins)}

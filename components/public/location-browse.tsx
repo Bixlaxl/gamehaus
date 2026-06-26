@@ -357,10 +357,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }
 
   function addToCart(t: Table) {
-    // Minimum booking is start + stop (i.e. ≥ 30 min). A single 15-min slot
-    // isn't a valid session — the footer's disabled state already prevents
-    // this path, but we guard here too in case it's reached programmatically.
-    if (selectedSlots.length < 2) return;
+    const requiredSlots = t.name.toLowerCase().includes("simulator") ? 1 : 2;
+    if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
     const startIso  = new Date(`${date}T${firstSlot}:00`).toISOString();
@@ -675,15 +673,15 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       </button>
                     </div>
 
-                    {/* ── Stepper (1·When ──── 2·Players) ── */}
+                    {/* ── Stepper (1·Timing ──── 2·Players) ── */}
                     {hasPricing && (
                       <div className="flex items-center gap-3 pt-1">
                         <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textPri : textMut }}>
-                          1 · When
+                          1 · Timing
                         </span>
                         <div className="flex-1 h-px" style={{ background: onWhen ? sheetType.accent : inputBdr }} />
                         <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textMut : textPri }}>
-                          2 · {booking.type === "ps5" ? "Controllers" : "Players"}
+                          2 · {booking.name.toLowerCase().includes("simulator") ? "Players" : booking.type === "ps5" ? "Controllers" : "Players"}
                         </span>
                       </div>
                     )}
@@ -874,20 +872,27 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                             let circleText = n;
 
                             const isPs5  = booking.type === "ps5";
-                            let noun = isPs5
+                            const isSimulator = isPs5 && booking.name.toLowerCase().includes("simulator");
+                            let noun = isSimulator
+                              ? (n === "1" ? "player" : "players")
+                              : isPs5
                               ? (n === "1" ? "controller" : "controllers")
                               : `${n} player${n === "1" ? "" : "s"}`;
-                            let heading = isPs5 ? `${n} ${noun}` : noun;
-                            let sub = isPs5
+                            let heading = isSimulator || isPs5 ? `${n} ${noun}` : noun;
+                            let sub = isSimulator
+                              ? `${n} player setup ready`
+                              : isPs5
                               ? `${n} controller${n === "1" ? "" : "s"} ready`
                               : `${n} cues & full rack set out`;
 
                             if (idx === 0 && num > 1) {
                               circleText = `1-${n}`;
                               active = numPeople !== null && Number(numPeople) <= num;
-                              noun = isPs5 ? "controllers" : "players";
-                              heading = isPs5 ? `1-${n} ${noun}` : `1-${n} ${noun}`;
-                              sub = isPs5
+                              noun = isSimulator ? "players" : isPs5 ? "controllers" : "players";
+                              heading = isSimulator || isPs5 ? `1-${n} ${noun}` : `1-${n} ${noun}`;
+                              sub = isSimulator
+                                ? `1-${n} players setup ready`
+                                : isPs5
                                 ? `1-${n} controllers ready`
                                 : `1-${n} cues & full rack set out`;
                             }
@@ -954,7 +959,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
               {step === "when" ? (
                 <>
                   <div className="flex-1 min-w-0">
-                    {selectedSlots.length >= 2 ? (
+                    {selectedSlots.length >= (booking?.name.toLowerCase().includes("simulator") ? 1 : 2) ? (
                       <>
                         <p className="text-sm font-bold tabular-nums" style={{ color: textPri }}>
                           {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
@@ -963,10 +968,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                           {selLabel} booked
                         </p>
                       </>
-                    ) : selectedSlots.length === 1 ? (
+                    ) : selectedSlots.length === 1 && !(booking?.name.toLowerCase().includes("simulator")) ? (
                       <p className="text-xs" style={{ color: textMut }}>Pick a finish time to continue</p>
                     ) : (
-                      <p className="text-xs" style={{ color: textMut }}>Pick start, then finish</p>
+                      <p className="text-xs" style={{ color: textMut }}>Pick a start time</p>
                     )}
                   </div>
                   <button
@@ -974,7 +979,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       if (pricingOptions.length > 0) setStep("players");
                       else addToCart(booking);
                     }}
-                    disabled={selectedSlots.length < 2}
+                    disabled={selectedSlots.length < (booking?.name.toLowerCase().includes("simulator") ? 1 : 2)}
                     className="px-5 py-3 rounded-xl font-bold text-white text-sm transition-opacity disabled:opacity-40 flex items-center gap-1.5"
                     style={{ background: "#111111" }}
                   >

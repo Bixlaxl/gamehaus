@@ -674,7 +674,8 @@ function PeoplePicker({
   const pricing  = (item.table?.people_pricing ?? {}) as Record<string, number>;
   const options  = Object.keys(pricing).sort((a, b) => Number(a) - Number(b));
   if (options.length === 0) return null;
-  const label    = item.table?.type === "ps5" ? "controller" : "player";
+  const isSimulator = item.table?.type === "ps5" && item.table?.name.toLowerCase().includes("simulator");
+  const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
   const current  = item.num_people ?? null;
   const baseRate = item.table?.hourly_rate ?? item.rate_per_hour;
 
