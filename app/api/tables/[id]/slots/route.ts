@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { isPs5Conflict } from "@/lib/utils";
 
 export const runtime = 'edge';
-
-
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -25,21 +24,44 @@ export async function GET(
   const dayStartMs = new Date(dayStart).getTime();
   const dayEndMs   = new Date(dayEnd).getTime();
 
+  // 1. Fetch target table to verify type
+  const { data: targetTable, error: targetTableErr } = await admin
+    .from("tables")
+    .select("location_id, name, type")
+    .eq("id", tableId)
+    .single();
+
+  if (targetTableErr || !targetTable) {
+    return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });
+  }
+
+  // 2. Load all active tables in location to map PS5 console dependencies
+  const { data: allTables } = await admin
+    .from("tables")
+    .select("id, name, type")
+    .eq("location_id", targetTable.location_id)
+    .eq("is_active", true);
+
+  const hasPs5 = targetTable.type === "ps5";
+  const queryTableIds = hasPs5
+    ? (allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [tableId])
+    : [tableId];
+
   // Don't SQL-filter on scheduled_start — walk-ins have NULL scheduled_start
   // and would be excluded, leaving the table appearing free to public bookers.
   // Post-filter handles date scoping using actual_start (running) or scheduled_start (scheduled).
   const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
-      .eq("table_id", tableId)
+      .select("table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
 
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
-      .eq("order_items.table_id", tableId)
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
+      .in("order_items.table_id", queryTableIds)
       .eq("status", "confirmed")
       .gte("scheduled_start", new Date(dayStartMs).toISOString())
       .lte("scheduled_start", new Date(dayEndMs).toISOString()),
@@ -49,10 +71,46 @@ export async function GET(
     const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
     if (!startStr) return false;
     const startMs = new Date(startStr).getTime();
-    return startMs >= dayStartMs && startMs <= dayEndMs;
+    const isSameDay = startMs >= dayStartMs && startMs <= dayEndMs;
+    if (!isSameDay) return false;
+
+    if (hasPs5) {
+      const exTable = allTables?.find(t => t.id === item.table_id);
+      if (!exTable) return false;
+      return isPs5Conflict({
+        reqTableId: tableId,
+        reqTableName: targetTable.name,
+        reqTableType: targetTable.type,
+        reqNumPeople: 1, // default to 1-pax check on slot views
+        exTableId: item.table_id,
+        exTableName: exTable.name,
+        exTableType: exTable.type,
+        exNumPeople: item.num_people ?? 1
+      });
+    }
+    return item.table_id === tableId;
   });
 
-  const bookings = rawBookings ?? [];
+  const bookings = (rawBookings ?? []).filter(b => {
+    const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
+    if (!oi) return false;
+
+    if (hasPs5) {
+      const exTable = allTables?.find(t => t.id === oi.table_id);
+      if (!exTable) return false;
+      return isPs5Conflict({
+        reqTableId: tableId,
+        reqTableName: targetTable.name,
+        reqTableType: targetTable.type,
+        reqNumPeople: 1,
+        exTableId: oi.table_id,
+        exTableName: exTable.name,
+        exTableType: exTable.type,
+        exNumPeople: oi.num_people ?? 1
+      });
+    }
+    return oi.table_id === tableId;
+  });
 
   const blocked: { start: string; end: string }[] = [];
 

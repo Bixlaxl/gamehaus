@@ -105,3 +105,43 @@ export function formatSignedCountdown(endTime: Date, now: Date): { text: string;
     : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return { text: isOvertime ? `-${body}` : body, isOvertime };
 }
+
+export function getConsoleNumber(tableName: string): number | null {
+  const normalized = tableName.toLowerCase();
+  if (normalized.includes("1")) return 1;
+  if (normalized.includes("2")) return 2;
+  return null;
+}
+
+export function isPs5Conflict({
+  reqTableId,
+  reqTableName,
+  reqTableType,
+  reqNumPeople,
+  exTableId,
+  exTableName,
+  exTableType,
+  exNumPeople
+}: {
+  reqTableId: string;
+  reqTableName: string;
+  reqTableType: string;
+  reqNumPeople: number;
+  exTableId: string;
+  exTableName: string;
+  exTableType: string;
+  exNumPeople: number;
+}): boolean {
+  if (reqTableId === exTableId) return true;
+  if (reqTableType !== "ps5" || exTableType !== "ps5") return false;
+
+  const reqConsole = getConsoleNumber(reqTableName);
+  const exConsole = getConsoleNumber(exTableName);
+
+  if (reqConsole === null || exConsole === null) return false;
+
+  if (reqConsole === exConsole) return true;
+  if (reqNumPeople >= 2 || exNumPeople >= 2) return true;
+
+  return false;
+}

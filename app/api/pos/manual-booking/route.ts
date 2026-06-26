@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { isPs5Conflict } from "@/lib/utils";
 
 export const runtime = "edge";
 
@@ -77,36 +78,79 @@ export async function POST(request: Request) {
   }
 
   // ── Conflict check — same rule as /api/walkin ────────────────────────────
+  // Load all active tables in location to map PS5 console dependencies
+  const { data: allTables } = await admin
+    .from("tables")
+    .select("id, name, type")
+    .eq("location_id", location_id)
+    .eq("is_active", true);
+
+  const isPs5 = allTables?.find((t) => t.id === table_id)?.type === "ps5";
+  const queryTableIds = isPs5
+    ? [...new Set([table_id, ...(allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [])])]
+    : [table_id];
+
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
-      .eq("table_id", table_id)
+      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
       .eq("status", "confirmed")
-      .eq("order_items.table_id", table_id),
+      .in("order_items.table_id", queryTableIds),
   ]);
 
   const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && aE > bS;
 
   for (const ex of (existingItems ?? [])) {
-    if (ex.table_id !== table_id) continue;
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
     if (!exS || !exE) continue;
     if (overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
-      return NextResponse.json(err("Conflict: that table already has a session in this window", "TABLE_TAKEN"), { status: 409 });
+      const reqTable = allTables?.find((t) => t.id === table_id);
+      const exTable = allTables?.find((t) => t.id === ex.table_id);
+      if (!reqTable || !exTable) continue;
+
+      const conflict = isPs5Conflict({
+        reqTableId: table_id,
+        reqTableName: reqTable.name,
+        reqTableType: reqTable.type,
+        reqNumPeople: num_people ?? 1,
+        exTableId: ex.table_id,
+        exTableName: exTable.name,
+        exTableType: exTable.type,
+        exNumPeople: ex.num_people ?? 1,
+      });
+      if (conflict) {
+        return NextResponse.json(err("Conflict: that table already has a session in this window", "TABLE_TAKEN"), { status: 409 });
+      }
     }
   }
   for (const b of (existingBookings ?? [])) {
-    const tableMatches = (b.order_item as unknown as { table_id: string } | null)?.table_id === table_id;
-    if (!tableMatches) continue;
+    const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
+    if (!oi) continue;
     if (overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
-      return NextResponse.json(err("Conflict: that table already has a confirmed booking in this window", "TABLE_TAKEN"), { status: 409 });
+      const reqTable = allTables?.find((t) => t.id === table_id);
+      const exTable = allTables?.find((t) => t.id === oi.table_id);
+      if (!reqTable || !exTable) continue;
+
+      const conflict = isPs5Conflict({
+        reqTableId: table_id,
+        reqTableName: reqTable.name,
+        reqTableType: reqTable.type,
+        reqNumPeople: num_people ?? 1,
+        exTableId: oi.table_id,
+        exTableName: exTable.name,
+        exTableType: exTable.type,
+        exNumPeople: oi.num_people ?? 1,
+      });
+      if (conflict) {
+        return NextResponse.json(err("Conflict: that table already has a confirmed booking in this window", "TABLE_TAKEN"), { status: 409 });
+      }
     }
   }
 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
+import { isPs5Conflict } from "@/lib/utils";
 
 export const runtime = 'edge';
 
@@ -103,18 +104,31 @@ export async function POST(request: Request) {
   // window. Handles the race where a customer's online booking lands between
   // PanelWalkIn rendering and Start being pressed.
   const tableIds = [...new Set(items.map((i) => i.table_id))];
+
+  // Load all active tables in location to map PS5 console dependencies
+  const { data: allTables } = await admin
+    .from("tables")
+    .select("id, name, type")
+    .eq("location_id", location_id)
+    .eq("is_active", true);
+
+  const hasPs5 = allTables?.some((t) => tableIds.includes(t.id) && t.type === "ps5");
+  const queryTableIds = hasPs5
+    ? [...new Set([...tableIds, ...(allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [])])]
+    : tableIds;
+
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
-      .in("table_id", tableIds)
+      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
       .eq("status", "confirmed")
-      .in("order_items.table_id", tableIds),
+      .in("order_items.table_id", queryTableIds),
   ]);
 
   const overlaps = (aS: string, aE: string, bS: string, bE: string) =>
@@ -126,10 +140,25 @@ export async function POST(request: Request) {
     const reqE = new Date(now.getTime() + req.duration_mins * 60 * 1000).toISOString();
 
     const itemConflict = (existingItems ?? []).find((ex) => {
-      if (ex.table_id !== req.table_id) return false;
       const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
       const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
-      return exS && exE && overlaps(reqS, reqE, exS, exE);
+      const timeOverlap = exS && exE && overlaps(reqS, reqE, exS, exE);
+      if (!timeOverlap) return false;
+
+      const reqTable = allTables?.find((t) => t.id === req.table_id);
+      const exTable = allTables?.find((t) => t.id === ex.table_id);
+      if (!reqTable || !exTable) return false;
+
+      return isPs5Conflict({
+        reqTableId: req.table_id,
+        reqTableName: reqTable.name,
+        reqTableType: reqTable.type,
+        reqNumPeople: req.num_people ?? 1,
+        exTableId: ex.table_id,
+        exTableName: exTable.name,
+        exTableType: exTable.type,
+        exNumPeople: ex.num_people ?? 1,
+      });
     });
     if (itemConflict) {
       return NextResponse.json(
@@ -139,8 +168,26 @@ export async function POST(request: Request) {
     }
 
     const bookingConflict = (existingBookings ?? []).find((b) => {
-      const tableId = (b.order_item as unknown as { table_id: string } | null)?.table_id;
-      return tableId === req.table_id && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end);
+      const timeOverlap = overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end);
+      if (!timeOverlap) return false;
+
+      const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
+      if (!oi) return false;
+
+      const reqTable = allTables?.find((t) => t.id === req.table_id);
+      const exTable = allTables?.find((t) => t.id === oi.table_id);
+      if (!reqTable || !exTable) return false;
+
+      return isPs5Conflict({
+        reqTableId: req.table_id,
+        reqTableName: reqTable.name,
+        reqTableType: reqTable.type,
+        reqNumPeople: req.num_people ?? 1,
+        exTableId: oi.table_id,
+        exTableName: exTable.name,
+        exTableType: exTable.type,
+        exNumPeople: oi.num_people ?? 1,
+      });
     });
     if (bookingConflict) {
       return NextResponse.json(
