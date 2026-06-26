@@ -30,14 +30,12 @@ export async function GET(request: Request) {
       .single(),
     admin
       .from("customer_memberships")
-      .select("plan:membership_plans(discount_pct)")
+      .select("id, short_id, bound_table_ids, free_hours_ledger, plan:membership_plans(name, discount_pct, free_hrs)")
       .eq("customer_phone", phone)
       .eq("is_active", true)
       .lte("starts_at", nowIso)
       .gte("expires_at", nowIso)
-      .order("starts_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order("starts_at", { ascending: false }),
   ]);
 
   const data = profileResult.data;
@@ -61,8 +59,19 @@ export async function GET(request: Request) {
     }
   }
 
-  const mPlan = (membershipResult.data as { plan: { discount_pct: number } | { discount_pct: number }[] | null } | null)?.plan;
-  const membershipDiscountPct = Array.isArray(mPlan) ? (mPlan[0]?.discount_pct ?? 0) : (mPlan?.discount_pct ?? 0);
+  const memberships = (membershipResult.data || []).map((m: any) => ({
+    id: m.id,
+    short_id: m.short_id || "",
+    bound_table_ids: m.bound_table_ids || [],
+    free_hours_ledger: m.free_hours_ledger || {},
+    plan: m.plan ? (Array.isArray(m.plan) ? m.plan[0] : m.plan) : null,
+  }));
+
+  const primaryMembership = memberships[0] || null;
+  const membershipDiscountPct = primaryMembership?.plan?.discount_pct ?? 0;
+  const membershipId = primaryMembership?.id ?? null;
+  const boundTableIds = primaryMembership?.bound_table_ids ?? [];
+  const freeHoursLedger = primaryMembership?.free_hours_ledger ?? {};
 
   return NextResponse.json({
     found: true,
@@ -72,6 +81,10 @@ export async function GET(request: Request) {
       visit_count:             data.visit_count,
       total_spent:             data.total_spent,
       membership_discount_pct: membershipDiscountPct,
+      membership_id:           membershipId,
+      bound_table_ids:         boundTableIds,
+      free_hours_ledger:       freeHoursLedger,
+      active_memberships:      memberships,
     },
   });
 }

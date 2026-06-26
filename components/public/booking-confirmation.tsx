@@ -40,8 +40,9 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
   const totalAmount = (order?.items ?? []).reduce((sum, item) => {
     return sum + ((item.rate_per_hour ?? 0) * (item.scheduled_duration_mins ?? 0) / 60);
   }, 0);
+  const discountAmount = (order as any)?.discount_amount ?? 0;
   const advancePaid = order?.advance_paid ?? 0;
-  const amountDue   = Math.max(0, totalAmount - advancePaid);
+  const amountDue   = Math.max(0, totalAmount - discountAmount - advancePaid);
 
   if (!order) {
     return (
@@ -139,6 +140,14 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
                 ₹{totalAmount.toLocaleString("en-IN")}
               </span>
             </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-sm" style={{ color: textSec }}>
+                <span>Discount</span>
+                <span style={{ color: "#10B981", fontWeight: 600 }}>
+                  −₹{discountAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+            )}
             {advancePaid > 0 && (
               <div className="flex justify-between text-sm" style={{ color: textSec }}>
                 <span>Paid</span>
@@ -155,7 +164,7 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
                 </span>
               </div>
             )}
-            {amountDue === 0 && advancePaid > 0 && (
+            {amountDue === 0 && (advancePaid > 0 || discountAmount > 0) && (
               <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
                 <span>Fully paid</span>
                 <span>✓</span>

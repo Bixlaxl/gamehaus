@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, memo } from "react";
+import { useState, useRef, memo, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
@@ -93,12 +93,28 @@ function PanelWalkIn({
   const [durationInput, setDurationInput] = useState("60"); // raw string so it can be erased
   // People / controller count — keys into table.people_pricing. When set,
   // overrides table.hourly_rate with the tier rate.
-  const peopleOptions = table.people_pricing
-    ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b))
-    : [];
+  const peopleOptions = useMemo(() => {
+    if (table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
+      const dbKeys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+      return dbKeys.length > 0 ? dbKeys : ["1", "2"];
+    }
+    if (!table.people_pricing) return [];
+    return Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b));
+  }, [table]);
   const peopleLabel   = table.type === "ps5" ? "controller" : "player";
   const [numPeople,   setNumPeople]   = useState<string | null>(null);
-  const effectiveRate = (numPeople && table.people_pricing?.[numPeople]) || table.hourly_rate;
+  const effectiveRate = (() => {
+    if (numPeople && table.people_pricing?.[numPeople]) {
+      return table.people_pricing[numPeople];
+    }
+    if (table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
+      if (numPeople === "2") {
+        return table.hourly_rate * 2;
+      }
+      return table.hourly_rate;
+    }
+    return table.hourly_rate;
+  })();
   const [loading,       setLoading]       = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const [customer,      setCustomer]      = useState<CustomerLookup | null>(null);
@@ -319,6 +335,7 @@ function PanelWalkIn({
       created_at:       nowIso,
       finalized_at:     null,
       coupon_id:        null,
+      membership_id:    null,
       advance_paid:     0,
       points_redeemed:  0,
       subtotal:         0,
@@ -528,7 +545,7 @@ function PanelWalkIn({
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
-              {peopleOptions.map((n) => {
+              {peopleOptions.map((n: string) => {
                 const selected = numPeople === n;
                 return (
                   <button
@@ -671,10 +688,16 @@ function PeoplePicker({
   const qc = useQueryClient();
   const [saving, setSaving] = useState<number | null>(null);
 
-  const pricing  = (item.table?.people_pricing ?? {}) as Record<string, number>;
-  const options  = Object.keys(pricing).sort((a, b) => Number(a) - Number(b));
-  if (options.length === 0) return null;
   const isSimulator = item.table?.type === "ps5" && item.table?.name.toLowerCase().includes("simulator");
+  const pricing = useMemo(() => (item.table?.people_pricing ?? {}) as Record<string, number>, [item.table?.people_pricing]);
+  const options  = useMemo(() => {
+    const dbKeys = Object.keys(pricing).sort((a, b) => Number(a) - Number(b));
+    if (dbKeys.length === 0 && isSimulator) {
+      return ["1", "2"];
+    }
+    return dbKeys;
+  }, [pricing, isSimulator]);
+  if (options.length === 0) return null;
   const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
   const current  = item.num_people ?? null;
   const baseRate = item.table?.hourly_rate ?? item.rate_per_hour;
@@ -682,7 +705,10 @@ function PeoplePicker({
   async function pick(n: number) {
     if (saving) return;
     const prev = { num_people: item.num_people, rate_per_hour: item.rate_per_hour };
-    const newRate = pricing[String(n)] ?? baseRate;
+    let newRate = pricing[String(n)] ?? baseRate;
+    if (isSimulator && !pricing[String(n)] && n === 2) {
+      newRate = baseRate * 2;
+    }
     setSaving(n);
     patchOrderItem(item.id, { num_people: n, rate_per_hour: newRate });
     const res = await fetch("/api/sessions/people", {
@@ -706,7 +732,7 @@ function PeoplePicker({
         {label}s
       </span>
       <div className="flex gap-1 flex-wrap justify-end">
-        {options.map((n, idx) => {
+        {options.map((n: string, idx: number) => {
           const num = Number(n);
           let selected = current === num;
           let labelText = n;
@@ -727,7 +753,7 @@ function PeoplePicker({
                   : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
               }`}
               style={selected ? { background: "#D4541A" } : {}}
-              title={`₹${pricing[n] ?? baseRate}/hr`}
+              title={`₹${pricing[n] ?? (isSimulator && n === "2" ? baseRate * 2 : baseRate)}/hr`}
             >
               {saving === num ? "…" : labelText}
             </button>
@@ -1185,8 +1211,8 @@ function PanelSession({
               {/* Players / controllers — only when the table has tiered pricing
                   AND the session is still adjustable (not yet finalized). */}
               {(item.status === "running" || item.status === "scheduled") &&
-                item.table?.people_pricing &&
-                Object.keys(item.table.people_pricing).length > 0 && (
+                ((item.table?.people_pricing && Object.keys(item.table.people_pricing).length > 0) ||
+                 (item.table?.type === "ps5" && item.table?.name.toLowerCase().includes("simulator"))) && (
                   <PeoplePicker item={item} locationId={locationId} />
               )}
 

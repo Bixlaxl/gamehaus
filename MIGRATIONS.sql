@@ -197,3 +197,31 @@ ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_urls text[] NOT NULL DEFAUL
 -- Uses subquery-free SELECT filters for staff to enable Supabase Realtime broadcast.
 -- WRITE operations (INSERT, UPDATE, DELETE) remain securely location-validated.
 
+
+-- ============================================================
+-- MULTI-ASSET FREE HOURS MEMBERSHIP (009_membership_multi_asset.sql)
+-- ============================================================
+ALTER TABLE customer_memberships
+  ADD COLUMN IF NOT EXISTS bound_table_ids UUID[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS free_hours_ledger JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS membership_id UUID REFERENCES customer_memberships(id) ON DELETE SET NULL;
+
+
+-- ============================================================
+-- TEMPLATE MEMBERSHIP PLAN BOUNDS (010_membership_plan_bounds.sql)
+-- ============================================================
+ALTER TABLE membership_plans
+  ADD COLUMN IF NOT EXISTS bound_table_ids UUID[] NOT NULL DEFAULT '{}';
+
+
+-- ============================================================
+-- SHORT MEMBERSHIP ID COLUMN (011_membership_short_id.sql)
+-- ============================================================
+ALTER TABLE customer_memberships
+  ADD COLUMN IF NOT EXISTS short_id TEXT UNIQUE;
+
+ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS free_hours_to_redeem NUMERIC;
+

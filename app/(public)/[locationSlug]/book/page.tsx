@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
@@ -17,6 +17,17 @@ interface CustomerLookup {
   name: string | null;
   points_balance: number;
   visit_count: number;
+  membership_discount_pct: number;
+  membership_id: string | null;
+  bound_table_ids: string[];
+  free_hours_ledger: Record<string, number>;
+  active_memberships?: Array<{
+    id: string;
+    short_id: string;
+    bound_table_ids: string[];
+    free_hours_ledger: Record<string, number>;
+    plan: { name: string; discount_pct: number; free_hrs: number } | null;
+  }>;
 }
 
 type CouponState =
@@ -101,6 +112,12 @@ export default function CheckoutPage() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [customer, setCustomer]       = useState<CustomerLookup | null>(null);
+  const [membershipIdInput, setMembershipIdInput] = useState("");
+  const [validatedMembership, setValidatedMembership] = useState<any | null>(null);
+  const [dismissedMembership, setDismissedMembership] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [redeemHoursInput, setRedeemHoursInput] = useState<number>(0);
+  const [showValidationPopup, setShowValidationPopup] = useState(false);
   // When the typed name doesn't match the name stored against this phone,
   // we show the same Use existing / Update name choice the staff sees.
   const [nameMismatchOnline, setNameMismatchOnline] = useState<{ stored: string; entered: string } | null>(null);
@@ -265,15 +282,145 @@ export default function CheckoutPage() {
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
   const baseAfterCoupon   = Math.max(0, baseAmount - effectiveDiscount);
+
+  const boundMembershipForCart = useMemo(() => {
+    if (!customer?.active_memberships) return null;
+    return customer.active_memberships.find(m => {
+      const hasFreeHours = Number(m.plan?.free_hrs || 0) > 0;
+      const boundItemInCart = cart.items.find(item => m.bound_table_ids?.includes(item.tableId));
+      if (!boundItemInCart) return false;
+      const tableType = boundItemInCart.tableType || "";
+      const remainingFreeHrs = Number(m.free_hours_ledger?.[tableType] || 0);
+      return hasFreeHours && remainingFreeHrs > 0;
+    });
+  }, [customer, cart.items]);
+
+  useEffect(() => {
+    if (boundMembershipForCart && !validatedMembership && !dismissedMembership) {
+      setShowValidationPopup(true);
+    } else {
+      setShowValidationPopup(false);
+    }
+  }, [boundMembershipForCart, validatedMembership, dismissedMembership]);
+
+  useEffect(() => {
+    setValidatedMembership(null);
+    setDismissedMembership(false);
+    setValidationError(null);
+    setMembershipIdInput("");
+    setRedeemHoursInput(0);
+    setShowValidationPopup(false);
+  }, [phone]);
+
+  function handleValidateMembership() {
+    if (!customer?.active_memberships) return;
+    const input = membershipIdInput.trim().toUpperCase();
+    
+    const matched = customer.active_memberships.find(m => {
+      const hasFreeHours = Number(m.plan?.free_hrs || 0) > 0;
+      const boundItemInCart = cart.items.find(item => m.bound_table_ids?.includes(item.tableId));
+      if (!boundItemInCart) return false;
+      const tableType = boundItemInCart.tableType || "";
+      const remainingFreeHrs = Number(m.free_hours_ledger?.[tableType] || 0);
+      
+      const target = (m.short_id || "").trim().toUpperCase();
+      return hasFreeHours && remainingFreeHrs > 0 && input && target && input === target;
+    });
+
+    if (matched) {
+      setValidatedMembership(matched);
+      setValidationError(null);
+      setShowValidationPopup(false);
+      
+      const boundItem = cart.items.find(item => matched.bound_table_ids?.includes(item.tableId));
+      if (boundItem) {
+        const tableType = boundItem.tableType || "";
+        const availableFreeHrs = Number(matched.free_hours_ledger?.[tableType] || 0);
+        const durationHrs = boundItem.durationMins / 60;
+        setRedeemHoursInput(Math.min(durationHrs, availableFreeHrs));
+      }
+    } else {
+      setValidationError("Incorrect Membership ID. Please try again or close this window.");
+      setMembershipIdInput("");
+    }
+  }
+
+  const hasBoundAssetInCart = !!(
+    customer &&
+    cart.items.some(item => {
+      if (validatedMembership) {
+        return validatedMembership.bound_table_ids?.includes(item.tableId);
+      }
+      return customer.bound_table_ids?.includes(item.tableId);
+    })
+  );
+
+  const hasGlobalDiscount = !!(customer && customer.membership_discount_pct > 0);
+
+  const isMembershipValid = !!(
+    customer &&
+    (validatedMembership || hasGlobalDiscount)
+  );
+
+  let freeHoursDiscount = 0;
+  let clientUpdatedLedger: Record<string, number> = customer ? { ...(customer.free_hours_ledger || {}) } : {};
+  const appliedLedgerDeductions: Record<string, number> = {};
+
+  if (isMembershipValid && customer && validatedMembership) {
+    for (const item of cart.items) {
+      const isBound = validatedMembership.bound_table_ids?.includes(item.tableId);
+      if (!isBound) continue;
+      
+      const durationHrs = item.durationMins / 60;
+      const tableType = item.tableType || "";
+      const remainingFreeHrs = Number(clientUpdatedLedger[tableType]) || 0;
+      
+      if (remainingFreeHrs > 0) {
+        const hoursToRedeem = Math.min(redeemHoursInput, durationHrs, remainingFreeHrs);
+        const discountForThisItem = hoursToRedeem * item.ratePerHour;
+        freeHoursDiscount += discountForThisItem;
+        
+        clientUpdatedLedger[tableType] = Math.max(0, remainingFreeHrs - hoursToRedeem);
+        appliedLedgerDeductions[tableType] = (appliedLedgerDeductions[tableType] || 0) + hoursToRedeem;
+      }
+    }
+  }
+
+  const maxRedeemableHrs = useMemo(() => {
+    if (!validatedMembership) return 0;
+    const boundItem = cart.items.find(item => validatedMembership.bound_table_ids?.includes(item.tableId));
+    if (!boundItem) return 0;
+    const tableType = boundItem.tableType || "";
+    const availableFreeHrs = Number(validatedMembership.free_hours_ledger?.[tableType] || 0);
+    const durationHrs = boundItem.durationMins / 60;
+    return Math.min(durationHrs, availableFreeHrs);
+  }, [validatedMembership, cart.items]);
+
+  const hoursOptions = useMemo(() => {
+    const opts = [];
+    for (let h = 0.5; h <= maxRedeemableHrs; h += 0.5) {
+      opts.push(h);
+    }
+    return opts;
+  }, [maxRedeemableHrs]);
+
+  const baseAfterFreeHours = Math.max(0, baseAfterCoupon - freeHoursDiscount);
+  const membershipPctDiscount = isMembershipValid && customer?.membership_discount_pct
+    ? Math.floor(baseAfterFreeHours * customer.membership_discount_pct / 100)
+    : 0;
+  const totalMembershipDiscount = freeHoursDiscount + membershipPctDiscount;
+  const baseAfterMembership = Math.max(0, baseAfterCoupon - totalMembershipDiscount);
+
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
-  const maxRedeem     = Math.min(customer?.points_balance ?? 0, Math.floor(baseAfterCoupon));
+  const maxRedeem     = Math.min(customer?.points_balance ?? 0, Math.floor(baseAfterMembership));
   // Minimum 100 points required to redeem; any input below 100 is treated as 0
   const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
-  const amountToPay   = Math.max(0, baseAfterCoupon - clampedRedeem);
+  const amountToPay   = Math.max(0, baseAfterMembership - clampedRedeem);
 
   function triggerLookup(currentPhone: string, currentName: string) {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
     setCustomer(null);
+    setMembershipIdInput("");
     setRedeemInput("0");
     setNameMismatchOnline(null);
     // Both a valid Indian mobile number and name are required for lookup on the public site
@@ -356,16 +503,21 @@ export default function CheckoutPage() {
         type:            "online",
         customer_name:   name.trim(),
         customer_phone:  phone.trim(),
+        membership_id:   isMembershipValid ? (validatedMembership?.id ?? customer.membership_id) : undefined,
         points_redeemed: clampedRedeem,
         payment_mode:    paymentMode,
-        items: cart.items.map(i => ({
-          table_id:               i.tableId,
-          scheduled_start:        i.scheduledStart,
-          scheduled_end:          i.scheduledEnd,
-          scheduled_duration_mins: i.durationMins,
-          rate_per_hour:          i.ratePerHour,
-          num_people:             i.numPeople,
-        })),
+        items: cart.items.map(i => {
+          const isBound = validatedMembership?.bound_table_ids?.includes(i.tableId);
+          return {
+            table_id:               i.tableId,
+            scheduled_start:        i.scheduledStart,
+            scheduled_end:          i.scheduledEnd,
+            scheduled_duration_mins: i.durationMins,
+            rate_per_hour:          i.ratePerHour,
+            num_people:             i.numPeople,
+            free_hours_to_redeem:   isBound ? redeemHoursInput : undefined,
+          };
+        }),
         coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
       }),
     });
@@ -382,6 +534,35 @@ export default function CheckoutPage() {
     }
 
     const { order_id } = orderBody.data;
+
+    if (amountToPay === 0) {
+      try {
+        const finRes = await fetch(`/api/orders/${order_id}/finalize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payments: [],
+            coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
+            points_redeemed: clampedRedeem,
+            customer_phone: phone.trim(),
+          }),
+        });
+        const finBody = await finRes.json();
+        if (!finBody.success) {
+          setError(finBody.error || "Failed to finalize order");
+          setLoading(false);
+          submitting.current = false;
+          return;
+        }
+        cart.clearCart();
+        router.push(`/booking/${order_id}`);
+      } catch (err: any) {
+        setError(err?.message || "Failed to complete checkout. Please try again.");
+        setLoading(false);
+        submitting.current = false;
+      }
+      return;
+    }
 
     // Warm up the confirmation page while Razorpay does its thing. By the
     // time the customer actually completes payment (anywhere from 5 to
@@ -472,6 +653,75 @@ export default function CheckoutPage() {
             setNameMismatchOnline(null);
           }}
         />
+      )}
+      {showValidationPopup && boundMembershipForCart && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div
+            className="w-full max-w-md rounded-2xl p-6 border shadow-2xl space-y-4"
+            style={{
+              background: dark ? "rgba(17,17,17,0.9)" : "rgba(255,255,255,0.95)",
+              borderColor: border,
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-100 dark:bg-purple-950/50">
+                <Star className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white" style={{ color: textPri }}>Redeem Free Hours</h3>
+                <p className="text-xs text-gray-500" style={{ color: textSec }}>Membership plan detected for your number</p>
+              </div>
+            </div>
+
+            <p className="text-sm leading-relaxed" style={{ color: textSec }}>
+              You have an active <span className="font-semibold text-purple-600 dark:text-purple-400" style={{ color: "#A855F7" }}>{boundMembershipForCart.plan?.name}</span> plan with remaining free hours on this table asset. Enter your Membership ID to unlock and redeem your free credits.
+            </p>
+
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Enter Membership ID (e.g. SNK782)"
+                value={membershipIdInput}
+                onChange={(e) => {
+                  setMembershipIdInput(e.target.value);
+                  setValidationError(null);
+                }}
+                className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none transition-all uppercase tracking-wider"
+                style={{
+                  background: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.02)",
+                  border: `1.5px solid ${validationError ? "#EF4444" : "#D4541A"}`,
+                  color: textPri,
+                }}
+                autoFocus
+              />
+              {validationError && (
+                <p className="text-xs font-semibold text-red-500">{validationError}</p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDismissedMembership(true);
+                  setShowValidationPopup(false);
+                }}
+                className="flex-1 py-3 rounded-xl font-bold text-sm text-gray-700 dark:text-[#ccc] bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 transition-all active:scale-[0.98]"
+              >
+                No, Thanks
+              </button>
+              <button
+                type="button"
+                onClick={handleValidateMembership}
+                className="flex-1 py-3 rounded-xl font-bold text-sm text-white transition-all active:scale-[0.98]"
+                style={{ background: "#D4541A" }}
+              >
+                Validate ID
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <div className="min-h-screen" style={{ background: bg }}>
 
@@ -649,7 +899,7 @@ export default function CheckoutPage() {
                 {lookingUp && (
                   <p className="text-xs mt-1.5" style={{ color: textMut }}>Looking up...</p>
                 )}
-                {!lookingUp && customer && (
+                 {!lookingUp && customer && (
                   <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
                     <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#F59E0B" }} />
@@ -683,6 +933,79 @@ export default function CheckoutPage() {
                       {redeemPoints > 0 && redeemPoints < 100 && (
                         <span style={{ color: "#EF4444" }}> — enter 100 or more</span>
                       )}
+                    </p>
+                  </div>
+                )}
+                {/* Membership validation */}
+                {!lookingUp && customer && validatedMembership && (
+                  <div className="mt-4 space-y-4 p-5 rounded-xl border" style={{ background: inputBg, borderColor: "#10B981" }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-sm font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
+                          Membership Applied ({validatedMembership.short_id})
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setValidatedMembership(null);
+                          setRedeemHoursInput(0);
+                        }}
+                        className="text-xs font-semibold text-red-500 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Plan: <span className="font-semibold text-gray-900 dark:text-white">{validatedMembership.plan?.name}</span>
+                      </p>
+                      {validatedMembership.plan?.discount_pct > 0 && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          Perks: <span className="font-semibold text-purple-600 dark:text-purple-400">{validatedMembership.plan.discount_pct}% Off</span> on remaining charges.
+                        </p>
+                      )}
+                    </div>
+
+                    {maxRedeemableHrs > 0 && (
+                      <div className="space-y-2 border-t pt-3" style={{ borderColor: border }}>
+                        <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest" style={{ color: textMut }}>
+                          Select Free Hours to Redeem
+                        </label>
+                        <div className="flex flex-col gap-2">
+                          <select
+                            value={redeemHoursInput}
+                            onChange={(e) => setRedeemHoursInput(parseFloat(e.target.value))}
+                            className="w-full px-3 py-2 rounded-xl text-sm font-semibold outline-none"
+                            style={{ background: surface, border: `1.5px solid ${inputBdr}`, color: textPri }}
+                          >
+                            <option value={0}>0 hours (Do not redeem)</option>
+                            {hoursOptions.map((h: number) => (
+                              <option key={h} value={h}>
+                                {h} {h === 1 ? "hour" : "hours"}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-xs text-gray-500">
+                            Available free hours: {maxRedeemableHrs} hrs max
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!lookingUp && customer && hasGlobalDiscount && !validatedMembership && (
+                  <div className="mt-4 p-4 rounded-xl border" style={{ background: inputBg, borderColor: "#10B981" }}>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-sm font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
+                        Automated Discount Applied
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {customer.membership_discount_pct}% Off global percentage discount applied automatically matching your phone number.
                     </p>
                   </div>
                 )}
@@ -919,6 +1242,32 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
                   <span>Coupon ({couponState.code})</span>
                   <span>-{formatCurrency(effectiveDiscount)}</span>
+                </div>
+              )}
+              {isMembershipValid && totalMembershipDiscount > 0 && (
+                <div className="space-y-1.5">
+                  {freeHoursDiscount > 0 && (
+                    <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
+                      <span>Free Hours Discount</span>
+                      <span>-{formatCurrency(freeHoursDiscount)}</span>
+                    </div>
+                  )}
+                  {membershipPctDiscount > 0 && (
+                    <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
+                      <span>Membership ({customer.membership_discount_pct}% Off)</span>
+                      <span>-{formatCurrency(membershipPctDiscount)}</span>
+                    </div>
+                  )}
+                  <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#10B981" }}>
+                    {Object.entries(appliedLedgerDeductions).map(([type, hrs]) => {
+                      const rem = clientUpdatedLedger[type] !== undefined ? clientUpdatedLedger[type] : 0;
+                      return (
+                        <p key={type} className="text-xs font-semibold" style={{ color: "#10B981" }}>
+                          Redeemed {hrs} {hrs === 1 ? 'hr' : 'hrs'} for {type.toUpperCase()} ({rem} hrs remaining)
+                        </p>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               {clampedRedeem > 0 && (

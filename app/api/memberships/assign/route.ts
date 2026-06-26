@@ -33,12 +33,47 @@ export async function POST(request: Request) {
   const expiresAt = new Date(startsAt);
   expiresAt.setDate(expiresAt.getDate() + plan.duration_days);
 
-  // Deactivate any existing active memberships for this customer
-  await admin
-    .from("customer_memberships")
-    .update({ is_active: false })
-    .eq("customer_phone", customer_phone)
-    .eq("is_active", true);
+  // Generate unique short_id
+  let shortId = "";
+  let isUnique = false;
+  let attempts = 0;
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  while (!isUnique && attempts < 10) {
+    attempts++;
+    let candidate = "";
+    for (let i = 0; i < 6; i++) {
+      candidate += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const { data: existing } = await admin
+      .from("customer_memberships")
+      .select("id")
+      .eq("short_id", candidate)
+      .maybeSingle();
+    if (!existing) {
+      shortId = candidate;
+      isUnique = true;
+    }
+  }
+  if (!shortId) {
+    for (let i = 0; i < 6; i++) {
+      shortId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  }
+
+  // Query the table types to initialize the free hours ledger
+  let initialLedger: Record<string, number> = {};
+  if (plan.bound_table_ids && plan.bound_table_ids.length > 0) {
+    const { data: tables } = await admin
+      .from("tables")
+      .select("id, type")
+      .in("id", plan.bound_table_ids);
+    
+    if (tables && tables.length > 0) {
+      tables.forEach((t) => {
+        initialLedger[t.type] = Number(plan.free_hrs) || 0;
+      });
+    }
+  }
 
   const { data, error } = await admin
     .from("customer_memberships")
@@ -47,6 +82,9 @@ export async function POST(request: Request) {
       plan_id,
       starts_at:  startsAt.toISOString(),
       expires_at: expiresAt.toISOString(),
+      bound_table_ids: plan.bound_table_ids ?? [],
+      free_hours_ledger: initialLedger,
+      short_id: shortId,
     })
     .select(`*, plan:membership_plans(*)`)
     .single();

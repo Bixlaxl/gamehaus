@@ -80,6 +80,7 @@ export const createOrderSchema = z.object({
   type: z.enum(["online", "walk_in"]),
   customer_name: z.string().min(1),
   customer_phone: z.string().optional(),
+  membership_id: z.string().uuid().optional(),
   // 0 means no redemption; any value 1–99 is invalid (minimum redemption is 100 pts)
   points_redeemed: z.number().int().min(0)
     .refine((v) => v === 0 || v >= 100, { message: "Minimum 100 points required to redeem" })
@@ -95,6 +96,7 @@ export const createOrderSchema = z.object({
       scheduled_duration_mins: z.number().int().positive().optional(),
       rate_per_hour: z.number().positive(),
       num_people: z.number().int().positive().max(20).optional(),
+      free_hours_to_redeem: z.number().nonnegative().optional(),
     })
   ),
 });
@@ -166,6 +168,7 @@ export const membershipPlanSchema = z.object({
   duration_days: z.number().int().positive(),
   discount_pct: z.number().min(0).max(100).default(0),
   free_hrs: z.number().min(0).default(0),
+  bound_table_ids: z.array(z.string().uuid()).optional().default([]),
 });
 
 export const updateMembershipPlanSchema = membershipPlanSchema.partial();

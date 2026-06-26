@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   const { data: table, error: tableErr } = await admin
     .from("tables")
-    .select("hourly_rate, people_pricing")
+    .select("name, type, hourly_rate, people_pricing")
     .eq("id", item.table_id)
     .single();
 
@@ -52,11 +52,16 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });
   }
 
+  const isSimulator = table.type === "ps5" && table.name.toLowerCase().includes("simulator");
   const pp = (table.people_pricing ?? {}) as Record<string, number>;
   const tieredRate = pp[String(num_people)];
-  const newRate = typeof tieredRate === "number" && tieredRate > 0
+  let newRate = typeof tieredRate === "number" && tieredRate > 0
     ? tieredRate
     : table.hourly_rate;
+
+  if (isSimulator && !pp[String(num_people)] && num_people === 2) {
+    newRate = table.hourly_rate * 2;
+  }
 
   const { error: updateErr } = await admin
     .from("order_items")

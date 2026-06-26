@@ -216,6 +216,7 @@ export interface Database {
           created_by: string | null;
           created_at: string;
           finalized_at: string | null;
+          membership_id: string | null;
         };
         Insert: {
           id?: string;
@@ -234,6 +235,7 @@ export interface Database {
           created_by?: string | null;
           created_at?: string;
           finalized_at?: string | null;
+          membership_id?: string | null;
         };
         Update: {
           id?: string;
@@ -252,6 +254,7 @@ export interface Database {
           created_by?: string | null;
           created_at?: string;
           finalized_at?: string | null;
+          membership_id?: string | null;
         };
         Relationships: [
           {
@@ -274,6 +277,13 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "users";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_membership_id_fkey";
+            columns: ["membership_id"];
+            isOneToOne: false;
+            referencedRelation: "customer_memberships";
+            referencedColumns: ["id"];
           }
         ];
       };
@@ -292,10 +302,11 @@ export interface Database {
           extended_mins: number;
           rate_per_hour: number;
           final_amount: number | null;
-          num_people: number | null;
+           num_people: number | null;
           is_deleted: boolean;
           deleted_at: string | null;
           created_at: string;
+          free_hours_to_redeem?: number | null;
         };
         Insert: {
           id?: string;
@@ -315,6 +326,7 @@ export interface Database {
           is_deleted?: boolean;
           deleted_at?: string | null;
           created_at?: string;
+          free_hours_to_redeem?: number | null;
         };
         Update: {
           id?: string;
@@ -334,6 +346,7 @@ export interface Database {
           is_deleted?: boolean;
           deleted_at?: string | null;
           created_at?: string;
+          free_hours_to_redeem?: number | null;
         };
         Relationships: [
           {
@@ -736,6 +749,7 @@ export interface Database {
           free_hrs: number;
           is_active: boolean;
           created_at: string;
+          bound_table_ids: string[];
         };
         Insert: {
           id?: string;
@@ -746,6 +760,7 @@ export interface Database {
           free_hrs?: number;
           is_active?: boolean;
           created_at?: string;
+          bound_table_ids?: string[];
         };
         Update: {
           id?: string;
@@ -756,6 +771,7 @@ export interface Database {
           free_hrs?: number;
           is_active?: boolean;
           created_at?: string;
+          bound_table_ids?: string[];
         };
         Relationships: [];
       };
@@ -769,6 +785,9 @@ export interface Database {
           free_hrs_used: number;
           is_active: boolean;
           created_at: string;
+          bound_table_ids: string[];
+          free_hours_ledger: Json;
+          short_id: string | null;
         };
         Insert: {
           id?: string;
@@ -779,6 +798,9 @@ export interface Database {
           free_hrs_used?: number;
           is_active?: boolean;
           created_at?: string;
+          bound_table_ids?: string[];
+          free_hours_ledger?: Json;
+          short_id?: string | null;
         };
         Update: {
           id?: string;
@@ -789,6 +811,9 @@ export interface Database {
           free_hrs_used?: number;
           is_active?: boolean;
           created_at?: string;
+          bound_table_ids?: string[];
+          free_hours_ledger?: Json;
+          short_id?: string | null;
         };
         Relationships: [
           {

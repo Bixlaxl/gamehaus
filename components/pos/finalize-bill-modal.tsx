@@ -83,7 +83,14 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   // bill.totalDue (which already absorbs the advance) and BEFORE points
   // redemption. Floor matches Math.floor in /api/orders/[id]/finalize.
   const membershipPct      = customerInfo?.membership_discount_pct ?? 0;
-  const membershipDiscount = membershipPct > 0 ? Math.floor(bill.totalDue * membershipPct / 100) : 0;
+  // Calculate remaining session due only (excluding extras)
+  const sessionTotal = bill.tableLines.reduce((sum, l) => sum + l.amount, 0);
+  const scheduledSubtotal = bill.tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0);
+  const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
+  const netSessionDue = bill.advancePaid > 0
+    ? Math.max(0, scheduledSubtotal - bill.advancePaid) + overtimeTotal
+    : sessionTotal;
+  const membershipDiscount = membershipPct > 0 ? Math.floor(netSessionDue * membershipPct / 100) : 0;
   const billAfterMembership = Math.max(0, bill.totalDue - membershipDiscount);
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
   // Minimum 100 points required to redeem; any input below 100 is treated as 0

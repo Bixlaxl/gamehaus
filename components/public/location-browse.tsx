@@ -237,15 +237,26 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
   /* People/controller pricing options for the current booking */
   const pricingOptions = useMemo(() => {
-    if (!booking?.people_pricing) return [];
+    if (!booking) return [];
+    if (booking.type === "ps5" && booking.name.toLowerCase().includes("simulator")) {
+      const dbKeys = booking.people_pricing ? Object.keys(booking.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+      return dbKeys.length > 0 ? dbKeys : ["1", "2"];
+    }
+    if (!booking.people_pricing) return [];
     return Object.keys(booking.people_pricing).sort((a, b) => Number(a) - Number(b));
   }, [booking]);
 
   /* Effective hourly rate — uses people_pricing if a count is selected, else flat rate */
   const effectiveRate = (() => {
     if (!booking) return 0;
-    if (numPeople && booking.people_pricing?.[numPeople]) {
+    if (numPeople && booking.people_pricing && booking.people_pricing[numPeople]) {
       return booking.people_pricing[numPeople];
+    }
+    if (booking.type === "ps5" && booking.name.toLowerCase().includes("simulator")) {
+      if (numPeople === "2") {
+        return booking.hourly_rate * 2;
+      }
+      return booking.hourly_rate;
     }
     return booking.hourly_rate;
   })();
@@ -318,7 +329,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     setSelected([]);
     setStep("when");
     // Default people selection to smallest group size if pricing exists
-    const keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+    let keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+    if (keys.length === 0 && table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
+      keys = ["1", "2"];
+    }
     setNumPeople(keys[0] ?? null);
     // blockedRanges hydration is owned by the slot-loading effect — it runs
     // synchronously after this setBooking() and pulls from initialSlots if
@@ -390,7 +404,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       closeSheet();
       return;
     }
-    const rate: number = (numPeople && t.people_pricing?.[numPeople]) || t.hourly_rate;
+    let rate: number = (numPeople && t.people_pricing && t.people_pricing[numPeople]) || t.hourly_rate;
+    if (t.type === "ps5" && t.name.toLowerCase().includes("simulator")) {
+      if (!numPeople || !t.people_pricing || !t.people_pricing[numPeople]) {
+        rate = numPeople === "2" ? t.hourly_rate * 2 : t.hourly_rate;
+      }
+    }
     cart.addItem({
       tableId: t.id, tableName: t.name, tableType: t.type,
       ratePerHour: rate,
@@ -584,6 +603,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                           return lo === hi
                             ? `${formatCurrency(lo)}/hr`
                             : `${formatCurrency(lo)}–${formatCurrency(hi)}/hr`;
+                        }
+                        if (table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
+                          return `${formatCurrency(table.hourly_rate)}–${formatCurrency(table.hourly_rate * 2)}/hr`;
                         }
                         return `${formatCurrency(table.hourly_rate)}/hr`;
                       })()}
@@ -916,7 +938,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                             }
 
                             const is2PaxDisabled = isSimulator && n === "2" && isOtherConsoleOccupied;
-                            const rate   = booking.people_pricing?.[n] ?? 0;
+                            const rate   = booking.people_pricing?.[n] ?? (isSimulator && n === "2" ? booking.hourly_rate * 2 : booking.hourly_rate);
                             const total  = formatCurrency((selMins / 60) * rate);
                             return (
                               <button

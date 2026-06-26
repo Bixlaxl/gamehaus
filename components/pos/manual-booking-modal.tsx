@@ -77,18 +77,33 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     return base;
   }, [isSimulator]);
   // Default-pick num_people to the table's smallest tier if it has tiered pricing
-  const peopleOptions = chosenTable?.people_pricing
-    ? Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b))
-    : [];
+  const peopleOptions = useMemo(() => {
+    if (chosenTable?.type === "ps5" && chosenTable?.name.toLowerCase().includes("simulator")) {
+      const dbKeys = chosenTable.people_pricing ? Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+      return dbKeys.length > 0 ? dbKeys : ["1", "2"];
+    }
+    if (!chosenTable?.people_pricing) return [];
+    return Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b));
+  }, [chosenTable]);
   const [numPeople, setNumPeople] = useState<string | null>(null);
   useEffect(() => {
     setNumPeople(peopleOptions[0] ?? null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableId]);
+  }, [tableId, peopleOptions]);
 
-  const effectiveRate = chosenTable
-    ? ((numPeople && chosenTable.people_pricing?.[numPeople]) || chosenTable.hourly_rate)
-    : 0;
+  const effectiveRate = (() => {
+    if (!chosenTable) return 0;
+    if (numPeople && chosenTable.people_pricing?.[numPeople]) {
+      return chosenTable.people_pricing[numPeople];
+    }
+    if (chosenTable.type === "ps5" && chosenTable.name.toLowerCase().includes("simulator")) {
+      if (numPeople === "2") {
+        return chosenTable.hourly_rate * 2;
+      }
+      return chosenTable.hourly_rate;
+    }
+    return chosenTable.hourly_rate;
+  })();
   const estimatedTotal = Math.round((duration / 60) * effectiveRate);
 
   // Build the ISO strings the server expects (IST local time → ISO with offset)
@@ -201,7 +216,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                     active = numPeople !== null && Number(numPeople) <= num;
                   }
 
-                  const rate   = chosenTable!.people_pricing?.[n] ?? 0;
+                  const rate   = chosenTable!.people_pricing?.[n] ?? (isSimulator && n === "2" ? chosenTable!.hourly_rate * 2 : chosenTable!.hourly_rate);
                   return (
                     <button
                       key={n}

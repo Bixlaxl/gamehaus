@@ -8,7 +8,7 @@ export default async function MembershipsPage() {
   const admin = createAdminClient();
   const now   = new Date().toISOString();
 
-  const [{ data: plans }, { data: assignments }] = await Promise.all([
+  const [{ data: plans }, { data: assignments }, { data: tables }] = await Promise.all([
     admin.from("membership_plans").select("*").order("price"),
     admin
       .from("customer_memberships")
@@ -17,12 +17,18 @@ export default async function MembershipsPage() {
       .gte("expires_at", now)
       .order("created_at", { ascending: false })
       .limit(50),
+    admin
+      .from("tables")
+      .select(`id, name, type, location:locations(name)`)
+      .eq("is_active", true)
+      .order("name"),
   ]);
 
   return (
     <MembershipsContent
       initialPlans={plans ?? []}
-      initialAssignments={assignments ?? []}
+      initialAssignments={assignments as any ?? []}
+      tables={tables as any ?? []}
     />
   );
 }

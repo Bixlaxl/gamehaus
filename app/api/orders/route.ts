@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { location_id, type, customer_name, customer_phone, items, points_redeemed, coupon_code, payment_mode } = parsed.data;
+  const { location_id, type, customer_name, customer_phone, membership_id, items, points_redeemed, coupon_code, payment_mode } = parsed.data;
 
   // Online orders: public customers aren't logged in, use admin client
   // Walk-in orders: require staff authentication
@@ -198,6 +198,7 @@ export async function POST(request: Request) {
       type,
       customer_name,
       customer_phone:  customer_phone ?? null,
+      membership_id:   membership_id ?? null,
       points_redeemed: points_redeemed ?? 0,
       coupon_id:       resolvedCouponId,
       subtotal:        roundedSubtotal > 0 ? roundedSubtotal : null,
@@ -224,6 +225,7 @@ export async function POST(request: Request) {
         scheduled_duration_mins: item.scheduled_duration_mins ?? null,
         rate_per_hour: item.rate_per_hour,
         num_people:    item.num_people ?? null,
+        free_hours_to_redeem: item.free_hours_to_redeem ?? null,
       }))
     )
     .select("id, table_id, scheduled_start, scheduled_end");
