@@ -133,6 +133,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const [numPeople, setNumPeople]     = useState<string | null>(null); // key into people_pricing
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
   const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
+  const [otherConsoleBlocked, setOtherConsoleBlocked] = useState<{ start: string; end: string }[]>([]);
   const [slotsLoading,  setSlotsLoading] = useState(false);
   // Bump this whenever a realtime DB event invalidates the slot data.
   // Used as a dependency on the slot-loading effect so the next fetch is forced.
@@ -212,6 +213,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       .then((body: { success: boolean; data: { start: string; end: string }[] }) => {
         if (cancelled || !body.success) return;
         setBlocked(body.data);
+        const otherBlocked = (body as any).otherConsoleBlocked ?? [];
+        setOtherConsoleBlocked(otherBlocked);
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setSlotsLoading(false); });
@@ -246,6 +249,20 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     }
     return booking.hourly_rate;
   })();
+
+  const isOtherConsoleOccupied = useMemo(() => {
+    if (!booking || !booking.name.toLowerCase().includes("simulator")) return false;
+    if (selectedSlots.length === 0) return false;
+
+    return selectedSlots.some((slotTime) => {
+      const slotMs = new Date(`${date}T${slotTime}:00`).getTime();
+      return otherConsoleBlocked.some((r) => {
+        const startMs = new Date(r.start).getTime();
+        const endMs = new Date(r.end).getTime();
+        return slotMs >= startMs && slotMs < endMs;
+      });
+    });
+  }, [booking, selectedSlots, date, otherConsoleBlocked]);
 
   /* Derived totals from slot selection */
   const selMins  = selectedSlots.length * 15;
@@ -313,6 +330,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     setSelected([]);
     setNumPeople(null);
     setBlocked([]);
+    setOtherConsoleBlocked([]);
     setSlotsLoading(false);
     setStep("when");
   }
@@ -897,35 +915,41 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                 : `1-${n} cues & full rack set out`;
                             }
 
+                            const is2PaxDisabled = isSimulator && n === "2" && isOtherConsoleOccupied;
                             const rate   = booking.people_pricing?.[n] ?? 0;
                             const total  = formatCurrency((selMins / 60) * rate);
                             return (
                               <button
                                 key={n}
-                                onClick={() => setNumPeople(n)}
+                                onClick={() => {
+                                  if (!is2PaxDisabled) setNumPeople(n);
+                                }}
+                                disabled={is2PaxDisabled}
                                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-left"
                                 style={{
-                                  background: active ? sheetType.accent : inputBg,
-                                  border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
-                                  boxShadow:  active ? `0 6px 18px ${sheetType.accent}40` : "none",
+                                  background: is2PaxDisabled ? (resolvedTheme === "dark" ? "#1a1a1a" : "#f5f5f5") : active ? sheetType.accent : inputBg,
+                                  border:     `1.5px solid ${is2PaxDisabled ? (resolvedTheme === "dark" ? "#2a2a2a" : "#e5e5e5") : active ? sheetType.accent : inputBdr}`,
+                                  boxShadow:  (active && !is2PaxDisabled) ? `0 6px 18px ${sheetType.accent}40` : "none",
+                                  opacity:    is2PaxDisabled ? 0.5 : 1,
+                                  cursor:     is2PaxDisabled ? "not-allowed" : "pointer",
                                 }}
                               >
                                 <div
                                   className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shrink-0"
                                   style={{
-                                    background: active ? "rgba(255,255,255,0.20)" : surface,
-                                    color:      active ? "#fff" : textPri,
+                                    background: is2PaxDisabled ? "rgba(0,0,0,0.05)" : active ? "rgba(255,255,255,0.20)" : surface,
+                                    color:      is2PaxDisabled ? "#999" : active ? "#fff" : textPri,
                                     border:     active ? "none" : `1.5px solid ${inputBdr}`,
                                   }}
                                 >
                                   {circleText}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold leading-tight" style={{ color: active ? "#fff" : textPri }}>
-                                    {heading}
+                                  <p className="text-sm font-bold leading-tight" style={{ color: is2PaxDisabled ? "#999" : active ? "#fff" : textPri }}>
+                                    {heading} {is2PaxDisabled && " (Unavailable)"}
                                   </p>
-                                  <p className="text-[11px] mt-0.5" style={{ color: active ? "rgba(255,255,255,0.85)" : textSec }}>
-                                    {sub}
+                                  <p className="text-[11px] mt-0.5" style={{ color: is2PaxDisabled ? "#aaa" : active ? "rgba(255,255,255,0.85)" : textSec }}>
+                                    {is2PaxDisabled ? "Other console or simulator is already in use during these timings" : sub}
                                   </p>
                                 </div>
                                 <div className="text-right shrink-0">

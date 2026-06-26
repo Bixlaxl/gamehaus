@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { isPs5Conflict } from "@/lib/utils";
+import { isPs5Conflict, getConsoleNumber } from "@/lib/utils";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -46,6 +46,17 @@ export async function GET(
   const queryTableIds = hasPs5
     ? (allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [tableId])
     : [tableId];
+
+  const reqConsole = hasPs5 ? getConsoleNumber(targetTable.name) : null;
+  const otherConsoleTableIds = hasPs5
+    ? (allTables
+        ?.filter((t) => {
+          if (t.type !== "ps5") return false;
+          const c = getConsoleNumber(t.name);
+          return c !== null && reqConsole !== null && c !== reqConsole;
+        })
+        .map((t) => t.id) ?? [])
+    : [];
 
   // Don't SQL-filter on scheduled_start — walk-ins have NULL scheduled_start
   // and would be excluded, leaving the table appearing free to public bookers.
@@ -137,5 +148,49 @@ export async function GET(
     return true;
   });
 
-  return NextResponse.json(ok(unique));
+  const otherConsoleBlocked: { start: string; end: string }[] = [];
+  if (hasPs5 && reqConsole !== null) {
+    const otherConsoleItems = (rawItems ?? []).filter((item) => {
+      const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
+      if (!startStr) return false;
+      const startMs = new Date(startStr).getTime();
+      const isSameDay = startMs >= dayStartMs && startMs <= dayEndMs;
+      if (!isSameDay) return false;
+      return otherConsoleTableIds.includes(item.table_id);
+    });
+
+    const otherConsoleBookings = (rawBookings ?? []).filter((b) => {
+      const oi = b.order_item as unknown as { table_id: string } | null;
+      if (!oi) return false;
+      return otherConsoleTableIds.includes(oi.table_id);
+    });
+
+    for (const item of otherConsoleItems) {
+      if (item.status === "running" && item.actual_start) {
+        otherConsoleBlocked.push({
+          start: item.actual_start,
+          end:   item.expected_end ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+        });
+      } else if (item.status === "scheduled" && item.scheduled_start && item.scheduled_end) {
+        otherConsoleBlocked.push({ start: item.scheduled_start, end: item.scheduled_end });
+      }
+    }
+
+    for (const b of otherConsoleBookings) {
+      otherConsoleBlocked.push({ start: b.scheduled_start, end: b.scheduled_end });
+    }
+  }
+
+  // Deduplicate otherConsoleBlocked by start time
+  const otherSeen = new Set<string>();
+  const uniqueOther = otherConsoleBlocked.filter(r => {
+    if (otherSeen.has(r.start)) return false;
+    otherSeen.add(r.start);
+    return true;
+  });
+
+  return NextResponse.json({
+    ...ok(unique),
+    otherConsoleBlocked: uniqueOther,
+  });
 }
