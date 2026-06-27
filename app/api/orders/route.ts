@@ -75,33 +75,32 @@ export async function POST(request: Request) {
       const reqTable = allTables?.find((t) => t.id === req.table_id);
       if (!reqTable) continue;
 
-      const occupiedSet = new Set<string>();
+      const occupiedItems: Array<{ tableId: string; numPeople?: number | null }> = [];
 
       (existingItems ?? []).forEach((ex) => {
         const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
         const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
         if (exS && exE && overlaps(reqS, reqE, exS, exE)) {
-          occupiedSet.add(ex.table_id);
+          occupiedItems.push({ tableId: ex.table_id, numPeople: ex.num_people });
         }
       });
 
       (existingBookings ?? []).forEach((b) => {
         if (b.scheduled_start && b.scheduled_end && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end)) {
-          const oi = b.order_item as unknown as { table_id: string } | null;
-          if (oi?.table_id) occupiedSet.add(oi.table_id);
+          const oi = b.order_item as unknown as { table_id: string; num_people?: number | null } | null;
+          if (oi?.table_id) occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
         }
       });
 
-      const occupiedTableIds = Array.from(occupiedSet);
-
       let isConflict = false;
       if (!isConsoleTable(reqTable)) {
-        isConflict = occupiedTableIds.includes(req.table_id);
+        isConflict = occupiedItems.some((item) => item.tableId === req.table_id);
       } else {
         isConflict = checkConsolePoolConflict({
           reqTableId: req.table_id,
+          reqNumPeople: req.num_people ?? 1,
           allTables: (allTables ?? []) as Array<{ id: string; name: string; type: string }>,
-          occupiedTableIds,
+          occupiedItems,
         });
       }
 
@@ -115,6 +114,7 @@ export async function POST(request: Request) {
         );
       }
     }
+
 
   }
 

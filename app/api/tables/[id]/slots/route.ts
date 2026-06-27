@@ -56,21 +56,21 @@ export async function GET(
   const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
+      .select("table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status, num_people")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
 
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
       .in("order_items.table_id", queryTableIds)
       .eq("status", "confirmed")
       .gte("scheduled_start", new Date(dayStartMs).toISOString())
       .lte("scheduled_start", new Date(dayEndMs).toISOString()),
   ]);
 
-  const activeRanges: Array<{ tableId: string; startMs: number; endMs: number; startIso: string; endIso: string }> = [];
+  const activeRanges: Array<{ tableId: string; numPeople?: number | null; startMs: number; endMs: number; startIso: string; endIso: string }> = [];
 
   (rawItems ?? []).forEach((item) => {
     const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
@@ -80,15 +80,15 @@ export async function GET(
     if (!startStr || !endStr) return;
     const startMs = new Date(startStr).getTime();
     const endMs   = new Date(endStr).getTime();
-    activeRanges.push({ tableId: item.table_id, startMs, endMs, startIso: startStr, endIso: endStr });
+    activeRanges.push({ tableId: item.table_id, numPeople: item.num_people, startMs, endMs, startIso: startStr, endIso: endStr });
   });
 
   (rawBookings ?? []).forEach((b) => {
-    const oi = b.order_item as unknown as { table_id: string } | null;
+    const oi = b.order_item as unknown as { table_id: string; num_people?: number | null } | null;
     if (!oi || !b.scheduled_start || !b.scheduled_end) return;
     const startMs = new Date(b.scheduled_start).getTime();
     const endMs   = new Date(b.scheduled_end).getTime();
-    activeRanges.push({ tableId: oi.table_id, startMs, endMs, startIso: b.scheduled_start, endIso: b.scheduled_end });
+    activeRanges.push({ tableId: oi.table_id, numPeople: oi.num_people, startMs, endMs, startIso: b.scheduled_start, endIso: b.scheduled_end });
   });
 
   const blocked: { start: string; end: string }[] = [];
@@ -104,18 +104,14 @@ export async function GET(
     const slotStepMs = 15 * 60 * 1000;
     for (let slotMs = dayStartMs; slotMs < dayEndMs; slotMs += slotStepMs) {
       const slotEndMs = slotMs + slotStepMs;
-      const occupiedTableIds = Array.from(
-        new Set(
-          activeRanges
-            .filter((r) => slotMs < r.endMs && slotEndMs > r.startMs)
-            .map((r) => r.tableId)
-        )
-      );
+      const occupiedItems = activeRanges
+        .filter((r) => slotMs < r.endMs && slotEndMs > r.startMs)
+        .map((r) => ({ tableId: r.tableId, numPeople: r.numPeople }));
 
       const isConflict = checkConsolePoolConflict({
         reqTableId: tableId,
         allTables,
-        occupiedTableIds,
+        occupiedItems,
       });
 
       if (isConflict) {
@@ -126,6 +122,7 @@ export async function GET(
       }
     }
   }
+
 
   // Deduplicate by start time
   const seen = new Set<string>();

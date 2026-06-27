@@ -116,47 +116,73 @@ export function isSimulatorTable(table: { name: string; type: string }): boolean
   return t === "simulator" || table.name.toLowerCase().includes("simulator");
 }
 
+export type OccupiedConsoleItem = {
+  tableId: string;
+  numPeople?: number | null;
+};
+
 export function checkConsolePoolConflict({
   reqTableId,
+  reqNumPeople = 1,
   allTables,
-  occupiedTableIds,
+  occupiedItems,
 }: {
   reqTableId: string;
+  reqNumPeople?: number;
   allTables: Array<{ id: string; name: string; type: string }>;
-  occupiedTableIds: string[];
+  occupiedItems: Array<string | OccupiedConsoleItem>;
 }): boolean {
   const reqTable = allTables.find(t => t.id === reqTableId);
   if (!reqTable) return false;
   if (!isConsoleTable(reqTable)) return false;
 
-  if (occupiedTableIds.includes(reqTableId)) return true;
+  // Normalize occupiedItems to object format
+  const normalizedItems: OccupiedConsoleItem[] = occupiedItems.map(item =>
+    typeof item === "string" ? { tableId: item, numPeople: 1 } : item
+  );
 
-  const totalPs5 = allTables.filter(t => isConsoleTable(t)).length;
-  const totalSim = allTables.filter(t => isSimulatorTable(t)).length;
+  // If requested table itself is explicitly occupied in this window, return conflict
+  if (normalizedItems.some(item => item.tableId === reqTableId)) {
+    return true;
+  }
 
-  let usedPs5Standalone = 0;
-  let usedSimulators = 0;
+  // Standalone PS5 consoles count (type === 'ps5' and not simulator)
+  const totalPs5Consoles = allTables.filter(t => (t.type as string) === "ps5" && !t.name.toLowerCase().includes("simulator")).length;
+  // Total physical Simulator tables
+  const totalSimulators = allTables.filter(t => isSimulatorTable(t)).length;
 
-  for (const occId of occupiedTableIds) {
-    const occTable = allTables.find(t => t.id === occId);
+  let ps5ConsolesUsed = 0;
+  let simulatorsUsed = 0;
+
+  for (const item of normalizedItems) {
+    const occTable = allTables.find(t => t.id === item.tableId);
     if (!occTable) continue;
     if (isSimulatorTable(occTable)) {
-      usedSimulators++;
+      simulatorsUsed += 1;
+      // 1 person simulator uses 1 PS5; 2 people simulator uses 2 PS5s
+      const nPeople = Math.max(1, Number(item.numPeople) || 1);
+      ps5ConsolesUsed += nPeople;
     } else if (isConsoleTable(occTable)) {
-      usedPs5Standalone++;
+      ps5ConsolesUsed += 1;
     }
   }
 
+  const remPs5Consoles = totalPs5Consoles - ps5ConsolesUsed;
+  const remSimulators = totalSimulators - simulatorsUsed;
+
   const reqIsSim = isSimulatorTable(reqTable);
+  const neededPs5 = reqIsSim ? Math.max(1, Number(reqNumPeople) || 1) : 1;
 
   if (reqIsSim) {
-    const availSim = Math.min(totalSim - usedSimulators, totalPs5 - usedPs5Standalone - usedSimulators);
-    return availSim <= 0;
+    if (remSimulators <= 0) return true;
+    if (remPs5Consoles < neededPs5) return true;
+    return false;
   } else {
-    const availPs5 = totalPs5 - usedPs5Standalone - usedSimulators;
-    return availPs5 <= 0;
+    if (remPs5Consoles < neededPs5) return true;
+    return false;
   }
 }
+
 
 
 

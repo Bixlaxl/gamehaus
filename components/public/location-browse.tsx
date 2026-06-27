@@ -289,6 +289,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       tableId: i.tableId,
       tableName: i.tableName,
       tableType: i.tableType,
+      numPeople: i.numPeople ?? 1,
       startMs: new Date(i.scheduledStart).getTime(),
       endMs:   new Date(i.scheduledEnd).getTime(),
     })),
@@ -302,16 +303,18 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     if (!isConsoleTable(booking)) {
       return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
     }
-    const occupiedTableIds = cartItemsMs
+    const occupiedItems = cartItemsMs
       .filter(item => slotMs >= item.startMs && slotMs < item.endMs)
-      .map(item => item.tableId);
+      .map(item => ({ tableId: item.tableId, numPeople: item.numPeople }));
 
     return checkConsolePoolConflict({
       reqTableId: tableId,
+      reqNumPeople: numPeople ? Number(numPeople) : 1,
       allTables: tables as Array<{ id: string; name: string; type: string }>,
-      occupiedTableIds,
+      occupiedItems,
     });
   }
+
 
 
 
@@ -939,7 +942,22 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                 : `1-${n} cues & full rack set out`;
                             }
 
-                            const is2PaxDisabled = (isSimulator || isPs5) && n === "2" && isOtherConsoleOccupied;
+                            let is2PaxDisabled = false;
+                            if (isSimulator && n === "2" && selectedSlots.length > 0 && booking) {
+                              is2PaxDisabled = selectedSlots.some((slotTime) => {
+                                const slotMs = new Date(`${date}T${slotTime}:00`).getTime();
+                                const occupiedItems = cartItemsMs
+                                  .filter((item) => slotMs >= item.startMs && slotMs < item.endMs)
+                                  .map((item) => ({ tableId: item.tableId, numPeople: item.numPeople }));
+                                return checkConsolePoolConflict({
+                                  reqTableId: booking.id,
+                                  reqNumPeople: 2,
+                                  allTables: tables as Array<{ id: string; name: string; type: string }>,
+                                  occupiedItems,
+                                });
+                              });
+                            }
+
 
                             const rate   = booking.people_pricing?.[n] ?? (isSimulator && n === "2" ? booking.hourly_rate * 2 : booking.hourly_rate);
                             const total  = formatCurrency((selMins / 60) * rate);

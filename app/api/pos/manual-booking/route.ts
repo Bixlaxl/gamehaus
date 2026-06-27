@@ -97,51 +97,51 @@ export async function POST(request: Request) {
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
+      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
       .eq("status", "confirmed")
       .in("order_items.table_id", queryTableIds),
   ]);
 
   const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && aE > bS;
-  const occupiedSet = new Set<string>();
+  const occupiedItems: Array<{ tableId: string; numPeople?: number | null }> = [];
 
   (existingItems ?? []).forEach((ex) => {
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
     if (exS && exE && overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
-      occupiedSet.add(ex.table_id);
+      occupiedItems.push({ tableId: ex.table_id, numPeople: ex.num_people });
     }
   });
 
   (existingBookings ?? []).forEach((b) => {
     if (b.scheduled_start && b.scheduled_end && overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
-      const oi = b.order_item as unknown as { table_id: string } | null;
-      if (oi?.table_id) occupiedSet.add(oi.table_id);
+      const oi = b.order_item as unknown as { table_id: string; num_people?: number | null } | null;
+      if (oi?.table_id) occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
     }
   });
 
-  const occupiedTableIds = Array.from(occupiedSet);
-
   let isConflict = false;
   if (!isConsoleTable(reqTable)) {
-    isConflict = occupiedTableIds.includes(table_id);
+    isConflict = occupiedItems.some((item) => item.tableId === table_id);
   } else {
     isConflict = checkConsolePoolConflict({
       reqTableId: table_id,
+      reqNumPeople: num_people ?? 1,
       allTables,
-      occupiedTableIds,
+      occupiedItems,
     });
   }
 
   if (isConflict) {
     return NextResponse.json(err("Conflict: that table already has a session or pool constraint in this window", "TABLE_TAKEN"), { status: 409 });
   }
+
 
 
   // ── Create order ──────────────────────────────────────────────────────────
