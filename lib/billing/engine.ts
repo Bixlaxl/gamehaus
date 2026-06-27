@@ -58,18 +58,25 @@ export function calculateBill(
 
   for (const item of items) {
     if (item.status === "cancelled" || item.is_deleted) continue;
-    if (!item.actual_start) continue; // not started yet — 0 charge
+    let start: Date;
+    let billingEnd: Date;
+    if (item.actual_start) {
+      start = new Date(item.actual_start);
+      billingEnd = item.expected_end
+        ? new Date(item.expected_end)
+        : item.actual_end
+        ? new Date(item.actual_end)
+        : now;
+    } else if (item.scheduled_start && item.scheduled_end) {
+      start = new Date(item.scheduled_start);
+      billingEnd = new Date(item.scheduled_end);
+    } else if (item.scheduled_duration_mins && item.scheduled_duration_mins > 0) {
+      start = now;
+      billingEnd = new Date(now.getTime() + item.scheduled_duration_mins * 60000);
+    } else {
+      continue;
+    }
 
-    const start = new Date(item.actual_start);
-
-    // Billing is slot-based: charge is locked to the booked slot (expected_end - actual_start).
-    // Stopping early does not reduce the bill. Extensions move expected_end forward.
-    // No per-minute ticking, no overtime blocks — sessions auto-stop within the 2-min grace.
-    const billingEnd = item.expected_end
-      ? new Date(item.expected_end)
-      : item.actual_end
-      ? new Date(item.actual_end)
-      : now; // fallback: session started but expected_end not yet set
 
     const scheduledMins   = Math.ceil((billingEnd.getTime() - start.getTime()) / 60000);
     const scheduledAmount = Math.round((scheduledMins / 60) * item.rate_per_hour * 100) / 100;
