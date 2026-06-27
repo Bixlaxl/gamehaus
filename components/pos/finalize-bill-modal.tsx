@@ -18,11 +18,16 @@ type PaymentMethod = "cash" | "upi";
 interface CustomerInfo {
   points_balance: number;
   name: string | null;
-  /** Live discount % from any active membership the customer holds. The
-   *  server applies this on top of bill.totalDue at finalize time, so the
-   *  modal needs to mirror it to keep the displayed Total Due in sync. */
+  /** Live discount % from any active membership the customer holds. */
   membership_discount_pct?: number | null;
+  active_memberships?: Array<{
+    id: string;
+    bound_table_ids?: string[];
+    free_hours_ledger?: Record<string, number>;
+    plan?: { name?: string; discount_pct?: number; free_hrs?: number } | null;
+  }>;
 }
+
 
 type HandoverBooking = Pick<Booking, "id" | "scheduled_start" | "scheduled_end"> & {
   order: Pick<Order, "customer_name" | "customer_phone">;
@@ -82,16 +87,80 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   // Membership discount mirrors the server's finalize math: applied AFTER
   // bill.totalDue (which already absorbs the advance) and BEFORE points
   // redemption. Floor matches Math.floor in /api/orders/[id]/finalize.
-  const membershipPct      = customerInfo?.membership_discount_pct ?? 0;
-  // Calculate remaining session due only (excluding extras)
+  const allMemberships = customerInfo?.active_memberships ?? [];
+  const membershipPct = allMemberships.reduce((max, m) => {
+    const pct = m.plan?.discount_pct ?? 0;
+    return pct > max ? pct : max;
+  }, customerInfo?.membership_discount_pct ?? 0);
+
+  const ledgerUpdates: Map<string, Record<string, number>> = new Map();
+  allMemberships.forEach(m => {
+    ledgerUpdates.set(m.id, { ...(m.free_hours_ledger || {}) });
+  });
+
+  let totalFreeHoursDiscount = 0;
+
+  for (const item of activeItems) {
+    const tableMeta = item.table as { id?: string; type?: string } | null;
+    const tableId = item.table_id || tableMeta?.id;
+    const storeTable = storeTablesRef.find(t => t.id === tableId);
+    const tableType = tableMeta?.type || storeTable?.type || "";
+
+    const itemMembershipId = (item as any).membership_id;
+    let coveringMembership = itemMembershipId
+      ? allMemberships.find(m => m.id === itemMembershipId)
+      : allMemberships.find(m => m.bound_table_ids?.includes(tableId ?? ""));
+
+    if (!coveringMembership) continue;
+
+    const ledger = ledgerUpdates.get(coveringMembership.id);
+    if (!ledger) continue;
+    const remainingFreeHrs = Number(ledger[tableType]) || 0;
+    if (remainingFreeHrs <= 0) continue;
+
+    let start: Date;
+    let end: Date;
+    if (item.actual_start) {
+      start = new Date(item.actual_start);
+      end = item.expected_end
+        ? new Date(item.expected_end)
+        : item.actual_end
+        ? new Date(item.actual_end)
+        : now;
+    } else if (item.scheduled_start && item.scheduled_end) {
+      start = new Date(item.scheduled_start);
+      end = new Date(item.scheduled_end);
+    } else {
+      continue;
+    }
+
+    const durationHrs = (end.getTime() - start.getTime()) / (3600 * 1000);
+    let maxRedeem = Math.min(durationHrs, remainingFreeHrs);
+    if (typeof item.free_hours_to_redeem === "number" && item.free_hours_to_redeem >= 0) {
+      maxRedeem = Math.min(maxRedeem, item.free_hours_to_redeem);
+    }
+
+    const freeHoursDiscount = maxRedeem * (item.rate_per_hour || 0);
+    totalFreeHoursDiscount += freeHoursDiscount;
+    ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
+  }
+
   const sessionTotal = bill.tableLines.reduce((sum, l) => sum + l.amount, 0);
   const scheduledSubtotal = bill.tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0);
   const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
   const netSessionDue = bill.advancePaid > 0
     ? Math.max(0, scheduledSubtotal - bill.advancePaid) + overtimeTotal
     : sessionTotal;
-  const membershipDiscount = membershipPct > 0 ? Math.floor(netSessionDue * membershipPct / 100) : 0;
-  const billAfterMembership = Math.max(0, bill.totalDue - membershipDiscount);
+
+  const remainingSessionDue = Math.max(0, netSessionDue - totalFreeHoursDiscount);
+  const pctDiscount = membershipPct > 0
+    ? Math.floor(remainingSessionDue * membershipPct / 100)
+    : 0;
+
+  let membershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
+  membershipDiscount = Math.min(membershipDiscount, bill.totalDue);
+  const billAfterMembership = Math.max(0, Math.round((bill.totalDue - membershipDiscount) * 100) / 100);
+
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
   // Minimum 100 points required to redeem; any input below 100 is treated as 0
   const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
@@ -405,12 +474,19 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                 <span style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
               </div>
             )}
-            {membershipDiscount > 0 && (
+            {totalFreeHoursDiscount > 0 && (
               <div className="flex justify-between">
-                <span style={{ color: "#8b5cf6" }}>Membership ({membershipPct}% off)</span>
-                <span style={{ color: "#8b5cf6" }}>−{formatCurrency(membershipDiscount)}</span>
+                <span style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+                <span style={{ color: "#8b5cf6" }}>−{formatCurrency(totalFreeHoursDiscount)}</span>
               </div>
             )}
+            {pctDiscount > 0 && (
+              <div className="flex justify-between">
+                <span style={{ color: "#8b5cf6" }}>Membership ({membershipPct}% off)</span>
+                <span style={{ color: "#8b5cf6" }}>−{formatCurrency(pctDiscount)}</span>
+              </div>
+            )}
+
             {clampedRedeem > 0 && (
               <div className="flex justify-between">
                 <span style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
