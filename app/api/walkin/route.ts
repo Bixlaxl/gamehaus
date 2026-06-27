@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
-import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
 
 
 export const runtime = 'edge';
@@ -47,10 +46,6 @@ export async function POST(request: Request) {
     const [ch, cm] = loc.closing_time.split(":").map(Number);
     const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
 
-    // Shop hours are stored as local IST times. Edge runtime is UTC, so we
-    // must explicitly shift into IST (UTC+5:30) before resolving today's
-    // open/close window — otherwise setHours() picks UTC midnight and the
-    // window slides by 5.5h, falsely flagging midday traffic as "before open".
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
     const nowIst = new Date(now.getTime() + IST_OFFSET_MS);
     const y  = nowIst.getUTCFullYear();
@@ -88,7 +83,6 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    // Cap each item's duration so the session can't run past closing
     const minsUntilClose = Math.floor((closesMs - now.getTime()) / 60000);
     const overflow = items.find((i) => i.duration_mins > minsUntilClose);
     if (overflow) {
@@ -99,37 +93,21 @@ export async function POST(request: Request) {
     }
   }
 
-  // ── Conflict check ────────────────────────────────────────────────────────
-  // Walk-in occupies [now, now + duration_mins]. Reject if any other running/
-  // scheduled session or confirmed booking on the same table overlaps that
-  // window. Handles the race where a customer's online booking lands between
-  // PanelWalkIn rendering and Start being pressed.
+  // ── Conflict check (per-table, no pool logic) ─────────────────────────────
   const tableIds = [...new Set(items.map((i) => i.table_id))];
-
-  // Load all active tables in location to map console/simulator capacity pools
-  const { data: rawAllTables } = await admin
-    .from("tables")
-    .select("id, name, type, people_pricing")
-    .eq("location_id", location_id)
-    .eq("is_active", true);
-
-  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
-
-  const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
-  const queryTableIds = [...new Set([...tableIds, ...consoleTableIds])];
 
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
-      .in("table_id", queryTableIds)
+      .select("id, table_id, actual_start, expected_end, status")
+      .in("table_id", tableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id)")
       .eq("status", "confirmed")
-      .in("order_items.table_id", queryTableIds),
+      .in("order_items.table_id", tableIds),
   ]);
 
   const overlaps = (aS: string, aE: string, bS: string, bE: string) =>
@@ -140,43 +118,30 @@ export async function POST(request: Request) {
     const reqS = now.toISOString();
     const reqE = new Date(now.getTime() + req.duration_mins * 60 * 1000).toISOString();
 
-    const reqTable = allTables.find((t) => t.id === req.table_id);
-    if (!reqTable) continue;
-
-    const occupiedItems: Array<{ tableId: string; numPeople?: number | null }> = [];
     const processedItemIds = new Set<string>();
-
-    (existingItems ?? []).forEach((ex) => {
-      const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
-      const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
-      if (exS && exE && overlaps(reqS, reqE, exS, exE)) {
-        if (ex.id) processedItemIds.add(ex.id);
-        occupiedItems.push({ tableId: ex.table_id, numPeople: ex.num_people });
-      }
-    });
-
-    (existingBookings ?? []).forEach((b) => {
-      if (b.scheduled_start && b.scheduled_end && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end)) {
-        const oi = b.order_item as unknown as { id: string; table_id: string; num_people?: number | null } | null;
-        if (oi?.table_id) {
-          if (oi.id && processedItemIds.has(oi.id)) return;
-          if (oi.id) processedItemIds.add(oi.id);
-          occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
-        }
-      }
-    });
-
-
     let isConflict = false;
-    if (!isConsoleTable(reqTable)) {
-      isConflict = occupiedItems.some((item) => item.tableId === req.table_id);
-    } else {
-      isConflict = checkConsolePoolConflict({
-        reqTableId: req.table_id,
-        reqNumPeople: req.num_people ?? 1,
-        allTables,
-        occupiedItems,
-      });
+
+    for (const ex of (existingItems ?? [])) {
+      if (ex.table_id !== req.table_id) continue;
+      const exS = ex.status === "running" ? ex.actual_start : null;
+      const exE = ex.status === "running" ? ex.expected_end : null;
+      if (exS && exE && overlaps(reqS, reqE, exS, exE)) {
+        isConflict = true;
+        if (ex.id) processedItemIds.add(ex.id);
+        break;
+      }
+    }
+
+    if (!isConflict) {
+      for (const b of (existingBookings ?? [])) {
+        if (!b.scheduled_start || !b.scheduled_end) continue;
+        if (!overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end)) continue;
+        const oi = b.order_item as unknown as { id: string; table_id: string } | null;
+        if (!oi || oi.table_id !== req.table_id) continue;
+        if (oi.id && processedItemIds.has(oi.id)) continue;
+        isConflict = true;
+        break;
+      }
     }
 
     if (isConflict) {
@@ -186,7 +151,6 @@ export async function POST(request: Request) {
       );
     }
   }
-
 
 
   const { data: order, error: orderError } = await admin

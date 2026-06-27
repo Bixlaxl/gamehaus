@@ -5,8 +5,10 @@ export interface CartItem {
   tableId: string;
   tableName: string;
   tableType: string;
+  /** For ps5_simulator tables: "ps5" uses controller count, "simulator" is always 1 player flat rate */
+  bookingMode?: "ps5" | "simulator";
   ratePerHour: number;
-  numPeople?: number; // for snooker/pool (4/5/6) or PS5 (1/2 controllers); null = flat hourly rate
+  numPeople?: number; // for snooker/pool (4/5/6) or PS5 controllers (1–4); null = flat hourly rate
   scheduledStart: string; // ISO string
   scheduledEnd: string;   // ISO string
   durationMins: number;

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
-import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
 
 export const runtime = 'edge';
 
@@ -31,37 +30,22 @@ export async function POST(request: Request) {
 
   // ── Conflict check ────────────────────────────────────────────────────────
   // Re-verify every requested slot is still free at the moment of booking.
-  // The cart-side "expired-slot" guard only checks past-time; this catches
-  // the race where a walk-in or another booking grabbed the same slot
-  // between cart-add and checkout-submit.
   const scheduledItems = items.filter((i) => i.scheduled_start && i.scheduled_end);
   if (scheduledItems.length > 0) {
     const tableIds = [...new Set(scheduledItems.map((i) => i.table_id))];
 
-    // Load all active tables in location to map console/simulator capacity pools
-    const { data: rawAllTables } = await admin
-      .from("tables")
-      .select("id, name, type, people_pricing")
-      .eq("location_id", location_id)
-      .eq("is_active", true);
-
-    const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
-    const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
-    const queryTableIds = [...new Set([...tableIds, ...consoleTableIds])];
-
-
     const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
       admin
         .from("order_items")
-        .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
-        .in("table_id", queryTableIds)
+        .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
+        .in("table_id", tableIds)
         .eq("is_deleted", false)
         .in("status", ["running", "scheduled"]),
       admin
         .from("bookings")
-        .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id, num_people)")
+        .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id)")
         .eq("status", "confirmed")
-        .in("order_items.table_id", queryTableIds),
+        .in("order_items.table_id", tableIds),
     ]);
 
     const overlaps = (aS: string, aE: string, bS: string, bE: string) =>
@@ -72,43 +56,31 @@ export async function POST(request: Request) {
       const reqS = req.scheduled_start!;
       const reqE = req.scheduled_end!;
 
-      const reqTable = allTables?.find((t) => t.id === req.table_id);
-      if (!reqTable) continue;
-
-      const occupiedItems: Array<{ tableId: string; numPeople?: number | null }> = [];
+      // Build deduplicated occupied list for THIS table only
       const processedItemIds = new Set<string>();
+      let isConflict = false;
 
-      (existingItems ?? []).forEach((ex) => {
+      for (const ex of (existingItems ?? [])) {
+        if (ex.table_id !== req.table_id) continue;
         const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
         const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
         if (exS && exE && overlaps(reqS, reqE, exS, exE)) {
+          isConflict = true;
           if (ex.id) processedItemIds.add(ex.id);
-          occupiedItems.push({ tableId: ex.table_id, numPeople: ex.num_people });
+          break;
         }
-      });
+      }
 
-      (existingBookings ?? []).forEach((b) => {
-        if (b.scheduled_start && b.scheduled_end && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end)) {
-          const oi = b.order_item as unknown as { id: string; table_id: string; num_people?: number | null } | null;
-          if (oi?.table_id) {
-            if (oi.id && processedItemIds.has(oi.id)) return;
-            if (oi.id) processedItemIds.add(oi.id);
-            occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
-          }
+      if (!isConflict) {
+        for (const b of (existingBookings ?? [])) {
+          if (!b.scheduled_start || !b.scheduled_end) continue;
+          if (!overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end)) continue;
+          const oi = b.order_item as unknown as { id: string; table_id: string } | null;
+          if (!oi || oi.table_id !== req.table_id) continue;
+          if (oi.id && processedItemIds.has(oi.id)) continue;
+          isConflict = true;
+          break;
         }
-      });
-
-
-      let isConflict = false;
-      if (!isConsoleTable(reqTable)) {
-        isConflict = occupiedItems.some((item) => item.tableId === req.table_id);
-      } else {
-        isConflict = checkConsolePoolConflict({
-          reqTableId: req.table_id,
-          reqNumPeople: req.num_people ?? 1,
-          allTables: (allTables ?? []) as Array<{ id: string; name: string; type: string }>,
-          occupiedItems,
-        });
       }
 
       if (isConflict) {

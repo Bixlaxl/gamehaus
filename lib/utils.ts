@@ -108,100 +108,18 @@ export function formatSignedCountdown(endTime: Date, now: Date): { text: string;
 
 export function isConsoleTable(table: { name: string; type: string }): boolean {
   const t = table.type as string;
-  return t === "ps5" || t === "simulator" || table.name.toLowerCase().includes("simulator");
+  return t === "ps5" || t === "ps5_simulator" || t === "simulator" || table.name.toLowerCase().includes("simulator");
 }
 
+/** True for the new unified "PS5 & Simulator" table type */
+export function isPsSimulatorTable(table: { name?: string; type: string }): boolean {
+  return (table.type as string) === "ps5_simulator";
+}
+
+/** @deprecated — kept for backward compat with old "ps5" or "simulator"-named tables */
 export function isSimulatorTable(table: { name: string; type: string }): boolean {
   const t = table.type as string;
   return t === "simulator" || table.name.toLowerCase().includes("simulator");
 }
-
-export type OccupiedConsoleItem = {
-  tableId: string;
-  numPeople?: number | null;
-};
-
-export function getSimulatorTotalCapacity(allTables: Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>): number {
-  const simTables = allTables.filter(t => isSimulatorTable(t));
-  if (simTables.length === 0) return 2;
-  let capacity = 0;
-  for (const st of simTables) {
-    if (st.people_pricing && typeof st.people_pricing === "object" && st.people_pricing !== null) {
-      const keys = Object.keys(st.people_pricing).filter(k => Boolean(st.people_pricing![k]));
-      if (keys.length > 0) {
-        capacity += keys.length;
-        continue;
-      }
-    }
-    capacity += 2;
-  }
-  return Math.max(2, capacity);
-}
-
-export function checkConsolePoolConflict({
-  reqTableId,
-  reqNumPeople = 1,
-  allTables,
-  occupiedItems,
-}: {
-  reqTableId: string;
-  reqNumPeople?: number;
-  allTables: Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
-  occupiedItems: Array<string | OccupiedConsoleItem>;
-}): boolean {
-  const reqTable = allTables.find(t => t.id === reqTableId);
-  if (!reqTable) return false;
-  if (!isConsoleTable(reqTable)) return false;
-
-  // Normalize occupiedItems to object format
-  const normalizedItems: OccupiedConsoleItem[] = occupiedItems.map(item =>
-    typeof item === "string" ? { tableId: item, numPeople: 1 } : item
-  );
-
-  // Standalone PS5 consoles count (type === 'ps5' and not simulator)
-  const standalonePs5Tables = allTables.filter(t => (t.type as string) === "ps5" && !t.name.toLowerCase().includes("simulator"));
-  const totalPs5Consoles = Math.max(2, standalonePs5Tables.length);
-
-  // Total physical Simulator capacity based on registered controller rates in owner portal
-  const totalSimulatorsCapacity = getSimulatorTotalCapacity(allTables);
-
-  let ps5ConsolesUsed = 0;
-  let simulatorsUsed = 0;
-
-  for (const item of normalizedItems) {
-    const occTable = allTables.find(t => t.id === item.tableId);
-    if (!occTable) continue;
-    if (isSimulatorTable(occTable)) {
-      const nPeople = Math.max(1, Number(item.numPeople) || 1);
-      simulatorsUsed += nPeople;
-      ps5ConsolesUsed += nPeople;
-    } else if (isConsoleTable(occTable)) {
-      ps5ConsolesUsed += 1;
-    }
-  }
-
-  const remPs5Consoles = totalPs5Consoles - ps5ConsolesUsed;
-  const remSimulators = totalSimulatorsCapacity - simulatorsUsed;
-
-  const reqIsSim = isSimulatorTable(reqTable);
-  const neededSim = reqIsSim ? Math.max(1, Number(reqNumPeople) || 1) : 1;
-  const neededPs5 = neededSim;
-
-  if (reqIsSim) {
-    if (remSimulators < neededSim) return true;
-    if (remPs5Consoles < neededPs5) return true;
-    return false;
-  } else {
-    if (normalizedItems.some(item => item.tableId === reqTableId)) {
-      return true;
-    }
-    if (remPs5Consoles < 1) return true;
-    return false;
-  }
-}
-
-
-
-
 
 

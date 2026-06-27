@@ -307,7 +307,7 @@ export function TablesContent({
         pp[k] = String(v);
       }
     }
-    const isDefault = ["snooker", "pool", "ps5", "foosball"].includes(t.type);
+    const isDefault = ["snooker", "pool", "ps5_simulator", "foosball"].includes(t.type);
     setForm({
       location_id:    t.location_id,
       name:           t.name,
@@ -365,14 +365,14 @@ export function TablesContent({
           "5": form.people_pricing["5"] ?? "",
           "6": form.people_pricing["6"] ?? "",
         };
-      } else if (typeValue === "ps5" || typeValue === "simulator" || typeValue.includes("simulator")) {
+      } else if (typeValue === "ps5_simulator") {
+        // Per-controller rates for PS5 mode (Simulator uses flat hourly_rate)
         finalPeoplePricing = {
           "1": form.people_pricing["1"] ?? "",
           "2": form.people_pricing["2"] ?? "",
           "3": form.people_pricing["3"] ?? "",
           "4": form.people_pricing["4"] ?? "",
         };
-
       } else {
         finalPeoplePricing = {};
       }
@@ -384,7 +384,7 @@ export function TablesContent({
   const typeIcon: Record<string, string> = {
     snooker: "🎱",
     pool: "🎱",
-    ps5: "🎮",
+    ps5_simulator: "🎮",
     foosball: "⚽",
   };
 
@@ -454,10 +454,13 @@ export function TablesContent({
                   <div className="flex flex-wrap gap-1 mt-0.5">
                     {Object.entries(table.people_pricing).sort(([a], [b]) => Number(a) - Number(b)).map(([k, v]) => (
                       <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">
-                        {table.type === "ps5" ? `${k}ctrl` : `${k}p`} ₹{v}/hr
+                        {(table.type as string) === "ps5_simulator" ? `${k}ctrl` : `${k}p`} ₹{v}/hr
                       </span>
                     ))}
                   </div>
+                )}
+                {(table.type as string) === "ps5_simulator" && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 font-medium">PS5 &amp; Simulator</span>
                 )}
                 <div className="flex items-center gap-2 pt-1">
                   {!table.is_active && (
@@ -556,7 +559,7 @@ export function TablesContent({
                   <SelectContent>
                     <SelectItem value="snooker">Snooker</SelectItem>
                     <SelectItem value="pool">Pool</SelectItem>
-                    <SelectItem value="ps5">PS5</SelectItem>
+                    <SelectItem value="ps5_simulator">PS5 &amp; Simulator</SelectItem>
                     <SelectItem value="foosball">Foosball</SelectItem>
                     <SelectItem value="custom">Custom...</SelectItem>
                   </SelectContent>
@@ -650,15 +653,15 @@ export function TablesContent({
                 </div>
               </div>
             )}
-            {(form.type === "ps5" || form.type === "simulator" || form.name.toLowerCase().includes("simulator") || (showCustomInput && customPricingBasis === "controller")) && (
+            {(form.type === "ps5_simulator" || (showCustomInput && customPricingBasis === "controller")) && (
 
               <div className="space-y-2">
-                <Label>Per-Controller Hourly Rate (₹/hr) — optional</Label>
-                <p className="text-xs text-gray-400">Override the flat hourly rate based on controller count. Leave blank to use the flat rate above.</p>
+                <Label>PS5 Per-Controller Rate (₹/hr) — optional</Label>
+                <p className="text-xs text-gray-400">Override the flat rate for PS5 mode based on controller count. Simulator bookings always use the flat hourly rate above.</p>
                 <div className="grid grid-cols-4 gap-2">
                   {["1", "2", "3", "4"].map((n) => (
                     <div key={n} className="space-y-1">
-                      <p className="text-xs text-gray-500 font-medium">{n} controller{n === "2" ? "s" : ""}</p>
+                      <p className="text-xs text-gray-500 font-medium">{n} ctrl</p>
                       <Input
                         type="number"
                         min="0"

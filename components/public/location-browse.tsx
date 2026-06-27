@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
-import { formatCurrency, checkConsolePoolConflict, isConsoleTable, isSimulatorTable } from "@/lib/utils";
+import { formatCurrency, isPsSimulatorTable } from "@/lib/utils";
 
 
 
@@ -16,10 +16,11 @@ import { useTheme } from "next-themes";
 
 /* ── Type config ─────────────────────────── */
 const TYPE: Record<string, { label: string; emoji: string; accent: string; grad: string }> = {
-  snooker:  { label: "Snooker",  emoji: "🎱", accent: "#D4541A", grad: "linear-gradient(135deg,#D4541A 0%,#7A2508 100%)" },
-  pool:     { label: "Pool",     emoji: "🎱", accent: "#1E6B4A", grad: "linear-gradient(135deg,#1E6B4A 0%,#0B3324 100%)" },
-  ps5:      { label: "PS5",      emoji: "🎮", accent: "#6D28D9", grad: "linear-gradient(135deg,#6D28D9 0%,#3B0D8E 100%)" },
-  foosball: { label: "Foosball", emoji: "⚽", accent: "#B45309", grad: "linear-gradient(135deg,#B45309 0%,#6B3203 100%)" },
+  snooker:       { label: "Snooker",       emoji: "🎱", accent: "#D4541A", grad: "linear-gradient(135deg,#D4541A 0%,#7A2508 100%)" },
+  pool:          { label: "Pool",          emoji: "🎱", accent: "#1E6B4A", grad: "linear-gradient(135deg,#1E6B4A 0%,#0B3324 100%)" },
+  ps5:           { label: "PS5",           emoji: "🎮", accent: "#6D28D9", grad: "linear-gradient(135deg,#6D28D9 0%,#3B0D8E 100%)" },
+  ps5_simulator: { label: "PS5 & Sim",    emoji: "🎮", accent: "#6D28D9", grad: "linear-gradient(135deg,#6D28D9 0%,#3B0D8E 100%)" },
+  foosball:      { label: "Foosball",      emoji: "⚽", accent: "#B45309", grad: "linear-gradient(135deg,#B45309 0%,#6B3203 100%)" },
 };
 function cfg(type: string) {
   return TYPE[type] ?? { label: type, emoji: "🎯", accent: "#555", grad: "linear-gradient(135deg,#444,#222)" };
@@ -132,7 +133,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const [date, setDate]               = useState(() => getLocalDateString(location.timezone));
   const [booking, setBooking]         = useState<Table | null>(null);
   const [selectedSlots, setSelected]  = useState<string[]>([]);
-  const [step, setStep]               = useState<"when" | "players">("when");
+  // For ps5_simulator tables: "mode" is picked first ("ps5" or "simulator")
+  // For all other types: step is "when" → optionally "players"
+  const [step, setStep]               = useState<"mode" | "when" | "players">("mode");
+  const [bookingMode, setBookingMode] = useState<"ps5" | "simulator" | null>(null);
   const [numPeople, setNumPeople]     = useState<string | null>(null); // key into people_pricing
   const [errorImgs, setErrorImgs]     = useState<Set<string>>(new Set());
   const [blockedRanges, setBlocked]   = useState<{ start: string; end: string }[]>([]);
@@ -241,34 +245,39 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   /* People/controller pricing options for the current booking */
   const pricingOptions = useMemo(() => {
     if (!booking) return [];
-    if (isSimulatorTable(booking)) {
-      if (booking.people_pricing && typeof booking.people_pricing === "object") {
-        const dbKeys = Object.keys(booking.people_pricing)
-          .filter((k) => Boolean(booking.people_pricing![k]))
-          .sort((a, b) => Number(a) - Number(b));
-        if (dbKeys.length > 0) return dbKeys;
+    // ps5_simulator: simulator mode has no player options; ps5 mode uses controller pricing
+    if (isPsSimulatorTable(booking)) {
+      if (bookingMode === "simulator") return [];
+      if (bookingMode === "ps5") {
+        if (booking.people_pricing && typeof booking.people_pricing === "object") {
+          const dbKeys = Object.keys(booking.people_pricing)
+            .filter((k) => Boolean(booking.people_pricing![k]))
+            .sort((a, b) => Number(a) - Number(b));
+          if (dbKeys.length > 0) return dbKeys;
+        }
+        return ["1", "2", "3", "4"];
       }
-      return ["1", "2"];
+      return [];
     }
     if (!booking.people_pricing) return [];
     return Object.keys(booking.people_pricing).sort((a, b) => Number(a) - Number(b));
-  }, [booking]);
+  }, [booking, bookingMode]);
 
 
   /* Effective hourly rate — uses people_pricing if a count is selected, else flat rate */
   const effectiveRate = (() => {
     if (!booking) return 0;
-    if (numPeople && booking.people_pricing && booking.people_pricing[numPeople]) {
-      return booking.people_pricing[numPeople];
-    }
-    if (isSimulatorTable(booking)) {
+    if (isPsSimulatorTable(booking)) {
+      if (bookingMode === "simulator") return booking.hourly_rate;
+      // PS5 mode
       if (numPeople && booking.people_pricing && booking.people_pricing[numPeople]) {
-        return booking.people_pricing[numPeople];
+        return booking.people_pricing[numPeople] as number;
       }
-      const factor = numPeople ? Math.max(1, Number(numPeople)) : 1;
-      return booking.hourly_rate * factor;
+      return booking.hourly_rate;
     }
-
+    if (numPeople && booking.people_pricing && booking.people_pricing[numPeople]) {
+      return booking.people_pricing[numPeople] as number;
+    }
     return booking.hourly_rate;
   })();
 
@@ -305,23 +314,11 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     [cart.items]
   );
 
-  /* Slot is in customer's own cart (show green occupied card) */
+  /* Slot is in customer's own cart (show blue occupied card) */
   function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
     const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
-    if (!booking) return false;
-    if (!isConsoleTable(booking)) {
-      return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
-    }
-    const occupiedItems = cartItemsMs
-      .filter(item => slotMs >= item.startMs && slotMs < item.endMs)
-      .map(item => ({ tableId: item.tableId, numPeople: item.numPeople }));
-
-    return checkConsolePoolConflict({
-      reqTableId: tableId,
-      reqNumPeople: numPeople ? Number(numPeople) : 1,
-      allTables: tables as Array<{ id: string; name: string; type: string }>,
-      occupiedItems,
-    });
+    // Per-table check — a slot in the cart for this same table blocks it
+    return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
   }
 
 
@@ -341,26 +338,28 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function openSheet(table: Table) {
     setBooking(table);
     setSelected([]);
-    setStep("when");
-    // Default people selection to smallest group size if pricing exists
-    let keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
-    if (keys.length === 0 && table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
-      keys = ["1", "2"];
+    setBookingMode(null);
+    setNumPeople(null);
+    if (isPsSimulatorTable(table)) {
+      // Show mode selector first for ps5_simulator tables
+      setStep("mode");
+    } else {
+      setStep("when");
+      // Default people selection to smallest group size if pricing exists
+      const keys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
+      setNumPeople(keys[0] ?? null);
     }
-    setNumPeople(keys[0] ?? null);
-    // blockedRanges hydration is owned by the slot-loading effect — it runs
-    // synchronously after this setBooking() and pulls from initialSlots if
-    // available, then revalidates in the background.
   }
 
   function closeSheet() {
     setBooking(null);
     setSelected([]);
     setNumPeople(null);
+    setBookingMode(null);
     setBlocked([]);
     setOtherConsoleBlocked([]);
     setSlotsLoading(false);
-    setStep("when");
+    setStep("mode");
   }
 
   /*
@@ -403,13 +402,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }
 
   function addToCart(t: Table) {
-    const requiredSlots = t.name.toLowerCase().includes("simulator") ? 1 : 2;
+    const requiredSlots = 1; // all table types need at least 1 slot (15 min)
     if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
     const startIso  = new Date(`${date}T${firstSlot}:00`).toISOString();
     const endStr    = slotEndTime(lastSlot);
-    // Handle midnight crossing: if end time is earlier than start, it's next day
     const endDate   = endStr < firstSlot ? addOneDay(date) : date;
     const endIso    = new Date(`${endDate}T${endStr}:00`).toISOString();
     const durationMins = selectedSlots.length * 15;
@@ -418,16 +416,31 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       closeSheet();
       return;
     }
-    let rate: number = (numPeople && t.people_pricing && t.people_pricing[numPeople]) || t.hourly_rate;
-    if (t.type === "ps5" && t.name.toLowerCase().includes("simulator")) {
-      if (!numPeople || !t.people_pricing || !t.people_pricing[numPeople]) {
-        rate = numPeople === "2" ? t.hourly_rate * 2 : t.hourly_rate;
-      }
+
+    // Rate depends on mode for ps5_simulator
+    let rate: number;
+    let finalNumPeople: number | undefined;
+    const isSim = isPsSimulatorTable(t);
+
+    if (isSim && bookingMode === "simulator") {
+      // Simulator: always flat rate, 1 player
+      rate = t.hourly_rate;
+      finalNumPeople = 1;
+    } else if (isSim && bookingMode === "ps5") {
+      // PS5 mode: use controller-based pricing
+      rate = (numPeople && t.people_pricing && t.people_pricing[numPeople]) ? t.people_pricing[numPeople] as number : t.hourly_rate;
+      finalNumPeople = numPeople ? Number(numPeople) : undefined;
+    } else {
+      // Non-ps5_simulator tables: standard logic
+      rate = (numPeople && t.people_pricing && t.people_pricing[numPeople]) ? t.people_pricing[numPeople] as number : t.hourly_rate;
+      finalNumPeople = numPeople ? Number(numPeople) : undefined;
     }
+
     cart.addItem({
       tableId: t.id, tableName: t.name, tableType: t.type,
+      bookingMode: isSim ? (bookingMode ?? undefined) : undefined,
       ratePerHour: rate,
-      numPeople: numPeople ? Number(numPeople) : undefined,
+      numPeople: finalNumPeople,
       scheduledStart: startIso, scheduledEnd: endIso,
       durationMins, amount: (durationMins / 60) * rate,
     });
@@ -685,6 +698,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
               {(() => {
                 const hasPricing = pricingOptions.length > 0;
+                const onMode     = step === "mode";
                 const onWhen     = step === "when";
                 const stopLabel  = (() => {
                   if (selectedSlots.length === 0) return "";
@@ -696,16 +710,17 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                 }).toUpperCase();
                 const isToday   = date === getLocalDateString(location.timezone);
 
-                const startBg  = "#10B981"; // Green for start
-                const stopBg   = "#EF4444"; // Red for stop
-                const middleBg = dark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.08)"; // Soft green for interior
+                const startBg  = "#10B981";
+                const stopBg   = "#EF4444";
+                const middleBg = dark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.08)";
+                const isPsSim  = isPsSimulatorTable(booking);
 
                 return (
                   <>
-                    {/* ── Header (chip + name + close, with optional Back arrow on step 2) ── */}
+                    {/* ── Header ── */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2 min-w-0 flex-1">
-                        {!onWhen && (
+                        {(!onWhen && !onMode) && (
                           <button
                             onClick={() => setStep("when")}
                             className="p-1.5 mt-0.5 rounded-full shrink-0"
@@ -715,11 +730,26 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                             <ArrowLeft className="h-4 w-4" />
                           </button>
                         )}
+                        {!onMode && isPsSim && step === "when" && (
+                          <button
+                            onClick={() => { setStep("mode"); setSelected([]); }}
+                            className="p-1.5 mt-0.5 rounded-full shrink-0"
+                            style={{ background: inputBg, color: textSec }}
+                            aria-label="Back to mode"
+                          >
+                            <ArrowLeft className="h-4 w-4" />
+                          </button>
+                        )}
                         <div className="min-w-0">
                           <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full text-white mb-2" style={{ background: sheetType.accent }}>
                             {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
                           </span>
                           <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
+                          {isPsSim && bookingMode && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: bookingMode === "ps5" ? "#6D28D9" : "#059669", color: "#fff" }}>
+                              {bookingMode === "ps5" ? "🎮 PS5 Mode" : "🕹️ Simulator Mode"}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
@@ -727,16 +757,49 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       </button>
                     </div>
 
-                    {/* ── Stepper (1·Timing ──── 2·Players) ── */}
-                    {hasPricing && (
+                    {/* ── Stepper ── */}
+                    {hasPricing && !onMode && (
                       <div className="flex items-center gap-3 pt-1">
                         <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textPri : textMut }}>
                           1 · Timing
                         </span>
                         <div className="flex-1 h-px" style={{ background: onWhen ? sheetType.accent : inputBdr }} />
                         <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textMut : textPri }}>
-                          2 · {booking.name.toLowerCase().includes("simulator") ? "Players" : booking.type === "ps5" ? "Controllers" : "Players"}
+                          2 · {bookingMode === "ps5" || (!isPsSim && booking.type === "ps5") ? "Controllers" : "Players"}
                         </span>
+                      </div>
+                    )}
+
+                    {/* ╔══ STEP 0 — MODE SELECTION (ps5_simulator only) ══╗ */}
+                    {onMode && isPsSim && (
+                      <div className="space-y-3 pt-2">
+                        <p className="text-sm font-medium" style={{ color: textSec }}>How would you like to use this unit?</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* PS5 Mode */}
+                          <button
+                            onClick={() => { setBookingMode("ps5"); setStep("when"); const keys = booking.people_pricing ? Object.keys(booking.people_pricing).filter(k => Boolean(booking.people_pricing![k])).sort((a,b) => Number(a)-Number(b)) : []; setNumPeople(keys[0] ?? "1"); }}
+                            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all active:scale-95"
+                            style={{ background: inputBg, borderColor: "#6D28D9", boxShadow: "0 4px 20px #6D28D930" }}
+                          >
+                            <span className="text-4xl">🎮</span>
+                            <div className="text-center">
+                              <p className="font-bold text-sm" style={{ color: textPri }}>PS5</p>
+                              <p className="text-xs mt-0.5" style={{ color: textSec }}>1–4 controllers</p>
+                            </div>
+                          </button>
+                          {/* Simulator Mode */}
+                          <button
+                            onClick={() => { setBookingMode("simulator"); setStep("when"); setNumPeople(null); }}
+                            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all active:scale-95"
+                            style={{ background: inputBg, borderColor: "#059669", boxShadow: "0 4px 20px #05966930" }}
+                          >
+                            <span className="text-4xl">🕹️</span>
+                            <div className="text-center">
+                              <p className="font-bold text-sm" style={{ color: textPri }}>Simulator</p>
+                              <p className="text-xs mt-0.5" style={{ color: textSec }}>1 player · flat rate</p>
+                            </div>
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -952,20 +1015,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                             }
 
                             let is2PaxDisabled = false;
-                            if (isSimulator && n === "2" && selectedSlots.length > 0 && booking) {
-                              is2PaxDisabled = selectedSlots.some((slotTime) => {
-                                const slotMs = new Date(`${date}T${slotTime}:00`).getTime();
-                                const occupiedItems = cartItemsMs
-                                  .filter((item) => slotMs >= item.startMs && slotMs < item.endMs)
-                                  .map((item) => ({ tableId: item.tableId, numPeople: item.numPeople }));
-                                return checkConsolePoolConflict({
-                                  reqTableId: booking.id,
-                                  reqNumPeople: 2,
-                                  allTables: tables as Array<{ id: string; name: string; type: string }>,
-                                  occupiedItems,
-                                });
-                              });
-                            }
+                            // For ps5_simulator in ps5 mode: no cross-table pool check needed
+                            // Each table blocks itself only, so no 2-pax disabling logic required
+
+
 
 
                             const rate   = booking.people_pricing?.[n] ?? (isSimulator && n === "2" ? booking.hourly_rate * 2 : booking.hourly_rate);

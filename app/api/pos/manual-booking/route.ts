@@ -3,7 +3,6 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
 
 export const runtime = "edge";
 
@@ -78,78 +77,50 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Duration must be 15-480 min", "VALIDATION_ERROR"), { status: 400 });
   }
 
-  // ── Conflict check ────────────────────────────────────────────────────────
-  const { data: rawAllTables } = await admin
-    .from("tables")
-    .select("id, name, type, people_pricing")
-    .eq("location_id", location_id)
-    .eq("is_active", true);
-
-  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
-
-  const reqTable = allTables.find((t) => t.id === table_id);
-  if (!reqTable) {
-    return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });
-  }
-
-  const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
-  const queryTableIds = [...new Set([table_id, ...consoleTableIds])];
-
+  // ── Conflict check (per-table, no pool logic) ─────────────────────────────
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
-      .in("table_id", queryTableIds)
+      .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
+      .eq("table_id", table_id)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id)")
       .eq("status", "confirmed")
-      .in("order_items.table_id", queryTableIds),
+      .eq("order_items.table_id", table_id),
   ]);
 
   const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && aE > bS;
-  const occupiedItems: Array<{ tableId: string; numPeople?: number | null }> = [];
   const processedItemIds = new Set<string>();
+  let isConflict = false;
 
-  (existingItems ?? []).forEach((ex) => {
+  for (const ex of (existingItems ?? [])) {
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
     if (exS && exE && overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
+      isConflict = true;
       if (ex.id) processedItemIds.add(ex.id);
-      occupiedItems.push({ tableId: ex.table_id, numPeople: ex.num_people });
+      break;
     }
-  });
+  }
 
-  (existingBookings ?? []).forEach((b) => {
-    if (b.scheduled_start && b.scheduled_end && overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
-      const oi = b.order_item as unknown as { id: string; table_id: string; num_people?: number | null } | null;
-      if (oi?.table_id) {
-        if (oi.id && processedItemIds.has(oi.id)) return;
-        if (oi.id) processedItemIds.add(oi.id);
-        occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
-      }
+  if (!isConflict) {
+    for (const b of (existingBookings ?? [])) {
+      if (!b.scheduled_start || !b.scheduled_end) continue;
+      if (!overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) continue;
+      const oi = b.order_item as unknown as { id: string; table_id: string } | null;
+      if (!oi) continue;
+      if (oi.id && processedItemIds.has(oi.id)) continue;
+      isConflict = true;
+      break;
     }
-  });
-
-
-  let isConflict = false;
-  if (!isConsoleTable(reqTable)) {
-    isConflict = occupiedItems.some((item) => item.tableId === table_id);
-  } else {
-    isConflict = checkConsolePoolConflict({
-      reqTableId: table_id,
-      reqNumPeople: num_people ?? 1,
-      allTables,
-      occupiedItems,
-    });
   }
 
   if (isConflict) {
-    return NextResponse.json(err("Conflict: that table already has a session or pool constraint in this window", "TABLE_TAKEN"), { status: 409 });
+    return NextResponse.json(err("Conflict: that table already has a session or booking in this window", "TABLE_TAKEN"), { status: 409 });
   }
-
 
 
   // ── Create order ──────────────────────────────────────────────────────────
