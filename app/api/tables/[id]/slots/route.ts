@@ -57,14 +57,14 @@ export async function GET(
   const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .select("id, table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status, num_people")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
 
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id, num_people)")
       .in("order_items.table_id", queryTableIds)
       .eq("status", "confirmed")
       .gte("scheduled_start", new Date(dayStartMs).toISOString())
@@ -72,8 +72,10 @@ export async function GET(
   ]);
 
   const activeRanges: Array<{ tableId: string; numPeople?: number | null; startMs: number; endMs: number; startIso: string; endIso: string }> = [];
+  const processedItemIds = new Set<string>();
 
   (rawItems ?? []).forEach((item) => {
+    if (item.id) processedItemIds.add(item.id);
     const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
     const endStr   = item.status === "running"
       ? (item.expected_end ?? new Date(Date.now() + 4 * 3600 * 1000).toISOString())
@@ -85,12 +87,15 @@ export async function GET(
   });
 
   (rawBookings ?? []).forEach((b) => {
-    const oi = b.order_item as unknown as { table_id: string; num_people?: number | null } | null;
+    const oi = b.order_item as unknown as { id: string; table_id: string; num_people?: number | null } | null;
     if (!oi || !b.scheduled_start || !b.scheduled_end) return;
+    if (oi.id && processedItemIds.has(oi.id)) return;
+    if (oi.id) processedItemIds.add(oi.id);
     const startMs = new Date(b.scheduled_start).getTime();
     const endMs   = new Date(b.scheduled_end).getTime();
     activeRanges.push({ tableId: oi.table_id, numPeople: oi.num_people, startMs, endMs, startIso: b.scheduled_start, endIso: b.scheduled_end });
   });
+
 
   const blocked: { start: string; end: string }[] = [];
 

@@ -98,34 +98,41 @@ export async function POST(request: Request) {
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id, num_people)")
       .eq("status", "confirmed")
       .in("order_items.table_id", queryTableIds),
   ]);
 
   const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && aE > bS;
   const occupiedItems: Array<{ tableId: string; numPeople?: number | null }> = [];
+  const processedItemIds = new Set<string>();
 
   (existingItems ?? []).forEach((ex) => {
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
     if (exS && exE && overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
+      if (ex.id) processedItemIds.add(ex.id);
       occupiedItems.push({ tableId: ex.table_id, numPeople: ex.num_people });
     }
   });
 
   (existingBookings ?? []).forEach((b) => {
     if (b.scheduled_start && b.scheduled_end && overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
-      const oi = b.order_item as unknown as { table_id: string; num_people?: number | null } | null;
-      if (oi?.table_id) occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
+      const oi = b.order_item as unknown as { id: string; table_id: string; num_people?: number | null } | null;
+      if (oi?.table_id) {
+        if (oi.id && processedItemIds.has(oi.id)) return;
+        if (oi.id) processedItemIds.add(oi.id);
+        occupiedItems.push({ tableId: oi.table_id, numPeople: oi.num_people });
+      }
     }
   });
+
 
   let isConflict = false;
   if (!isConsoleTable(reqTable)) {
