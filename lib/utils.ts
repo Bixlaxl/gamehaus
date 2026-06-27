@@ -123,19 +123,19 @@ export type OccupiedConsoleItem = {
 
 export function getSimulatorTotalCapacity(allTables: Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>): number {
   const simTables = allTables.filter(t => isSimulatorTable(t));
-  if (simTables.length === 0) return 0;
+  if (simTables.length === 0) return 2;
   let capacity = 0;
   for (const st of simTables) {
-    if (st.people_pricing && typeof st.people_pricing === "object") {
+    if (st.people_pricing && typeof st.people_pricing === "object" && st.people_pricing !== null) {
       const keys = Object.keys(st.people_pricing).filter(k => Boolean(st.people_pricing![k]));
       if (keys.length > 0) {
         capacity += keys.length;
         continue;
       }
     }
-    capacity += 1;
+    capacity += 2;
   }
-  return capacity;
+  return Math.max(2, capacity);
 }
 
 export function checkConsolePoolConflict({
@@ -159,7 +159,9 @@ export function checkConsolePoolConflict({
   );
 
   // Standalone PS5 consoles count (type === 'ps5' and not simulator)
-  const totalPs5Consoles = allTables.filter(t => (t.type as string) === "ps5" && !t.name.toLowerCase().includes("simulator")).length;
+  const standalonePs5Tables = allTables.filter(t => (t.type as string) === "ps5" && !t.name.toLowerCase().includes("simulator"));
+  const totalPs5Consoles = Math.max(2, standalonePs5Tables.length);
+
   // Total physical Simulator capacity based on registered controller rates in owner portal
   const totalSimulatorsCapacity = getSimulatorTotalCapacity(allTables);
 
@@ -197,6 +199,7 @@ export function checkConsolePoolConflict({
     return false;
   }
 }
+
 
 
 
