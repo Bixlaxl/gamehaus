@@ -107,9 +107,10 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     const tableType = tableMeta?.type || storeTable?.type || "";
 
     const itemMembershipId = (item as any).membership_id;
+    const isBound = (m: any) => !m.bound_table_ids || m.bound_table_ids.length === 0 || m.bound_table_ids.includes(tableId ?? "");
     let coveringMembership = itemMembershipId
-      ? allMemberships.find(m => m.id === itemMembershipId)
-      : allMemberships.find(m => m.bound_table_ids?.includes(tableId ?? ""));
+      ? allMemberships.find(m => m.id === itemMembershipId && isBound(m))
+      : allMemberships.find(m => isBound(m));
 
     if (!coveringMembership) continue;
 
@@ -155,13 +156,15 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     : 0;
 
   const totalMembershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
+  const orderDiscount = Math.max(Number(selectedOrder?.discount_amount) || 0, bill.discountAmount);
   const netScheduledDue = bill.advancePaid > 0
-    ? Math.max(0, remainingScheduledAfterFree - pctDiscount - bill.advancePaid)
-    : Math.max(0, remainingScheduledAfterFree - pctDiscount);
+    ? Math.max(0, remainingScheduledAfterFree - pctDiscount - orderDiscount - bill.advancePaid)
+    : Math.max(0, remainingScheduledAfterFree - pctDiscount - orderDiscount);
 
   const extrasTotal = bill.extraLines.reduce((sum, l) => sum + l.amount, 0);
   const membershipDiscount = totalMembershipDiscount;
-  const billAfterMembership = Math.max(0, Math.round((netScheduledDue + overtimeTotal + extrasTotal - bill.discountAmount) * 100) / 100);
+  const billAfterMembership = Math.max(0, Math.round((netScheduledDue + overtimeTotal + extrasTotal) * 100) / 100);
+
 
 
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
