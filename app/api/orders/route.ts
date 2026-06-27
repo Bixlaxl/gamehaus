@@ -38,17 +38,17 @@ export async function POST(request: Request) {
   if (scheduledItems.length > 0) {
     const tableIds = [...new Set(scheduledItems.map((i) => i.table_id))];
 
-    // Load all active tables in location to map PS5 console dependencies
-    const { data: allTables } = await admin
+    // Load all active tables in location to map console/simulator capacity pools
+    const { data: rawAllTables } = await admin
       .from("tables")
-      .select("id, name, type")
+      .select("id, name, type, people_pricing")
       .eq("location_id", location_id)
       .eq("is_active", true);
 
-    const hasPs5 = allTables?.some((t) => tableIds.includes(t.id) && t.type === "ps5");
-    const queryTableIds = hasPs5
-      ? [...new Set([...tableIds, ...(allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [])])]
-      : tableIds;
+    const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
+    const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
+    const queryTableIds = [...new Set([...tableIds, ...consoleTableIds])];
+
 
     const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
       admin

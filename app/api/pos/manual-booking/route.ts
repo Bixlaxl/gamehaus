@@ -81,11 +81,12 @@ export async function POST(request: Request) {
   // ── Conflict check ────────────────────────────────────────────────────────
   const { data: rawAllTables } = await admin
     .from("tables")
-    .select("id, name, type")
+    .select("id, name, type, people_pricing")
     .eq("location_id", location_id)
     .eq("is_active", true);
 
-  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string }>;
+  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
+
   const reqTable = allTables.find((t) => t.id === table_id);
   if (!reqTable) {
     return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });

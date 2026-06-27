@@ -121,6 +121,23 @@ export type OccupiedConsoleItem = {
   numPeople?: number | null;
 };
 
+export function getSimulatorTotalCapacity(allTables: Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>): number {
+  const simTables = allTables.filter(t => isSimulatorTable(t));
+  if (simTables.length === 0) return 0;
+  let capacity = 0;
+  for (const st of simTables) {
+    if (st.people_pricing && typeof st.people_pricing === "object") {
+      const keys = Object.keys(st.people_pricing).filter(k => Boolean(st.people_pricing![k]));
+      if (keys.length > 0) {
+        capacity += keys.length;
+        continue;
+      }
+    }
+    capacity += 1;
+  }
+  return capacity;
+}
+
 export function checkConsolePoolConflict({
   reqTableId,
   reqNumPeople = 1,
@@ -129,7 +146,7 @@ export function checkConsolePoolConflict({
 }: {
   reqTableId: string;
   reqNumPeople?: number;
-  allTables: Array<{ id: string; name: string; type: string }>;
+  allTables: Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
   occupiedItems: Array<string | OccupiedConsoleItem>;
 }): boolean {
   const reqTable = allTables.find(t => t.id === reqTableId);
@@ -141,15 +158,10 @@ export function checkConsolePoolConflict({
     typeof item === "string" ? { tableId: item, numPeople: 1 } : item
   );
 
-  // If requested table itself is explicitly occupied in this window, return conflict
-  if (normalizedItems.some(item => item.tableId === reqTableId)) {
-    return true;
-  }
-
   // Standalone PS5 consoles count (type === 'ps5' and not simulator)
   const totalPs5Consoles = allTables.filter(t => (t.type as string) === "ps5" && !t.name.toLowerCase().includes("simulator")).length;
-  // Total physical Simulator tables
-  const totalSimulators = allTables.filter(t => isSimulatorTable(t)).length;
+  // Total physical Simulator capacity based on registered controller rates in owner portal
+  const totalSimulatorsCapacity = getSimulatorTotalCapacity(allTables);
 
   let ps5ConsolesUsed = 0;
   let simulatorsUsed = 0;
@@ -158,9 +170,8 @@ export function checkConsolePoolConflict({
     const occTable = allTables.find(t => t.id === item.tableId);
     if (!occTable) continue;
     if (isSimulatorTable(occTable)) {
-      simulatorsUsed += 1;
-      // 1 person simulator uses 1 PS5; 2 people simulator uses 2 PS5s
       const nPeople = Math.max(1, Number(item.numPeople) || 1);
+      simulatorsUsed += nPeople;
       ps5ConsolesUsed += nPeople;
     } else if (isConsoleTable(occTable)) {
       ps5ConsolesUsed += 1;
@@ -168,20 +179,25 @@ export function checkConsolePoolConflict({
   }
 
   const remPs5Consoles = totalPs5Consoles - ps5ConsolesUsed;
-  const remSimulators = totalSimulators - simulatorsUsed;
+  const remSimulators = totalSimulatorsCapacity - simulatorsUsed;
 
   const reqIsSim = isSimulatorTable(reqTable);
-  const neededPs5 = reqIsSim ? Math.max(1, Number(reqNumPeople) || 1) : 1;
+  const neededSim = reqIsSim ? Math.max(1, Number(reqNumPeople) || 1) : 1;
+  const neededPs5 = neededSim;
 
   if (reqIsSim) {
-    if (remSimulators <= 0) return true;
+    if (remSimulators < neededSim) return true;
     if (remPs5Consoles < neededPs5) return true;
     return false;
   } else {
-    if (remPs5Consoles < neededPs5) return true;
+    if (normalizedItems.some(item => item.tableId === reqTableId)) {
+      return true;
+    }
+    if (remPs5Consoles < 1) return true;
     return false;
   }
 }
+
 
 
 

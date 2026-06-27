@@ -109,11 +109,12 @@ export async function POST(request: Request) {
   // Load all active tables in location to map console/simulator capacity pools
   const { data: rawAllTables } = await admin
     .from("tables")
-    .select("id, name, type")
+    .select("id, name, type, people_pricing")
     .eq("location_id", location_id)
     .eq("is_active", true);
 
-  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string }>;
+  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string; people_pricing?: Record<string, unknown> | null }>;
+
   const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
   const queryTableIds = [...new Set([...tableIds, ...consoleTableIds])];
 
