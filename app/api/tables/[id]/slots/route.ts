@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
+import { checkConsolePoolConflict, isConsoleTable, getSimulatorTotalCapacity, isSimulatorTable } from "@/lib/utils";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -116,6 +116,7 @@ export async function GET(
 
       const isConflict = checkConsolePoolConflict({
         reqTableId: tableId,
+        reqNumPeople: 1, // default to 1 for slot availability check
         allTables,
         occupiedItems,
       });
@@ -138,9 +139,24 @@ export async function GET(
     return true;
   });
 
+  // Debug payload — helps diagnose over-blocking in production
+  const standalonePs5Count = allTables.filter(t => (t.type as string) === "ps5" && !t.name.toLowerCase().includes("simulator")).length;
+  const simCapacity = getSimulatorTotalCapacity(allTables);
+  const reqTableInfo = allTables.find(t => t.id === tableId);
+
   return NextResponse.json({
     ...ok(unique),
     otherConsoleBlocked: [],
+    _debug: {
+      tableId,
+      tableName: reqTableInfo?.name,
+      tableType: reqTableInfo?.type,
+      isConsole,
+      totalPs5Consoles: Math.max(2, standalonePs5Count),
+      totalSimulatorsCapacity: simCapacity,
+      activeRanges: activeRanges.map(r => ({ tableId: r.tableId, numPeople: r.numPeople, start: r.startIso, end: r.endIso })),
+      allTablesSummary: allTables.map(t => ({ id: t.id, name: t.name, type: t.type, isSimulator: isSimulatorTable(t), isConsole: isConsoleTable(t), hasPeoplePricing: !!t.people_pricing, ppKeys: t.people_pricing ? Object.keys(t.people_pricing) : [] })),
+    },
   });
 }
 
