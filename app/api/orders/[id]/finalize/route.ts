@@ -194,19 +194,21 @@ export async function POST(
   const sessionTotal = bill.tableLines.reduce((sum, l) => sum + l.amount, 0);
   const scheduledSubtotal = bill.tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0);
   const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
-  const netSessionDue = bill.advancePaid > 0
-    ? Math.max(0, scheduledSubtotal - bill.advancePaid) + overtimeTotal
-    : sessionTotal;
 
-  const remainingSessionDue = Math.max(0, netSessionDue - totalFreeHoursDiscount);
+  const remainingScheduledAfterFree = Math.max(0, scheduledSubtotal - totalFreeHoursDiscount);
   const pctDiscount = membershipDiscountPct > 0
-    ? Math.floor(remainingSessionDue * membershipDiscountPct / 100)
+    ? Math.floor(remainingScheduledAfterFree * membershipDiscountPct / 100)
     : 0;
 
-  let membershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
-  membershipDiscount = Math.min(membershipDiscount, bill.totalDue);
+  const totalMembershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
+  const netScheduledDue = bill.advancePaid > 0
+    ? Math.max(0, remainingScheduledAfterFree - pctDiscount - bill.advancePaid)
+    : Math.max(0, remainingScheduledAfterFree - pctDiscount);
 
-  const billAfterMembership = Math.max(0, Math.round((bill.totalDue - membershipDiscount) * 100) / 100);
+  const extrasTotal = bill.extraLines.reduce((sum, l) => sum + l.amount, 0);
+  const membershipDiscount = totalMembershipDiscount;
+  const billAfterMembership = Math.max(0, Math.round((netScheduledDue + overtimeTotal + extrasTotal - bill.discountAmount) * 100) / 100);
+
 
   // Load owner-configured loyalty rates (falls back to defaults if unset)
   const settings = await getAppSettings(admin);

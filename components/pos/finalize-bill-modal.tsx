@@ -148,18 +148,21 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const sessionTotal = bill.tableLines.reduce((sum, l) => sum + l.amount, 0);
   const scheduledSubtotal = bill.tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0);
   const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
-  const netSessionDue = bill.advancePaid > 0
-    ? Math.max(0, scheduledSubtotal - bill.advancePaid) + overtimeTotal
-    : sessionTotal;
 
-  const remainingSessionDue = Math.max(0, netSessionDue - totalFreeHoursDiscount);
+  const remainingScheduledAfterFree = Math.max(0, scheduledSubtotal - totalFreeHoursDiscount);
   const pctDiscount = membershipPct > 0
-    ? Math.floor(remainingSessionDue * membershipPct / 100)
+    ? Math.floor(remainingScheduledAfterFree * membershipPct / 100)
     : 0;
 
-  let membershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
-  membershipDiscount = Math.min(membershipDiscount, bill.totalDue);
-  const billAfterMembership = Math.max(0, Math.round((bill.totalDue - membershipDiscount) * 100) / 100);
+  const totalMembershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
+  const netScheduledDue = bill.advancePaid > 0
+    ? Math.max(0, remainingScheduledAfterFree - pctDiscount - bill.advancePaid)
+    : Math.max(0, remainingScheduledAfterFree - pctDiscount);
+
+  const extrasTotal = bill.extraLines.reduce((sum, l) => sum + l.amount, 0);
+  const membershipDiscount = totalMembershipDiscount;
+  const billAfterMembership = Math.max(0, Math.round((netScheduledDue + overtimeTotal + extrasTotal - bill.discountAmount) * 100) / 100);
+
 
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
   // Minimum 100 points required to redeem; any input below 100 is treated as 0
