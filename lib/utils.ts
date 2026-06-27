@@ -107,10 +107,8 @@ export function formatSignedCountdown(endTime: Date, now: Date): { text: string;
 }
 
 export function getConsoleNumber(tableName: string): number | null {
-  const normalized = tableName.toLowerCase();
-  if (normalized.includes("1")) return 1;
-  if (normalized.includes("2")) return 2;
-  return null;
+  const match = tableName.match(/\d+/);
+  return match ? parseInt(match[0], 10) : null;
 }
 
 export function isPs5Conflict({
@@ -141,16 +139,14 @@ export function isPs5Conflict({
   const isExConsole  = exTableType === "ps5" || isExSim;
 
   if (!isReqConsole || !isExConsole) return false;
-  if (isReqSim !== isExSim) return false; // PS5 does not conflict with Simulator
 
   const reqConsole = getConsoleNumber(reqTableName);
   const exConsole  = getConsoleNumber(exTableName);
 
   if (reqConsole === null || exConsole === null) return false;
 
-  if (reqConsole === exConsole) return true;
-  if (reqNumPeople >= 2 || exNumPeople >= 2) return true;
-
-  return false;
+  // Same station hardware number (e.g. PS5 Console 1 & Simulator 1) share occupation!
+  return reqConsole === exConsole;
 }
+
 

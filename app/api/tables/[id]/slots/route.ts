@@ -44,28 +44,30 @@ export async function GET(
 
   const targetType = targetTable.type as string;
   const isConsole = targetType === "ps5" || targetType === "simulator" || targetTable.name.toLowerCase().includes("simulator");
-  const isSim = targetType === "simulator" || targetTable.name.toLowerCase().includes("simulator");
+  const reqConsole = isConsole ? getConsoleNumber(targetTable.name) : null;
 
   const queryTableIds = isConsole
     ? (allTables?.filter((t) => {
         const tType = t.type as string;
-        const tSim = tType === "simulator" || t.name.toLowerCase().includes("simulator");
-        return isSim ? tSim : (tType === "ps5" && !tSim);
+        const isTConsole = tType === "ps5" || tType === "simulator" || t.name.toLowerCase().includes("simulator");
+        if (!isTConsole) return false;
+        const c = getConsoleNumber(t.name);
+        return c !== null && reqConsole !== null && c === reqConsole;
       }).map((t) => t.id) ?? [tableId])
     : [tableId];
 
-  const reqConsole = isConsole ? getConsoleNumber(targetTable.name) : null;
   const otherConsoleTableIds = isConsole
     ? (allTables
         ?.filter((t) => {
           const tType = t.type as string;
-          const tSim = tType === "simulator" || t.name.toLowerCase().includes("simulator");
-          if (isSim !== tSim) return false;
+          const isTConsole = tType === "ps5" || tType === "simulator" || t.name.toLowerCase().includes("simulator");
+          if (!isTConsole) return false;
           const c = getConsoleNumber(t.name);
           return c !== null && reqConsole !== null && c !== reqConsole;
         })
         .map((t) => t.id) ?? [])
     : [];
+
 
 
   // Don't SQL-filter on scheduled_start — walk-ins have NULL scheduled_start
