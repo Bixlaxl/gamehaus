@@ -365,13 +365,14 @@ export function TablesContent({
           "5": form.people_pricing["5"] ?? "",
           "6": form.people_pricing["6"] ?? "",
         };
-      } else if (typeValue === "ps5") {
+      } else if (typeValue === "ps5" || typeValue === "simulator" || typeValue.includes("simulator")) {
         finalPeoplePricing = {
           "1": form.people_pricing["1"] ?? "",
           "2": form.people_pricing["2"] ?? "",
           "3": form.people_pricing["3"] ?? "",
           "4": form.people_pricing["4"] ?? "",
         };
+
       } else {
         finalPeoplePricing = {};
       }
@@ -649,7 +650,8 @@ export function TablesContent({
                 </div>
               </div>
             )}
-            {(form.type === "ps5" || (showCustomInput && customPricingBasis === "controller")) && (
+            {(form.type === "ps5" || form.type === "simulator" || form.name.toLowerCase().includes("simulator") || (showCustomInput && customPricingBasis === "controller")) && (
+
               <div className="space-y-2">
                 <Label>Per-Controller Hourly Rate (₹/hr) — optional</Label>
                 <p className="text-xs text-gray-400">Override the flat hourly rate based on controller count. Leave blank to use the flat rate above.</p>

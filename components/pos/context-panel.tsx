@@ -8,7 +8,8 @@ import { NameMismatchModal } from "./name-mismatch-modal";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill } from "@/lib/billing/engine";
 
-import { formatCurrency, formatSignedCountdown, getShopWindow } from "@/lib/utils";
+import { formatCurrency, formatSignedCountdown, getShopWindow, isSimulatorTable } from "@/lib/utils";
+
 import { X, Plus, Trash2, Square, Timer, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
@@ -94,9 +95,14 @@ function PanelWalkIn({
   // People / controller count — keys into table.people_pricing. When set,
   // overrides table.hourly_rate with the tier rate.
   const peopleOptions = useMemo(() => {
-    if (table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
-      const dbKeys = table.people_pricing ? Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
-      return dbKeys.length > 0 ? dbKeys : ["1", "2"];
+    if (isSimulatorTable(table)) {
+      if (table.people_pricing && typeof table.people_pricing === "object") {
+        const dbKeys = Object.keys(table.people_pricing)
+          .filter((k) => Boolean(table.people_pricing![k]))
+          .sort((a, b) => Number(a) - Number(b));
+        if (dbKeys.length > 0) return dbKeys;
+      }
+      return ["1", "2"];
     }
     if (!table.people_pricing) return [];
     return Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b));
@@ -107,14 +113,13 @@ function PanelWalkIn({
     if (numPeople && table.people_pricing?.[numPeople]) {
       return table.people_pricing[numPeople];
     }
-    if (table.type === "ps5" && table.name.toLowerCase().includes("simulator")) {
-      if (numPeople === "2") {
-        return table.hourly_rate * 2;
-      }
-      return table.hourly_rate;
+    if (isSimulatorTable(table)) {
+      const factor = numPeople ? Math.max(1, Number(numPeople)) : 1;
+      return table.hourly_rate * factor;
     }
     return table.hourly_rate;
   })();
+
   const [loading,       setLoading]       = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const [customer,      setCustomer]      = useState<CustomerLookup | null>(null);
@@ -688,15 +693,16 @@ function PeoplePicker({
   const qc = useQueryClient();
   const [saving, setSaving] = useState<number | null>(null);
 
-  const isSimulator = item.table?.type === "ps5" && item.table?.name.toLowerCase().includes("simulator");
+  const isSimulator = item.table ? isSimulatorTable(item.table) : false;
   const pricing = useMemo(() => (item.table?.people_pricing ?? {}) as Record<string, number>, [item.table?.people_pricing]);
   const options  = useMemo(() => {
-    const dbKeys = Object.keys(pricing).sort((a, b) => Number(a) - Number(b));
+    const dbKeys = Object.keys(pricing).filter(k => Boolean(pricing[k])).sort((a, b) => Number(a) - Number(b));
     if (dbKeys.length === 0 && isSimulator) {
       return ["1", "2"];
     }
     return dbKeys;
   }, [pricing, isSimulator]);
+
   if (options.length === 0) return null;
   const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
   const current  = item.num_people ?? null;
@@ -1212,9 +1218,10 @@ function PanelSession({
                   AND the session is still adjustable (not yet finalized). */}
               {(item.status === "running" || item.status === "scheduled") &&
                 ((item.table?.people_pricing && Object.keys(item.table.people_pricing).length > 0) ||
-                 (item.table?.type === "ps5" && item.table?.name.toLowerCase().includes("simulator"))) && (
+                 (item.table && isSimulatorTable(item.table))) && (
                   <PeoplePicker item={item} locationId={locationId} />
               )}
+
 
               {/* Bill-ready: show full session timings (Started → Ended) */}
               {item.status === "finished" && (

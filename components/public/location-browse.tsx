@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
-import { formatCurrency, checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
+import { formatCurrency, checkConsolePoolConflict, isConsoleTable, isSimulatorTable } from "@/lib/utils";
+
 
 
 import { createClient } from "@/lib/supabase/client";
@@ -240,13 +241,19 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   /* People/controller pricing options for the current booking */
   const pricingOptions = useMemo(() => {
     if (!booking) return [];
-    if (booking.type === "ps5" && booking.name.toLowerCase().includes("simulator")) {
-      const dbKeys = booking.people_pricing ? Object.keys(booking.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
-      return dbKeys.length > 0 ? dbKeys : ["1", "2"];
+    if (isSimulatorTable(booking)) {
+      if (booking.people_pricing && typeof booking.people_pricing === "object") {
+        const dbKeys = Object.keys(booking.people_pricing)
+          .filter((k) => Boolean(booking.people_pricing![k]))
+          .sort((a, b) => Number(a) - Number(b));
+        if (dbKeys.length > 0) return dbKeys;
+      }
+      return ["1", "2"];
     }
     if (!booking.people_pricing) return [];
     return Object.keys(booking.people_pricing).sort((a, b) => Number(a) - Number(b));
   }, [booking]);
+
 
   /* Effective hourly rate — uses people_pricing if a count is selected, else flat rate */
   const effectiveRate = (() => {
@@ -254,12 +261,14 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     if (numPeople && booking.people_pricing && booking.people_pricing[numPeople]) {
       return booking.people_pricing[numPeople];
     }
-    if (booking.type === "ps5" && booking.name.toLowerCase().includes("simulator")) {
-      if (numPeople === "2") {
-        return booking.hourly_rate * 2;
+    if (isSimulatorTable(booking)) {
+      if (numPeople && booking.people_pricing && booking.people_pricing[numPeople]) {
+        return booking.people_pricing[numPeople];
       }
-      return booking.hourly_rate;
+      const factor = numPeople ? Math.max(1, Number(numPeople)) : 1;
+      return booking.hourly_rate * factor;
     }
+
     return booking.hourly_rate;
   })();
 

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarPlus, Banknote, Smartphone } from "lucide-react";
 import type { Table } from "@/lib/supabase/types";
+import { isSimulatorTable } from "@/lib/utils";
+
 
 const DURATION_PRESETS = [
   { mins: 30,  label: "30m" },
@@ -62,7 +64,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   }, [tables, tableId]);
 
   const chosenTable = useMemo(() => tables.find((t) => t.id === tableId), [tables, tableId]);
-  const isSimulator = chosenTable?.type === "ps5" && chosenTable?.name.toLowerCase().includes("simulator");
+  const isSimulator = chosenTable ? isSimulatorTable(chosenTable) : false;
   const durationPresets = useMemo(() => {
     const base = [
       { mins: 30,  label: "30m" },
@@ -78,11 +80,17 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   }, [isSimulator]);
   // Default-pick num_people to the table's smallest tier if it has tiered pricing
   const peopleOptions = useMemo(() => {
-    if (chosenTable?.type === "ps5" && chosenTable?.name.toLowerCase().includes("simulator")) {
-      const dbKeys = chosenTable.people_pricing ? Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b)) : [];
-      return dbKeys.length > 0 ? dbKeys : ["1", "2"];
+    if (!chosenTable) return [];
+    if (isSimulatorTable(chosenTable)) {
+      if (chosenTable.people_pricing && typeof chosenTable.people_pricing === "object") {
+        const dbKeys = Object.keys(chosenTable.people_pricing)
+          .filter((k) => Boolean(chosenTable.people_pricing![k]))
+          .sort((a, b) => Number(a) - Number(b));
+        if (dbKeys.length > 0) return dbKeys;
+      }
+      return ["1", "2"];
     }
-    if (!chosenTable?.people_pricing) return [];
+    if (!chosenTable.people_pricing) return [];
     return Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b));
   }, [chosenTable]);
   const [numPeople, setNumPeople] = useState<string | null>(null);
@@ -96,14 +104,13 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     if (numPeople && chosenTable.people_pricing?.[numPeople]) {
       return chosenTable.people_pricing[numPeople];
     }
-    if (chosenTable.type === "ps5" && chosenTable.name.toLowerCase().includes("simulator")) {
-      if (numPeople === "2") {
-        return chosenTable.hourly_rate * 2;
-      }
-      return chosenTable.hourly_rate;
+    if (isSimulatorTable(chosenTable)) {
+      const factor = numPeople ? Math.max(1, Number(numPeople)) : 1;
+      return chosenTable.hourly_rate * factor;
     }
     return chosenTable.hourly_rate;
   })();
+
   const estimatedTotal = Math.round((duration / 60) * effectiveRate);
 
   // Build the ISO strings the server expects (IST local time → ISO with offset)
