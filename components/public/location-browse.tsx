@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
-import { formatCurrency, isPs5Conflict, getConsoleNumber } from "@/lib/utils";
+import { formatCurrency, checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
+
 
 import { createClient } from "@/lib/supabase/client";
 import type { Location, Table } from "@/lib/supabase/types";
@@ -263,45 +264,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   })();
 
   const isOtherConsoleOccupied = useMemo(() => {
-    if (!booking) return false;
-    const bType = booking.type as string;
-    const isConsole = bType === "ps5" || bType === "simulator" || booking.name.toLowerCase().includes("simulator");
-    if (!isConsole) return false;
-    if (selectedSlots.length === 0) return false;
-
-    const serverConflict = selectedSlots.some((slotTime) => {
-      const slotMs = new Date(`${date}T${slotTime}:00`).getTime();
-      return otherConsoleBlocked.some((r) => {
-        const startMs = new Date(r.start).getTime();
-        const endMs = new Date(r.end).getTime();
-        return slotMs >= startMs && slotMs < endMs;
-      });
-    });
-    if (serverConflict) return true;
-
-    const reqConsole = getConsoleNumber(booking.name);
-    const isSim = bType === "simulator" || booking.name.toLowerCase().includes("simulator");
-
-    return selectedSlots.some((slotTime) => {
-      const slotMs = new Date(`${date}T${slotTime}:00`).getTime();
-      return cart.items.some((i) => {
-        const iType = i.tableType as string;
-        const isItemConsole = iType === "ps5" || iType === "simulator" || i.tableName.toLowerCase().includes("simulator");
-        if (!isItemConsole) return false;
-        const isItemSim = iType === "simulator" || i.tableName.toLowerCase().includes("simulator");
-        if (isSim !== isItemSim) return false;
-
-        const exConsole = getConsoleNumber(i.tableName);
-        if (reqConsole !== null && exConsole !== null && reqConsole !== exConsole) {
-          const startMs = new Date(i.scheduledStart).getTime();
-          const endMs = new Date(i.scheduledEnd).getTime();
-          return slotMs >= startMs && slotMs < endMs;
-        }
-        return false;
-      });
-    });
-  }, [booking, selectedSlots, date, otherConsoleBlocked, cart.items]);
-
+    return false;
+  }, []);
 
   /* Derived totals from slot selection */
   const selMins  = selectedSlots.length * 15;
@@ -313,10 +277,6 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     : "";
 
   // ── Hot-path memoization for the slot grid ─────────────────────────────────
-  // Before: each of ~40 slots called isServerBlocked + isCartOccupied, which
-  // each constructed Date objects on every iteration of blockedRanges/cart.items.
-  // ~640 Date allocations per render on mobile. Now we pre-parse once and the
-  // slot-loop math is pure number comparison.
   const blockedRangesMs = useMemo(
     () => blockedRanges.map(r => ({
       start: new Date(r.start).getTime(),
@@ -329,7 +289,6 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
       tableId: i.tableId,
       tableName: i.tableName,
       tableType: i.tableType,
-      numPeople: i.numPeople ?? 1,
       startMs: new Date(i.scheduledStart).getTime(),
       endMs:   new Date(i.scheduledEnd).getTime(),
     })),
@@ -340,20 +299,20 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
     const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
     if (!booking) return false;
-    return cartItemsMs.some(item => {
-      if (slotMs < item.startMs || slotMs >= item.endMs) return false;
-      return isPs5Conflict({
-        reqTableId: tableId,
-        reqTableName: booking.name,
-        reqTableType: booking.type,
-        reqNumPeople: numPeople ? Number(numPeople) : 1,
-        exTableId: item.tableId,
-        exTableName: item.tableName,
-        exTableType: item.tableType,
-        exNumPeople: item.numPeople,
-      });
+    if (!isConsoleTable(booking)) {
+      return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
+    }
+    const occupiedTableIds = cartItemsMs
+      .filter(item => slotMs >= item.startMs && slotMs < item.endMs)
+      .map(item => item.tableId);
+
+    return checkConsolePoolConflict({
+      reqTableId: tableId,
+      allTables: tables as Array<{ id: string; name: string; type: string }>,
+      occupiedTableIds,
     });
   }
+
 
 
   /* Slot is blocked by a walk-in or confirmed booking on the server — hide it entirely */

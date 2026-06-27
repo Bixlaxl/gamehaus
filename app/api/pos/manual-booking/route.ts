@@ -3,9 +3,10 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { isPs5Conflict } from "@/lib/utils";
+import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
 
 export const runtime = "edge";
+
 
 /**
  * Manual phone-call booking. Same data shape as an online checkout, but the
@@ -77,82 +78,71 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Duration must be 15-480 min", "VALIDATION_ERROR"), { status: 400 });
   }
 
-  // ── Conflict check — same rule as /api/walkin ────────────────────────────
-  // Load all active tables in location to map PS5 console dependencies
-  const { data: allTables } = await admin
+  // ── Conflict check ────────────────────────────────────────────────────────
+  const { data: rawAllTables } = await admin
     .from("tables")
     .select("id, name, type")
     .eq("location_id", location_id)
     .eq("is_active", true);
 
-  const isPs5 = allTables?.find((t) => t.id === table_id)?.type === "ps5";
-  const queryTableIds = isPs5
-    ? [...new Set([table_id, ...(allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [])])]
-    : [table_id];
+  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string }>;
+  const reqTable = allTables.find((t) => t.id === table_id);
+  if (!reqTable) {
+    return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });
+  }
+
+  const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
+  const queryTableIds = [...new Set([table_id, ...consoleTableIds])];
 
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
       .eq("status", "confirmed")
       .in("order_items.table_id", queryTableIds),
   ]);
 
   const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && aE > bS;
+  const occupiedSet = new Set<string>();
 
-  for (const ex of (existingItems ?? [])) {
+  (existingItems ?? []).forEach((ex) => {
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
-    if (!exS || !exE) continue;
-    if (overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
-      const reqTable = allTables?.find((t) => t.id === table_id);
-      const exTable = allTables?.find((t) => t.id === ex.table_id);
-      if (!reqTable || !exTable) continue;
-
-      const conflict = isPs5Conflict({
-        reqTableId: table_id,
-        reqTableName: reqTable.name,
-        reqTableType: reqTable.type,
-        reqNumPeople: num_people ?? 1,
-        exTableId: ex.table_id,
-        exTableName: exTable.name,
-        exTableType: exTable.type,
-        exNumPeople: ex.num_people ?? 1,
-      });
-      if (conflict) {
-        return NextResponse.json(err("Conflict: that table already has a session in this window", "TABLE_TAKEN"), { status: 409 });
-      }
+    if (exS && exE && overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
+      occupiedSet.add(ex.table_id);
     }
-  }
-  for (const b of (existingBookings ?? [])) {
-    const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
-    if (!oi) continue;
-    if (overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
-      const reqTable = allTables?.find((t) => t.id === table_id);
-      const exTable = allTables?.find((t) => t.id === oi.table_id);
-      if (!reqTable || !exTable) continue;
+  });
 
-      const conflict = isPs5Conflict({
-        reqTableId: table_id,
-        reqTableName: reqTable.name,
-        reqTableType: reqTable.type,
-        reqNumPeople: num_people ?? 1,
-        exTableId: oi.table_id,
-        exTableName: exTable.name,
-        exTableType: exTable.type,
-        exNumPeople: oi.num_people ?? 1,
-      });
-      if (conflict) {
-        return NextResponse.json(err("Conflict: that table already has a confirmed booking in this window", "TABLE_TAKEN"), { status: 409 });
-      }
+  (existingBookings ?? []).forEach((b) => {
+    if (b.scheduled_start && b.scheduled_end && overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
+      const oi = b.order_item as unknown as { table_id: string } | null;
+      if (oi?.table_id) occupiedSet.add(oi.table_id);
     }
+  });
+
+  const occupiedTableIds = Array.from(occupiedSet);
+
+  let isConflict = false;
+  if (!isConsoleTable(reqTable)) {
+    isConflict = occupiedTableIds.includes(table_id);
+  } else {
+    isConflict = checkConsolePoolConflict({
+      reqTableId: table_id,
+      allTables,
+      occupiedTableIds,
+    });
   }
+
+  if (isConflict) {
+    return NextResponse.json(err("Conflict: that table already has a session or pool constraint in this window", "TABLE_TAKEN"), { status: 409 });
+  }
+
 
   // ── Create order ──────────────────────────────────────────────────────────
   const nowIso  = new Date().toISOString();

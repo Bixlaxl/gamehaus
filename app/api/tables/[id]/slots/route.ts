@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { isPs5Conflict, getConsoleNumber } from "@/lib/utils";
+import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -35,176 +35,109 @@ export async function GET(
     return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });
   }
 
-  // 2. Load all active tables in location to map PS5 console dependencies
-  const { data: allTables } = await admin
+  // 2. Load all active tables in location to map console/simulator capacity pools
+  const { data: rawAllTables } = await admin
     .from("tables")
     .select("id, name, type")
     .eq("location_id", targetTable.location_id)
     .eq("is_active", true);
 
-  const targetType = targetTable.type as string;
-  const isConsole = targetType === "ps5" || targetType === "simulator" || targetTable.name.toLowerCase().includes("simulator");
-  const reqConsole = isConsole ? getConsoleNumber(targetTable.name) : null;
+  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string }>;
+  const isConsole = isConsoleTable(targetTable);
 
   const queryTableIds = isConsole
-    ? (allTables?.filter((t) => {
-        const tType = t.type as string;
-        const isTConsole = tType === "ps5" || tType === "simulator" || t.name.toLowerCase().includes("simulator");
-        if (!isTConsole) return false;
-        const c = getConsoleNumber(t.name);
-        return c !== null && reqConsole !== null && c === reqConsole;
-      }).map((t) => t.id) ?? [tableId])
+    ? allTables.filter((t) => isConsoleTable(t)).map((t) => t.id)
     : [tableId];
 
-  const otherConsoleTableIds = isConsole
-    ? (allTables
-        ?.filter((t) => {
-          const tType = t.type as string;
-          const isTConsole = tType === "ps5" || tType === "simulator" || t.name.toLowerCase().includes("simulator");
-          if (!isTConsole) return false;
-          const c = getConsoleNumber(t.name);
-          return c !== null && reqConsole !== null && c !== reqConsole;
-        })
-        .map((t) => t.id) ?? [])
-    : [];
 
 
 
-  // Don't SQL-filter on scheduled_start — walk-ins have NULL scheduled_start
-  // and would be excluded, leaving the table appearing free to public bookers.
-  // Post-filter handles date scoping using actual_start (running) or scheduled_start (scheduled).
+  // 3. Fetch running items and confirmed bookings
   const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .select("table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
 
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
       .in("order_items.table_id", queryTableIds)
       .eq("status", "confirmed")
       .gte("scheduled_start", new Date(dayStartMs).toISOString())
       .lte("scheduled_start", new Date(dayEndMs).toISOString()),
   ]);
 
-  const items = (rawItems ?? []).filter(item => {
+  const activeRanges: Array<{ tableId: string; startMs: number; endMs: number; startIso: string; endIso: string }> = [];
+
+  (rawItems ?? []).forEach((item) => {
     const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
-    if (!startStr) return false;
+    const endStr   = item.status === "running"
+      ? (item.expected_end ?? new Date(Date.now() + 4 * 3600 * 1000).toISOString())
+      : item.scheduled_end;
+    if (!startStr || !endStr) return;
     const startMs = new Date(startStr).getTime();
-    const isSameDay = startMs >= dayStartMs && startMs <= dayEndMs;
-    if (!isSameDay) return false;
-
-    if (isConsole) {
-      const exTable = allTables?.find(t => t.id === item.table_id);
-      if (!exTable) return false;
-      return isPs5Conflict({
-        reqTableId: tableId,
-        reqTableName: targetTable.name,
-        reqTableType: targetTable.type,
-        reqNumPeople: 1, // default to 1-pax check on slot views
-        exTableId: item.table_id,
-        exTableName: exTable.name,
-        exTableType: exTable.type,
-        exNumPeople: item.num_people ?? 1
-      });
-    }
-    return item.table_id === tableId;
+    const endMs   = new Date(endStr).getTime();
+    activeRanges.push({ tableId: item.table_id, startMs, endMs, startIso: startStr, endIso: endStr });
   });
 
-  const bookings = (rawBookings ?? []).filter(b => {
-    const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
-    if (!oi) return false;
-
-    if (isConsole) {
-      const exTable = allTables?.find(t => t.id === oi.table_id);
-      if (!exTable) return false;
-      return isPs5Conflict({
-        reqTableId: tableId,
-        reqTableName: targetTable.name,
-        reqTableType: targetTable.type,
-        reqNumPeople: 1,
-        exTableId: oi.table_id,
-        exTableName: exTable.name,
-        exTableType: exTable.type,
-        exNumPeople: oi.num_people ?? 1
-      });
-    }
-    return oi.table_id === tableId;
+  (rawBookings ?? []).forEach((b) => {
+    const oi = b.order_item as unknown as { table_id: string } | null;
+    if (!oi || !b.scheduled_start || !b.scheduled_end) return;
+    const startMs = new Date(b.scheduled_start).getTime();
+    const endMs   = new Date(b.scheduled_end).getTime();
+    activeRanges.push({ tableId: oi.table_id, startMs, endMs, startIso: b.scheduled_start, endIso: b.scheduled_end });
   });
-
 
   const blocked: { start: string; end: string }[] = [];
 
-  for (const item of items) {
-    if (item.status === "running" && item.actual_start) {
-      blocked.push({
-        start: item.actual_start,
-        end:   item.expected_end ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-      });
-    } else if (item.status === "scheduled" && item.scheduled_start && item.scheduled_end) {
-      blocked.push({ start: item.scheduled_start, end: item.scheduled_end });
-    }
-  }
+  if (!isConsole) {
+    activeRanges.forEach((r) => {
+      if (r.tableId === tableId) {
+        blocked.push({ start: r.startIso, end: r.endIso });
+      }
+    });
+  } else {
+    // Generate 15-min slots for the day and check pool conflict for each slot
+    const slotStepMs = 15 * 60 * 1000;
+    for (let slotMs = dayStartMs; slotMs < dayEndMs; slotMs += slotStepMs) {
+      const slotEndMs = slotMs + slotStepMs;
+      const occupiedTableIds = Array.from(
+        new Set(
+          activeRanges
+            .filter((r) => slotMs < r.endMs && slotEndMs > r.startMs)
+            .map((r) => r.tableId)
+        )
+      );
 
-  for (const b of bookings) {
-    blocked.push({ start: b.scheduled_start, end: b.scheduled_end });
+      const isConflict = checkConsolePoolConflict({
+        reqTableId: tableId,
+        allTables,
+        occupiedTableIds,
+      });
+
+      if (isConflict) {
+        blocked.push({
+          start: new Date(slotMs).toISOString(),
+          end:   new Date(slotEndMs).toISOString(),
+        });
+      }
+    }
   }
 
   // Deduplicate by start time
   const seen = new Set<string>();
-  const unique = blocked.filter(r => {
+  const unique = blocked.filter((r) => {
     if (seen.has(r.start)) return false;
     seen.add(r.start);
     return true;
   });
 
-  const otherConsoleBlocked: { start: string; end: string }[] = [];
-  if (isConsole && reqConsole !== null) {
-
-    const otherConsoleItems = (rawItems ?? []).filter((item) => {
-      const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
-      if (!startStr) return false;
-      const startMs = new Date(startStr).getTime();
-      const isSameDay = startMs >= dayStartMs && startMs <= dayEndMs;
-      if (!isSameDay) return false;
-      return otherConsoleTableIds.includes(item.table_id);
-    });
-
-    const otherConsoleBookings = (rawBookings ?? []).filter((b) => {
-      const oi = b.order_item as unknown as { table_id: string } | null;
-      if (!oi) return false;
-      return otherConsoleTableIds.includes(oi.table_id);
-    });
-
-    for (const item of otherConsoleItems) {
-      if (item.status === "running" && item.actual_start) {
-        otherConsoleBlocked.push({
-          start: item.actual_start,
-          end:   item.expected_end ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-        });
-      } else if (item.status === "scheduled" && item.scheduled_start && item.scheduled_end) {
-        otherConsoleBlocked.push({ start: item.scheduled_start, end: item.scheduled_end });
-      }
-    }
-
-    for (const b of otherConsoleBookings) {
-      otherConsoleBlocked.push({ start: b.scheduled_start, end: b.scheduled_end });
-    }
-  }
-
-  // Deduplicate otherConsoleBlocked by start time
-  const otherSeen = new Set<string>();
-  const uniqueOther = otherConsoleBlocked.filter(r => {
-    if (otherSeen.has(r.start)) return false;
-    otherSeen.add(r.start);
-    return true;
-  });
-
   return NextResponse.json({
     ...ok(unique),
-    otherConsoleBlocked: uniqueOther,
+    otherConsoleBlocked: [],
   });
 }
+

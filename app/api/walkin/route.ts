@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
-import { isPs5Conflict } from "@/lib/utils";
+import { checkConsolePoolConflict, isConsoleTable } from "@/lib/utils";
+
 
 export const runtime = 'edge';
 
@@ -105,28 +106,27 @@ export async function POST(request: Request) {
   // PanelWalkIn rendering and Start being pressed.
   const tableIds = [...new Set(items.map((i) => i.table_id))];
 
-  // Load all active tables in location to map PS5 console dependencies
-  const { data: allTables } = await admin
+  // Load all active tables in location to map console/simulator capacity pools
+  const { data: rawAllTables } = await admin
     .from("tables")
     .select("id, name, type")
     .eq("location_id", location_id)
     .eq("is_active", true);
 
-  const hasPs5 = allTables?.some((t) => tableIds.includes(t.id) && t.type === "ps5");
-  const queryTableIds = hasPs5
-    ? [...new Set([...tableIds, ...(allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [])])]
-    : tableIds;
+  const allTables = (rawAllTables ?? []) as Array<{ id: string; name: string; type: string }>;
+  const consoleTableIds = allTables.filter((t) => isConsoleTable(t)).map((t) => t.id);
+  const queryTableIds = [...new Set([...tableIds, ...consoleTableIds])];
 
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, num_people")
+      .select("table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
       .in("table_id", queryTableIds)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
-      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id, num_people)")
+      .select("scheduled_start, scheduled_end, order_item:order_items!inner(table_id)")
       .eq("status", "confirmed")
       .in("order_items.table_id", queryTableIds),
   ]);
@@ -139,63 +139,47 @@ export async function POST(request: Request) {
     const reqS = now.toISOString();
     const reqE = new Date(now.getTime() + req.duration_mins * 60 * 1000).toISOString();
 
-    const itemConflict = (existingItems ?? []).find((ex) => {
+    const reqTable = allTables.find((t) => t.id === req.table_id);
+    if (!reqTable) continue;
+
+    const occupiedSet = new Set<string>();
+
+    (existingItems ?? []).forEach((ex) => {
       const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
       const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
-      const timeOverlap = exS && exE && overlaps(reqS, reqE, exS, exE);
-      if (!timeOverlap) return false;
-
-      const reqTable = allTables?.find((t) => t.id === req.table_id);
-      const exTable = allTables?.find((t) => t.id === ex.table_id);
-      if (!reqTable || !exTable) return false;
-
-      return isPs5Conflict({
-        reqTableId: req.table_id,
-        reqTableName: reqTable.name,
-        reqTableType: reqTable.type,
-        reqNumPeople: req.num_people ?? 1,
-        exTableId: ex.table_id,
-        exTableName: exTable.name,
-        exTableType: exTable.type,
-        exNumPeople: ex.num_people ?? 1,
-      });
+      if (exS && exE && overlaps(reqS, reqE, exS, exE)) {
+        occupiedSet.add(ex.table_id);
+      }
     });
-    if (itemConflict) {
-      return NextResponse.json(
-        err("This table was just booked online. Pick a different table or a shorter duration.", "TABLE_TAKEN"),
-        { status: 409 }
-      );
+
+    (existingBookings ?? []).forEach((b) => {
+      if (b.scheduled_start && b.scheduled_end && overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end)) {
+        const oi = b.order_item as unknown as { table_id: string } | null;
+        if (oi?.table_id) occupiedSet.add(oi.table_id);
+      }
+    });
+
+    const occupiedTableIds = Array.from(occupiedSet);
+
+    let isConflict = false;
+    if (!isConsoleTable(reqTable)) {
+      isConflict = occupiedTableIds.includes(req.table_id);
+    } else {
+      isConflict = checkConsolePoolConflict({
+        reqTableId: req.table_id,
+        allTables,
+        occupiedTableIds,
+      });
     }
 
-    const bookingConflict = (existingBookings ?? []).find((b) => {
-      const timeOverlap = overlaps(reqS, reqE, b.scheduled_start, b.scheduled_end);
-      if (!timeOverlap) return false;
-
-      const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
-      if (!oi) return false;
-
-      const reqTable = allTables?.find((t) => t.id === req.table_id);
-      const exTable = allTables?.find((t) => t.id === oi.table_id);
-      if (!reqTable || !exTable) return false;
-
-      return isPs5Conflict({
-        reqTableId: req.table_id,
-        reqTableName: reqTable.name,
-        reqTableType: reqTable.type,
-        reqNumPeople: req.num_people ?? 1,
-        exTableId: oi.table_id,
-        exTableName: exTable.name,
-        exTableType: exTable.type,
-        exNumPeople: oi.num_people ?? 1,
-      });
-    });
-    if (bookingConflict) {
+    if (isConflict) {
       return NextResponse.json(
         err("This table was just booked online. Pick a different table or a shorter duration.", "TABLE_TAKEN"),
         { status: 409 }
       );
     }
   }
+
 
   const { data: order, error: orderError } = await admin
     .from("orders")

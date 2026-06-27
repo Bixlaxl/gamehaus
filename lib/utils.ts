@@ -106,47 +106,57 @@ export function formatSignedCountdown(endTime: Date, now: Date): { text: string;
   return { text: isOvertime ? `-${body}` : body, isOvertime };
 }
 
-export function getConsoleNumber(tableName: string): number | null {
-  const match = tableName.match(/\d+/);
-  return match ? parseInt(match[0], 10) : null;
+export function isConsoleTable(table: { name: string; type: string }): boolean {
+  const t = table.type as string;
+  return t === "ps5" || t === "simulator" || table.name.toLowerCase().includes("simulator");
 }
 
-export function isPs5Conflict({
+export function isSimulatorTable(table: { name: string; type: string }): boolean {
+  const t = table.type as string;
+  return t === "simulator" || table.name.toLowerCase().includes("simulator");
+}
+
+export function checkConsolePoolConflict({
   reqTableId,
-  reqTableName,
-  reqTableType,
-  reqNumPeople,
-  exTableId,
-  exTableName,
-  exTableType,
-  exNumPeople
+  allTables,
+  occupiedTableIds,
 }: {
   reqTableId: string;
-  reqTableName: string;
-  reqTableType: string;
-  reqNumPeople: number;
-  exTableId: string;
-  exTableName: string;
-  exTableType: string;
-  exNumPeople: number;
+  allTables: Array<{ id: string; name: string; type: string }>;
+  occupiedTableIds: string[];
 }): boolean {
-  if (reqTableId === exTableId) return true;
+  const reqTable = allTables.find(t => t.id === reqTableId);
+  if (!reqTable) return false;
+  if (!isConsoleTable(reqTable)) return false;
 
-  const isReqSim = reqTableType === "simulator" || reqTableName.toLowerCase().includes("simulator");
-  const isExSim  = exTableType === "simulator" || exTableName.toLowerCase().includes("simulator");
+  if (occupiedTableIds.includes(reqTableId)) return true;
 
-  const isReqConsole = reqTableType === "ps5" || isReqSim;
-  const isExConsole  = exTableType === "ps5" || isExSim;
+  const totalPs5 = allTables.filter(t => isConsoleTable(t)).length;
+  const totalSim = allTables.filter(t => isSimulatorTable(t)).length;
 
-  if (!isReqConsole || !isExConsole) return false;
+  let usedPs5Standalone = 0;
+  let usedSimulators = 0;
 
-  const reqConsole = getConsoleNumber(reqTableName);
-  const exConsole  = getConsoleNumber(exTableName);
+  for (const occId of occupiedTableIds) {
+    const occTable = allTables.find(t => t.id === occId);
+    if (!occTable) continue;
+    if (isSimulatorTable(occTable)) {
+      usedSimulators++;
+    } else if (isConsoleTable(occTable)) {
+      usedPs5Standalone++;
+    }
+  }
 
-  if (reqConsole === null || exConsole === null) return false;
+  const reqIsSim = isSimulatorTable(reqTable);
 
-  // Same station hardware number (e.g. PS5 Console 1 & Simulator 1) share occupation!
-  return reqConsole === exConsole;
+  if (reqIsSim) {
+    const availSim = Math.min(totalSim - usedSimulators, totalPs5 - usedPs5Standalone - usedSimulators);
+    return availSim <= 0;
+  } else {
+    const availPs5 = totalPs5 - usedPs5Standalone - usedSimulators;
+    return availPs5 <= 0;
+  }
 }
+
 
 
