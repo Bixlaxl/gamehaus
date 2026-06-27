@@ -59,13 +59,24 @@ export async function GET(request: Request) {
     }
   }
 
-  const memberships = (membershipResult.data || []).map((m: any) => ({
-    id: m.id,
-    short_id: m.short_id || "",
-    bound_table_ids: m.bound_table_ids || [],
-    free_hours_ledger: m.free_hours_ledger || {},
-    plan: m.plan ? (Array.isArray(m.plan) ? m.plan[0] : m.plan) : null,
-  }));
+  const memberships = (membershipResult.data || []).map((m: any) => {
+    const planObj = m.plan ? (Array.isArray(m.plan) ? m.plan[0] : m.plan) : null;
+    const planFreeHrs = Number(planObj?.free_hrs || 0);
+    const ledger: Record<string, number> = { ...(m.free_hours_ledger || {}) };
+    if (planFreeHrs > 0 && Object.keys(ledger).length === 0) {
+      ["snooker", "pool", "ps5", "foosball", "simulator", "standard"].forEach((t) => {
+        ledger[t] = planFreeHrs;
+      });
+    }
+    return {
+      id: m.id,
+      short_id: m.short_id || "",
+      bound_table_ids: m.bound_table_ids || [],
+      free_hours_ledger: ledger,
+      plan: planObj,
+    };
+  });
+
 
   // Highest discount percentage across all active memberships
   const membershipDiscountPct = memberships.reduce((max: number, m: any) => {

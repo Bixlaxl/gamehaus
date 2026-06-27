@@ -62,11 +62,13 @@ export async function POST(request: Request) {
 
   // Query the table types to initialize the free hours ledger
   let initialLedger: Record<string, number> = {};
-  if (plan.bound_table_ids && plan.bound_table_ids.length > 0) {
+  let boundIds: string[] = plan.bound_table_ids ?? [];
+
+  if (boundIds.length > 0) {
     const { data: tables } = await admin
       .from("tables")
       .select("id, type")
-      .in("id", plan.bound_table_ids);
+      .in("id", boundIds);
     
     if (tables && tables.length > 0) {
       tables.forEach((t) => {
@@ -74,14 +76,14 @@ export async function POST(request: Request) {
       });
     }
   } else {
-    const { data: allTables } = await admin.from("tables").select("type").eq("is_active", true);
+    const { data: allTables } = await admin.from("tables").select("id, type").eq("is_active", true);
     if (allTables && allTables.length > 0) {
+      boundIds = allTables.map((t) => t.id);
       allTables.forEach((t) => {
         initialLedger[t.type] = Number(plan.free_hrs) || 0;
       });
     }
   }
-
 
   const { data, error } = await admin
     .from("customer_memberships")
@@ -90,10 +92,11 @@ export async function POST(request: Request) {
       plan_id,
       starts_at:  startsAt.toISOString(),
       expires_at: expiresAt.toISOString(),
-      bound_table_ids: plan.bound_table_ids ?? [],
+      bound_table_ids: boundIds,
       free_hours_ledger: initialLedger,
       short_id: shortId,
     })
+
     .select(`*, plan:membership_plans(*)`)
     .single();
 

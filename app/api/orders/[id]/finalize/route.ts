@@ -134,13 +134,21 @@ export async function POST(
   // Track per-membership ledger updates and hours used
   const ledgerUpdates: Map<string, { id: string; ledger: Record<string, number>; hoursRedeemed: number; freeHrsUsed: number }> = new Map();
   allMemberships.forEach(m => {
+    const planFreeHrs = Number(m.plan?.free_hrs || 0);
+    const ledger: Record<string, number> = { ...(m.free_hours_ledger as Record<string, number> || {}) };
+    if (planFreeHrs > 0 && Object.keys(ledger).length === 0) {
+      ["snooker", "pool", "ps5", "foosball", "simulator", "standard"].forEach((t) => {
+        ledger[t] = planFreeHrs;
+      });
+    }
     ledgerUpdates.set(m.id, {
       id: m.id,
-      ledger: { ...(m.free_hours_ledger as Record<string, number> || {}) },
+      ledger,
       hoursRedeemed: 0,
       freeHrsUsed: Number(m.free_hrs_used || 0),
     });
   });
+
 
   let totalFreeHoursDiscount = 0;
 
