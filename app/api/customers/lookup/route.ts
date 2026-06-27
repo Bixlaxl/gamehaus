@@ -67,11 +67,17 @@ export async function GET(request: Request) {
     plan: m.plan ? (Array.isArray(m.plan) ? m.plan[0] : m.plan) : null,
   }));
 
-  const primaryMembership = memberships[0] || null;
-  const membershipDiscountPct = primaryMembership?.plan?.discount_pct ?? 0;
-  const membershipId = primaryMembership?.id ?? null;
-  const boundTableIds = primaryMembership?.bound_table_ids ?? [];
-  const freeHoursLedger = primaryMembership?.free_hours_ledger ?? {};
+  // Highest discount percentage across all active memberships
+  const membershipDiscountPct = memberships.reduce((max: number, m: any) => {
+    const pct = m.plan?.discount_pct ?? 0;
+    return pct > max ? pct : max;
+  }, 0);
+
+  // We find the primary Free Hours membership (if any) or fallback to memberships[0]
+  const freeHoursMembership = memberships.find((m: any) => Number(m.plan?.free_hrs || 0) > 0) || memberships[0] || null;
+  const membershipId = freeHoursMembership?.id ?? null;
+  const boundTableIds = freeHoursMembership?.bound_table_ids ?? [];
+  const freeHoursLedger = freeHoursMembership?.free_hours_ledger ?? {};
 
   return NextResponse.json({
     found: true,

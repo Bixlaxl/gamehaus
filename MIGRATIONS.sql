@@ -225,3 +225,10 @@ ALTER TABLE customer_memberships
 ALTER TABLE order_items
   ADD COLUMN IF NOT EXISTS free_hours_to_redeem NUMERIC;
 
+
+-- ============================================================
+-- ORDER ITEMS MEMBERSHIP ID (012_order_items_membership_id.sql)
+-- ============================================================
+ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS membership_id UUID REFERENCES customer_memberships(id) ON DELETE SET NULL;
+

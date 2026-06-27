@@ -307,6 +307,7 @@ export interface Database {
           deleted_at: string | null;
           created_at: string;
           free_hours_to_redeem?: number | null;
+          membership_id?: string | null;
         };
         Insert: {
           id?: string;
@@ -327,6 +328,7 @@ export interface Database {
           deleted_at?: string | null;
           created_at?: string;
           free_hours_to_redeem?: number | null;
+          membership_id?: string | null;
         };
         Update: {
           id?: string;
@@ -347,6 +349,7 @@ export interface Database {
           deleted_at?: string | null;
           created_at?: string;
           free_hours_to_redeem?: number | null;
+          membership_id?: string | null;
         };
         Relationships: [
           {

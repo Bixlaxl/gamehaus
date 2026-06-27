@@ -44,9 +44,17 @@ export async function DELETE(
   const admin = createAdminClient();
   const { error } = await admin
     .from("membership_plans")
-    .update({ is_active: false })
+    .delete()
     .eq("id", id);
 
-  if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
-  return NextResponse.json(ok({ deactivated: true }));
+  if (error) {
+    if (error.code === "23503") {
+      return NextResponse.json(
+        err("Cannot permanently delete — this plan is assigned to customers. Deactivate it instead.", "FK_CONSTRAINT"),
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+  }
+  return NextResponse.json(ok({ deleted: true }));
 }

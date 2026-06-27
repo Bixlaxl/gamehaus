@@ -16,7 +16,7 @@ export default async function MembershipsPage() {
       .eq("is_active", true)
       .gte("expires_at", now)
       .order("created_at", { ascending: false })
-      .limit(50),
+      .limit(100),
     admin
       .from("tables")
       .select(`id, name, type, location:locations(name)`)
@@ -24,10 +24,28 @@ export default async function MembershipsPage() {
       .order("name"),
   ]);
 
+  const phones = Array.from(new Set((assignments ?? []).map((a) => a.customer_phone)));
+  let profiles: any[] = [];
+  if (phones.length > 0) {
+    const { data: profs } = await admin
+      .from("customer_profiles")
+      .select("phone, name")
+      .in("phone", phones);
+    profiles = profs ?? [];
+  }
+
+  const assignmentsWithNames = (assignments ?? []).map((a) => {
+    const profile = profiles.find((p) => p.phone === a.customer_phone);
+    return {
+      ...a,
+      customer_name: profile?.name ?? "Unknown",
+    };
+  });
+
   return (
     <MembershipsContent
       initialPlans={plans ?? []}
-      initialAssignments={assignments as any ?? []}
+      initialAssignments={assignmentsWithNames as any ?? []}
       tables={tables as any ?? []}
     />
   );

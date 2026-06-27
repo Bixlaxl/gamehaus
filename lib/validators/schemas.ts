@@ -97,6 +97,7 @@ export const createOrderSchema = z.object({
       rate_per_hour: z.number().positive(),
       num_people: z.number().int().positive().max(20).optional(),
       free_hours_to_redeem: z.number().nonnegative().optional(),
+      membership_id: z.string().uuid().optional().nullable(),
     })
   ),
 });
@@ -169,6 +170,7 @@ export const membershipPlanSchema = z.object({
   discount_pct: z.number().min(0).max(100).default(0),
   free_hrs: z.number().min(0).default(0),
   bound_table_ids: z.array(z.string().uuid()).optional().default([]),
+  is_active: z.boolean().optional(),
 });
 
 export const updateMembershipPlanSchema = membershipPlanSchema.partial();

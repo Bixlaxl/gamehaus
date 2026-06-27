@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,18 @@ import {
 } from "@/components/ui/select";
 import type { MembershipPlan } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, CreditCard, UserCheck } from "lucide-react";
+import {
+  Plus, Pencil, CreditCard, UserCheck, Search, Trash2,
+  ShieldCheck, ShieldOff, Clock, Percent,
+} from "lucide-react";
 
 type Assignment = {
   id: string;
   customer_phone: string;
+  customer_name?: string;
   starts_at: string;
   expires_at: string;
+  is_active?: boolean;
   plan: { name: string; discount_pct: number; free_hrs: number } | null;
   bound_table_ids?: string[];
   free_hours_ledger?: any;
@@ -39,11 +44,11 @@ type PlanForm = {
 };
 
 const defaultPlanForm: PlanForm = {
-  name:          "",
-  price:         "",
-  duration_days: "30",
-  discount_pct:  "0",
-  free_hrs:      "0",
+  name:            "",
+  price:           "",
+  duration_days:   "30",
+  discount_pct:    "0",
+  free_hrs:        "0",
   bound_table_ids: [],
 };
 
@@ -64,17 +69,36 @@ export function MembershipsContent({
 }) {
   const qc     = useQueryClient();
   const router = useRouter();
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [planCategory, setPlanCategory] = useState<"pct" | "hours">("pct");
-  const [selectedTableId, setSelectedTableId] = useState<string>("");
-  const [editingPlan, setEditingPlan] = useState<MembershipPlan | null>(null);
-  const [planForm, setPlanForm] = useState<PlanForm>(defaultPlanForm);
-  const [assignPhone, setAssignPhone] = useState("");
-  const [assignPlanId, setAssignPlanId] = useState("");
-  const [assignError, setAssignError] = useState<string | null>(null);
-  const [assigning, setAssigning] = useState(false);
 
+  // ─── Dialog state ─────────────────────────────────────────────────
+  const [planDialogOpen, setPlanDialogOpen]     = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [manageDialogOpen, setManageDialogOpen] = useState(false);
+
+  // ─── Plan form state ──────────────────────────────────────────────
+  const [planCategory, setPlanCategory]   = useState<"pct" | "hours">("pct");
+  const [selectedTableId, setSelectedTableId] = useState<string>("");
+  const [editingPlan, setEditingPlan]     = useState<MembershipPlan | null>(null);
+  const [planForm, setPlanForm]           = useState<PlanForm>(defaultPlanForm);
+
+  // ─── Assign form state ────────────────────────────────────────────
+  const [assignPhone, setAssignPhone]   = useState("");
+  const [assignPlanId, setAssignPlanId] = useState("");
+  const [assignError, setAssignError]   = useState<string | null>(null);
+  const [assigning, setAssigning]       = useState(false);
+
+  // ─── Manage perks state ───────────────────────────────────────────
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [boundTableIds, setBoundTableIds]           = useState<string[]>([]);
+  const [ledgerValues, setLedgerValues]             = useState<Record<string, string>>({});
+  const [savingPerks, setSavingPerks]               = useState(false);
+
+  // ─── Search ───────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const TABLE_TYPES = ["snooker", "pool", "ps5", "foosball", "simulator"];
+
+  // ─── Data queries ─────────────────────────────────────────────────
   const { data: plans } = useQuery<MembershipPlan[]>({
     queryKey: ["membership-plans"],
     queryFn: async () => {
@@ -88,58 +112,31 @@ export function MembershipsContent({
     staleTime: 0,
   });
 
-  // Assignments come from server props directly — router.refresh() pulls fresh data after mutations
-  const assignments = initialAssignments;
+  // Assignments are fetched client-side for real-time refresh after mutations
+  const { data: assignments } = useQuery<Assignment[]>({
+    queryKey: ["membership-assignments"],
+    queryFn: async () => {
+      const res  = await fetch("/api/memberships/assignments");
+      const body = await res.json() as { success: true; data: Assignment[] } | { success: false; error: string };
+      if (!body.success) throw new Error(body.error);
+      return body.data;
+    },
+    initialData: initialAssignments,
+    initialDataUpdatedAt: Date.now(),
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
 
-  const TABLE_TYPES = ["snooker", "pool", "ps5", "foosball"];
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
-  const [manageDialogOpen, setManageDialogOpen] = useState(false);
-  const [boundTableIds, setBoundTableIds] = useState<string[]>([]);
-  const [ledgerValues, setLedgerValues] = useState<Record<string, string>>({});
-  const [savingPerks, setSavingPerks] = useState(false);
-
-  function openManagePerks(a: Assignment) {
-    setSelectedAssignment(a);
-    setBoundTableIds(a.bound_table_ids || []);
-    
-    const initialLedger: Record<string, string> = {};
-    TABLE_TYPES.forEach(t => {
-      initialLedger[t] = String(a.free_hours_ledger?.[t] ?? 0);
-    });
-    setLedgerValues(initialLedger);
-    setManageDialogOpen(true);
-  }
-
-  async function savePerks() {
-    if (!selectedAssignment) return;
-    setSavingPerks(true);
-    
-    const parsedLedger: Record<string, number> = {};
-    TABLE_TYPES.forEach(t => {
-      parsedLedger[t] = parseFloat(ledgerValues[t]) || 0;
-    });
-
-    try {
-      const res = await fetch("/api/memberships/customer", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          membership_id: selectedAssignment.id,
-          bound_table_ids: boundTableIds,
-          free_hours_ledger: parsedLedger,
-        }),
-      });
-      const body = await res.json();
-      if (!body.success) throw new Error(body.error || "Failed to update perks");
-      
-      setManageDialogOpen(false);
-      router.refresh();
-    } catch (e: any) {
-      alert(e.message || "Failed to save perks");
-    } finally {
-      setSavingPerks(false);
-    }
-  }
+  const filteredAssignments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return assignments ?? [];
+    return (assignments ?? []).filter(
+      (a) =>
+        a.customer_phone.toLowerCase().includes(q) ||
+        (a.customer_name ?? "").toLowerCase().includes(q)
+    );
+  }, [assignments, searchQuery]);
 
   const tablesByLocation = tables.reduce((acc, table) => {
     const locName = table.location?.name || "Unknown Location";
@@ -148,14 +145,15 @@ export function MembershipsContent({
     return acc;
   }, {} as Record<string, typeof tables>);
 
+  // ─── Plan mutations ───────────────────────────────────────────────
   const planMutation = useMutation({
     mutationFn: async (values: PlanForm & { editId?: string }) => {
       const payload = {
-        name:          values.name,
-        price:         parseFloat(values.price),
-        duration_days: parseInt(values.duration_days),
-        discount_pct:  planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
-        free_hrs:      planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
+        name:            values.name,
+        price:           parseFloat(values.price),
+        duration_days:   parseInt(values.duration_days),
+        discount_pct:    planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
+        free_hrs:        planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
         bound_table_ids: planCategory === "hours" && selectedTableId ? [selectedTableId] : [],
       };
       const url    = values.editId ? `/api/memberships/${values.editId}` : "/api/memberships";
@@ -180,11 +178,11 @@ export function MembershipsContent({
             p.id === values.editId
               ? {
                   ...p,
-                  name: values.name,
-                  price: parseFloat(values.price),
-                  duration_days: parseInt(values.duration_days),
-                  discount_pct: planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
-                  free_hrs: planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
+                  name:            values.name,
+                  price:           parseFloat(values.price),
+                  duration_days:   parseInt(values.duration_days),
+                  discount_pct:    planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
+                  free_hrs:        planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
                   bound_table_ids: planCategory === "hours" && selectedTableId ? [selectedTableId] : [],
                 }
               : p
@@ -197,12 +195,20 @@ export function MembershipsContent({
       if (values.editId && ctx?.prev) qc.setQueryData(["membership-plans"], ctx.prev);
       alert((e as Error).message);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["membership-plans"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["membership-plans"] });
+      // Also refresh assignments so newly-created plans' ledgers are visible immediately
+      qc.invalidateQueries({ queryKey: ["membership-assignments"] });
+    },
   });
 
   const deactivatePlanMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res  = await fetch(`/api/memberships/${id}`, { method: "DELETE" });
+      const res  = await fetch(`/api/memberships/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: false }),
+      });
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
@@ -220,6 +226,52 @@ export function MembershipsContent({
     onSettled: () => qc.invalidateQueries({ queryKey: ["membership-plans"] }),
   });
 
+  const activatePlanMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res  = await fetch(`/api/memberships/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: true }),
+      });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error);
+    },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["membership-plans"] });
+      const prev = qc.getQueryData<MembershipPlan[]>(["membership-plans"]);
+      qc.setQueryData<MembershipPlan[]>(["membership-plans"], (old) =>
+        (old ?? []).map((p) => p.id === id ? { ...p, is_active: true } : p)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["membership-plans"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["membership-plans"] }),
+  });
+
+  const deletePlanMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res  = await fetch(`/api/memberships/${id}`, { method: "DELETE" });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) throw new Error(body.error);
+    },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["membership-plans"] });
+      const prev = qc.getQueryData<MembershipPlan[]>(["membership-plans"]);
+      qc.setQueryData<MembershipPlan[]>(["membership-plans"], (old) =>
+        (old ?? []).filter((p) => p.id !== id)
+      );
+      return { prev };
+    },
+    onError: (e, _, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["membership-plans"], ctx.prev);
+      alert((e as Error).message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["membership-plans"] }),
+  });
+
+  // ─── Helpers ──────────────────────────────────────────────────────
   async function assignMembership() {
     if (!assignPhone.trim() || !assignPlanId) {
       setAssignError("Phone and plan are required");
@@ -242,7 +294,8 @@ export function MembershipsContent({
     setAssignPhone("");
     setAssignPlanId("");
     setAssigning(false);
-    router.refresh();
+    // Immediately refetch assignments so the new entry + ledger shows up without a page reload
+    qc.invalidateQueries({ queryKey: ["membership-assignments"] });
   }
 
   function openAdd() {
@@ -260,18 +313,64 @@ export function MembershipsContent({
     const tId = p.bound_table_ids?.[0] ?? "";
     setSelectedTableId(tId);
     setPlanForm({
-      name:          p.name,
-      price:         String(p.price),
-      duration_days: String(p.duration_days),
-      discount_pct:  String(p.discount_pct),
-      free_hrs:      String(p.free_hrs),
+      name:            p.name,
+      price:           String(p.price),
+      duration_days:   String(p.duration_days),
+      discount_pct:    String(p.discount_pct),
+      free_hrs:        String(p.free_hrs),
       bound_table_ids: p.bound_table_ids || [],
     });
     setPlanDialogOpen(true);
   }
 
+  function openManagePerks(a: Assignment) {
+    setSelectedAssignment(a);
+    setBoundTableIds(a.bound_table_ids || []);
+    const initialLedger: Record<string, string> = {};
+    TABLE_TYPES.forEach(t => {
+      initialLedger[t] = String(a.free_hours_ledger?.[t] ?? 0);
+    });
+    setLedgerValues(initialLedger);
+    setManageDialogOpen(true);
+  }
+
+  async function savePerks() {
+    if (!selectedAssignment) return;
+    setSavingPerks(true);
+    const parsedLedger: Record<string, number> = {};
+    TABLE_TYPES.forEach(t => {
+      parsedLedger[t] = parseFloat(ledgerValues[t]) || 0;
+    });
+    try {
+      const res = await fetch("/api/memberships/customer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          membership_id:     selectedAssignment.id,
+          bound_table_ids:   boundTableIds,
+          free_hours_ledger: parsedLedger,
+        }),
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error || "Failed to update perks");
+      setManageDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["membership-assignments"] });
+    } catch (e: any) {
+      alert(e.message || "Failed to save perks");
+    } finally {
+      setSavingPerks(false);
+    }
+  }
+
+  function confirmDelete(plan: MembershipPlan) {
+    if (window.confirm(`Permanently delete "${plan.name}"? This cannot be undone.\n\nIf this plan is assigned to customers, you must deactivate it instead.`)) {
+      deletePlanMutation.mutate(plan.id);
+    }
+  }
+
   const activePlans = (plans ?? []).filter((p) => p.is_active);
 
+  // ─── Render ───────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -288,7 +387,7 @@ export function MembershipsContent({
         </div>
       </div>
 
-      {/* Plans grid */}
+      {/* ── Plans grid ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {(plans ?? []).length === 0 && (
           <div className="col-span-full flex flex-col items-center py-14 text-gray-400">
@@ -311,15 +410,23 @@ export function MembershipsContent({
               {formatCurrency(plan.price)}
             </p>
             <div className="space-y-1 text-xs text-gray-500">
-              <p>{plan.duration_days} days</p>
-              {plan.discount_pct > 0 && <p>Type: Global Discount ({plan.discount_pct}% Off)</p>}
+              <p>{plan.duration_days} days validity</p>
+              {plan.discount_pct > 0 && (
+                <p className="flex items-center gap-1">
+                  <Percent className="h-3 w-3 text-blue-500" />
+                  Global Discount: <span className="font-semibold text-blue-600">{plan.discount_pct}% Off</span>
+                </p>
+              )}
               {plan.free_hrs > 0 && (
-                <div>
-                  <p>Type: Restricted Free Hours ({plan.free_hrs} hrs)</p>
+                <div className="space-y-0.5">
+                  <p className="flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-green-500" />
+                    Free Hours: <span className="font-semibold text-green-600">{plan.free_hrs} hrs</span>
+                  </p>
                   {plan.bound_table_ids && plan.bound_table_ids.length > 0 && (() => {
                     const matchedTable = tables.find(t => t.id === plan.bound_table_ids[0]);
                     return (
-                      <p className="font-semibold text-purple-600 mt-0.5">
+                      <p className="font-semibold text-purple-600 pl-4">
                         Bound to: {matchedTable ? `${matchedTable.name} (${matchedTable.location?.name || "Gamehaus"})` : "Unknown table"}
                       </p>
                     );
@@ -327,64 +434,146 @@ export function MembershipsContent({
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(plan)}>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(plan)} title="Edit plan">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
-              {plan.is_active && (
+              {plan.is_active ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs"
+                  className="h-8 text-xs text-amber-600 border-amber-200 hover:bg-amber-50"
                   onClick={() => deactivatePlanMutation.mutate(plan.id)}
+                  disabled={deactivatePlanMutation.isPending}
+                  title="Deactivate plan"
                 >
+                  <ShieldOff className="h-3.5 w-3.5 mr-1" />
                   Deactivate
                 </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs text-green-600 border-green-200 hover:bg-green-50"
+                  onClick={() => activatePlanMutation.mutate(plan.id)}
+                  disabled={activatePlanMutation.isPending}
+                  title="Activate plan"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+                  Activate
+                </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 ml-auto"
+                onClick={() => confirmDelete(plan)}
+                disabled={deletePlanMutation.isPending}
+                title="Permanently delete plan"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Delete
+              </Button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Active assignments */}
-      {assignments.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      {/* ── Active assignments ──────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
             <h2 className="font-semibold text-gray-900">Active Member Assignments</h2>
-            <span className="text-xs text-gray-400">Tip: Click a row to manage table bindings and free hours ledger</span>
+            <p className="text-xs text-gray-400 mt-0.5">Click a row to manage table bindings and free-hour ledger</p>
           </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Membership ID</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Phone</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Plan</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Discount</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Expires</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {assignments.map((a) => (
-                <tr
-                  key={a.id}
-                  className="hover:bg-gray-50/50 cursor-pointer transition-colors"
-                  onClick={() => openManagePerks(a)}
-                >
-                  <td className="px-4 py-3 font-mono text-xs font-bold text-purple-600">{a.short_id || "—"}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{a.customer_phone}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{a.plan?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-right text-gray-500">
-                    {a.plan?.discount_pct ? `${a.plan.discount_pct}%` : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-500 text-xs">{fmtDate(a.expires_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Search by phone / name */}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search by phone or name…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-sm rounded-xl"
+            />
+          </div>
         </div>
-      )}
 
-      {/* Plan dialog */}
+        {filteredAssignments.length === 0 ? (
+          <div className="py-12 flex flex-col items-center text-gray-400">
+            <UserCheck className="h-8 w-8 mb-2 opacity-30" />
+            <p className="text-sm">{searchQuery ? "No results found" : "No active memberships yet"}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">ID</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Customer</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Phone</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Plan</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Benefit</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 whitespace-nowrap">Expires</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredAssignments.map((a) => {
+                  const hasFreeHrs   = (a.plan?.free_hrs ?? 0) > 0;
+                  const hasDiscount  = (a.plan?.discount_pct ?? 0) > 0;
+                  return (
+                    <tr
+                      key={a.id}
+                      className="hover:bg-gray-50/80 cursor-pointer transition-colors"
+                      onClick={() => openManagePerks(a)}
+                    >
+                      <td className="px-4 py-3 font-mono text-xs font-bold text-purple-600">
+                        {a.short_id || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-800 font-medium max-w-[140px] truncate">
+                        {a.customer_name && a.customer_name !== "Unknown"
+                          ? a.customer_name
+                          : <span className="text-gray-400 italic">Unknown</span>}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                        {a.customer_phone}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {a.plan?.name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {hasFreeHrs && (
+                            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                              <Clock className="h-3 w-3" />
+                              {a.plan!.free_hrs} hrs
+                            </span>
+                          )}
+                          {hasDiscount && (
+                            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                              <Percent className="h-3 w-3" />
+                              {a.plan!.discount_pct}% Off
+                            </span>
+                          )}
+                          {!hasFreeHrs && !hasDiscount && (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-500 text-xs whitespace-nowrap">
+                        {fmtDate(a.expires_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Plan dialog (create / edit) ─────────────────────────────── */}
       <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -427,7 +616,7 @@ export function MembershipsContent({
             {planCategory === "pct" ? (
               <div className="space-y-4 pt-2 border-t border-gray-50">
                 <div className="space-y-2">
-                  <Label>Plan Name Input (Custom text)</Label>
+                  <Label>Plan Name</Label>
                   <Input
                     value={planForm.name}
                     onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
@@ -437,53 +626,7 @@ export function MembershipsContent({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label>Plan Rate (Price) (₹)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={planForm.price}
-                      onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>InputValidity (days)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={planForm.duration_days}
-                      onChange={(e) => setPlanForm({ ...planForm, duration_days: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Discount Percentage Input (%)</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={planForm.discount_pct}
-                    onChange={(e) => setPlanForm({ ...planForm, discount_pct: e.target.value })}
-                    placeholder="e.g. 15"
-                    required
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 pt-2 border-t border-gray-50">
-                <div className="space-y-2">
-                  <Label>Plan Name Input (Custom text)</Label>
-                  <Input
-                    value={planForm.name}
-                    onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
-                    placeholder="e.g. Snooker Master"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Plan Rate (Price) Input (₹)</Label>
+                    <Label>Plan Rate (₹)</Label>
                     <Input
                       type="number"
                       min="0"
@@ -504,7 +647,53 @@ export function MembershipsContent({
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Total Free Hours Input</Label>
+                  <Label>Discount Percentage (%)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={planForm.discount_pct}
+                    onChange={(e) => setPlanForm({ ...planForm, discount_pct: e.target.value })}
+                    placeholder="e.g. 15"
+                    required
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2 border-t border-gray-50">
+                <div className="space-y-2">
+                  <Label>Plan Name</Label>
+                  <Input
+                    value={planForm.name}
+                    onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                    placeholder="e.g. Snooker Master"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Plan Rate (₹)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={planForm.price}
+                      onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Validity (days)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={planForm.duration_days}
+                      onChange={(e) => setPlanForm({ ...planForm, duration_days: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Total Free Hours</Label>
                   <Input
                     type="number"
                     min="0.5"
@@ -516,7 +705,7 @@ export function MembershipsContent({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Dynamic Website Tables Dropdown</Label>
+                  <Label>Asset / Table</Label>
                   <Select value={selectedTableId} onValueChange={setSelectedTableId}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select an asset/table" />
@@ -543,7 +732,7 @@ export function MembershipsContent({
         </DialogContent>
       </Dialog>
 
-      {/* Assign dialog */}
+      {/* ── Assign dialog ───────────────────────────────────────────── */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -585,7 +774,7 @@ export function MembershipsContent({
         </DialogContent>
       </Dialog>
 
-      {/* Customer Profile Card / Manage Perks Dialog */}
+      {/* ── Manage Perks dialog ─────────────────────────────────────── */}
       <Dialog open={manageDialogOpen} onOpenChange={setManageDialogOpen}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -595,21 +784,43 @@ export function MembershipsContent({
             <div className="space-y-5 py-2">
               {/* Profile Read-Only Summary */}
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-2">
+                {selectedAssignment.customer_name && selectedAssignment.customer_name !== "Unknown" && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-medium">Customer Name</span>
+                    <span className="font-semibold text-gray-900">{selectedAssignment.customer_name}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 font-medium">Customer Phone</span>
                   <span className="font-mono text-gray-900 font-semibold">{selectedAssignment.customer_phone}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500 font-medium">Global Discount</span>
-                  <span className="text-purple-600 font-bold">{selectedAssignment.plan?.discount_pct ?? 0}% Off</span>
+                  <span className="text-gray-500 font-medium">Plan</span>
+                  <span className="font-semibold text-gray-900">{selectedAssignment.plan?.name ?? "—"}</span>
                 </div>
+                {(selectedAssignment.plan?.discount_pct ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-medium">Global Discount</span>
+                    <span className="text-blue-600 font-bold">{selectedAssignment.plan!.discount_pct}% Off</span>
+                  </div>
+                )}
+                {(selectedAssignment.plan?.free_hrs ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-medium">Plan Free Hours</span>
+                    <span className="text-green-600 font-bold">{selectedAssignment.plan!.free_hrs} hrs</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm items-center">
                   <span className="text-gray-500 font-medium">Membership ID</span>
-                  <span className="font-mono text-xs text-gray-400 select-all cursor-pointer hover:text-gray-600 transition-colors" title="Click to copy" onClick={() => {
-                    navigator.clipboard.writeText(selectedAssignment.id);
-                    alert("Membership ID copied to clipboard!");
-                  }}>
-                    {selectedAssignment.id} (click to copy)
+                  <span
+                    className="font-mono text-xs text-gray-400 select-all cursor-pointer hover:text-gray-600 transition-colors truncate max-w-[200px]"
+                    title="Click to copy"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedAssignment.id);
+                      alert("Membership ID copied to clipboard!");
+                    }}
+                  >
+                    {selectedAssignment.short_id || selectedAssignment.id}
                   </span>
                 </div>
               </div>

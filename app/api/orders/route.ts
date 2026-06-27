@@ -226,6 +226,7 @@ export async function POST(request: Request) {
         rate_per_hour: item.rate_per_hour,
         num_people:    item.num_people ?? null,
         free_hours_to_redeem: item.free_hours_to_redeem ?? null,
+        membership_id: item.membership_id ?? null,
       }))
     )
     .select("id, table_id, scheduled_start, scheduled_end");
