@@ -73,7 +73,15 @@ export async function POST(request: Request) {
         initialLedger[t.type] = Number(plan.free_hrs) || 0;
       });
     }
+  } else {
+    const { data: allTables } = await admin.from("tables").select("type").eq("is_active", true);
+    if (allTables && allTables.length > 0) {
+      allTables.forEach((t) => {
+        initialLedger[t.type] = Number(plan.free_hrs) || 0;
+      });
+    }
   }
+
 
   const { data, error } = await admin
     .from("customer_memberships")

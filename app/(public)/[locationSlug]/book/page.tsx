@@ -283,14 +283,27 @@ export default function CheckoutPage() {
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
   const baseAfterCoupon   = Math.max(0, baseAmount - effectiveDiscount);
 
+  const isTableCoveredByMembership = (m: any, item: any) => {
+    if (!m) return false;
+    return !m.bound_table_ids || m.bound_table_ids.length === 0 || m.bound_table_ids.includes(item.tableId);
+  };
+
+  const getMembershipFreeHrs = (m: any, tableType: string) => {
+    if (!m) return 0;
+    if (m.free_hours_ledger && typeof m.free_hours_ledger[tableType] === "number") {
+      return Number(m.free_hours_ledger[tableType]);
+    }
+    return Number(m.plan?.free_hrs || 0);
+  };
+
   const boundMembershipForCart = useMemo(() => {
     if (!customer?.active_memberships) return null;
     return customer.active_memberships.find(m => {
       const hasFreeHours = Number(m.plan?.free_hrs || 0) > 0;
-      const boundItemInCart = cart.items.find(item => m.bound_table_ids?.includes(item.tableId));
+      const boundItemInCart = cart.items.find(item => isTableCoveredByMembership(m, item));
       if (!boundItemInCart) return false;
       const tableType = boundItemInCart.tableType || "";
-      const remainingFreeHrs = Number(m.free_hours_ledger?.[tableType] || 0);
+      const remainingFreeHrs = getMembershipFreeHrs(m, tableType);
       return hasFreeHours && remainingFreeHrs > 0;
     });
   }, [customer, cart.items]);
@@ -318,10 +331,10 @@ export default function CheckoutPage() {
     
     const matched = customer.active_memberships.find(m => {
       const hasFreeHours = Number(m.plan?.free_hrs || 0) > 0;
-      const boundItemInCart = cart.items.find(item => m.bound_table_ids?.includes(item.tableId));
+      const boundItemInCart = cart.items.find(item => isTableCoveredByMembership(m, item));
       if (!boundItemInCart) return false;
       const tableType = boundItemInCart.tableType || "";
-      const remainingFreeHrs = Number(m.free_hours_ledger?.[tableType] || 0);
+      const remainingFreeHrs = getMembershipFreeHrs(m, tableType);
       
       const target = (m.short_id || "").trim().toUpperCase();
       return hasFreeHours && remainingFreeHrs > 0 && input && target && input === target;
@@ -332,10 +345,10 @@ export default function CheckoutPage() {
       setValidationError(null);
       setShowValidationPopup(false);
       
-      const boundItem = cart.items.find(item => matched.bound_table_ids?.includes(item.tableId));
+      const boundItem = cart.items.find(item => isTableCoveredByMembership(matched, item));
       if (boundItem) {
         const tableType = boundItem.tableType || "";
-        const availableFreeHrs = Number(matched.free_hours_ledger?.[tableType] || 0);
+        const availableFreeHrs = getMembershipFreeHrs(matched, tableType);
         const durationHrs = boundItem.durationMins / 60;
         setRedeemHoursInput(Math.min(durationHrs, availableFreeHrs));
       }
@@ -349,9 +362,9 @@ export default function CheckoutPage() {
     customer &&
     cart.items.some(item => {
       if (validatedMembership) {
-        return validatedMembership.bound_table_ids?.includes(item.tableId);
+        return isTableCoveredByMembership(validatedMembership, item);
       }
-      return customer.bound_table_ids?.includes(item.tableId);
+      return (customer.active_memberships || []).some(m => isTableCoveredByMembership(m, item));
     })
   );
 
@@ -363,12 +376,18 @@ export default function CheckoutPage() {
   );
 
   let freeHoursDiscount = 0;
-  let clientUpdatedLedger: Record<string, number> = customer ? { ...(customer.free_hours_ledger || {}) } : {};
+  let clientUpdatedLedger: Record<string, number> = {};
+  if (customer && validatedMembership) {
+    cart.items.forEach(i => {
+      const tt = i.tableType || "";
+      clientUpdatedLedger[tt] = getMembershipFreeHrs(validatedMembership, tt);
+    });
+  }
   const appliedLedgerDeductions: Record<string, number> = {};
 
   if (isMembershipValid && customer && validatedMembership) {
     for (const item of cart.items) {
-      const isBound = validatedMembership.bound_table_ids?.includes(item.tableId);
+      const isBound = isTableCoveredByMembership(validatedMembership, item);
       if (!isBound) continue;
       
       const durationHrs = item.durationMins / 60;
@@ -376,7 +395,7 @@ export default function CheckoutPage() {
       const remainingFreeHrs = Number(clientUpdatedLedger[tableType]) || 0;
       
       if (remainingFreeHrs > 0) {
-        const hoursToRedeem = Math.min(redeemHoursInput, durationHrs, remainingFreeHrs);
+        const hoursToRedeem = Math.min(redeemHoursInput > 0 ? redeemHoursInput : durationHrs, durationHrs, remainingFreeHrs);
         const discountForThisItem = hoursToRedeem * item.ratePerHour;
         freeHoursDiscount += discountForThisItem;
         
@@ -388,13 +407,14 @@ export default function CheckoutPage() {
 
   const maxRedeemableHrs = useMemo(() => {
     if (!validatedMembership) return 0;
-    const boundItem = cart.items.find(item => validatedMembership.bound_table_ids?.includes(item.tableId));
+    const boundItem = cart.items.find(item => isTableCoveredByMembership(validatedMembership, item));
     if (!boundItem) return 0;
     const tableType = boundItem.tableType || "";
-    const availableFreeHrs = Number(validatedMembership.free_hours_ledger?.[tableType] || 0);
+    const availableFreeHrs = getMembershipFreeHrs(validatedMembership, tableType);
     const durationHrs = boundItem.durationMins / 60;
     return Math.min(durationHrs, availableFreeHrs);
   }, [validatedMembership, cart.items]);
+
 
   const hoursOptions = useMemo(() => {
     const opts = [];
