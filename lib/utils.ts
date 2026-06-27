@@ -133,10 +133,18 @@ export function isPs5Conflict({
   exNumPeople: number;
 }): boolean {
   if (reqTableId === exTableId) return true;
-  if (reqTableType !== "ps5" || exTableType !== "ps5") return false;
+
+  const isReqSim = reqTableType === "simulator" || reqTableName.toLowerCase().includes("simulator");
+  const isExSim  = exTableType === "simulator" || exTableName.toLowerCase().includes("simulator");
+
+  const isReqConsole = reqTableType === "ps5" || isReqSim;
+  const isExConsole  = exTableType === "ps5" || isExSim;
+
+  if (!isReqConsole || !isExConsole) return false;
+  if (isReqSim !== isExSim) return false; // PS5 does not conflict with Simulator
 
   const reqConsole = getConsoleNumber(reqTableName);
-  const exConsole = getConsoleNumber(exTableName);
+  const exConsole  = getConsoleNumber(exTableName);
 
   if (reqConsole === null || exConsole === null) return false;
 
@@ -145,3 +153,4 @@ export function isPs5Conflict({
 
   return false;
 }
+

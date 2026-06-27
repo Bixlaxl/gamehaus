@@ -42,21 +42,31 @@ export async function GET(
     .eq("location_id", targetTable.location_id)
     .eq("is_active", true);
 
-  const hasPs5 = targetTable.type === "ps5";
-  const queryTableIds = hasPs5
-    ? (allTables?.filter((t) => t.type === "ps5").map((t) => t.id) ?? [tableId])
+  const targetType = targetTable.type as string;
+  const isConsole = targetType === "ps5" || targetType === "simulator" || targetTable.name.toLowerCase().includes("simulator");
+  const isSim = targetType === "simulator" || targetTable.name.toLowerCase().includes("simulator");
+
+  const queryTableIds = isConsole
+    ? (allTables?.filter((t) => {
+        const tType = t.type as string;
+        const tSim = tType === "simulator" || t.name.toLowerCase().includes("simulator");
+        return isSim ? tSim : (tType === "ps5" && !tSim);
+      }).map((t) => t.id) ?? [tableId])
     : [tableId];
 
-  const reqConsole = hasPs5 ? getConsoleNumber(targetTable.name) : null;
-  const otherConsoleTableIds = hasPs5
+  const reqConsole = isConsole ? getConsoleNumber(targetTable.name) : null;
+  const otherConsoleTableIds = isConsole
     ? (allTables
         ?.filter((t) => {
-          if (t.type !== "ps5") return false;
+          const tType = t.type as string;
+          const tSim = tType === "simulator" || t.name.toLowerCase().includes("simulator");
+          if (isSim !== tSim) return false;
           const c = getConsoleNumber(t.name);
           return c !== null && reqConsole !== null && c !== reqConsole;
         })
         .map((t) => t.id) ?? [])
     : [];
+
 
   // Don't SQL-filter on scheduled_start — walk-ins have NULL scheduled_start
   // and would be excluded, leaving the table appearing free to public bookers.
@@ -85,7 +95,7 @@ export async function GET(
     const isSameDay = startMs >= dayStartMs && startMs <= dayEndMs;
     if (!isSameDay) return false;
 
-    if (hasPs5) {
+    if (isConsole) {
       const exTable = allTables?.find(t => t.id === item.table_id);
       if (!exTable) return false;
       return isPs5Conflict({
@@ -106,7 +116,7 @@ export async function GET(
     const oi = b.order_item as unknown as { table_id: string; num_people: number | null } | null;
     if (!oi) return false;
 
-    if (hasPs5) {
+    if (isConsole) {
       const exTable = allTables?.find(t => t.id === oi.table_id);
       if (!exTable) return false;
       return isPs5Conflict({
@@ -122,6 +132,7 @@ export async function GET(
     }
     return oi.table_id === tableId;
   });
+
 
   const blocked: { start: string; end: string }[] = [];
 
@@ -149,7 +160,8 @@ export async function GET(
   });
 
   const otherConsoleBlocked: { start: string; end: string }[] = [];
-  if (hasPs5 && reqConsole !== null) {
+  if (isConsole && reqConsole !== null) {
+
     const otherConsoleItems = (rawItems ?? []).filter((item) => {
       const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
       if (!startStr) return false;
