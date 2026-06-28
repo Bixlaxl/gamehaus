@@ -918,128 +918,131 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       </>
                     )}
 
-                    {/* ╔═══════════════════════════ STEP 2 — PLAYERS ═══════════════════════════╗ */}
-                    {!onWhen && hasPricing && (
-                      <>
-                        {/* Time recap pill — taps back to step 1 to edit */}
-                        <button
-                          onClick={() => setStep("when")}
-                          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-colors text-left"
-                          style={{
-                            background: dark ? "rgba(16,185,129,0.10)" : "rgba(16,185,129,0.08)",
-                            border:     `1.5px solid ${dark ? "rgba(16,185,129,0.25)" : "rgba(16,185,129,0.30)"}`,
-                          }}
-                        >
-                          <Check className="h-4 w-4 shrink-0" style={{ color: "#10B981" }} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-base font-bold tabular-nums" style={{ color: textPri }}>
-                              {fmt(selectedSlots[0])} – {stopLabel}
-                            </p>
-                            <p className="text-xs" style={{ color: textSec }}>
-                              {selLabel} · tap to change
+                    {/* ╔═══════════════════════════ STEP 2 — PLAYERS / CONTROLLERS ═══════════════════════════╗ */}
+                    {!onWhen && hasPricing && (() => {
+                      const hasModes = Boolean(booking.modes && booking.modes.length > 0);
+                      let pricingBasis: "controller" | "player" | "none" = "player";
+                      let activePeoplePricing: Record<string, number> | null = null;
+                      let baseHourlyRate = booking.hourly_rate;
+
+                      if (hasModes && selectedMode) {
+                        pricingBasis = selectedMode.pricing_basis ?? "none";
+                        activePeoplePricing = selectedMode.people_pricing ?? null;
+                        baseHourlyRate = selectedMode.hourly_rate;
+                      } else {
+                        activePeoplePricing = booking.people_pricing ?? null;
+                        if (activePeoplePricing) {
+                          if (activePeoplePricing["1"] !== undefined) pricingBasis = "controller";
+                          else pricingBasis = "player";
+                        } else if (booking.type === "ps5") {
+                          pricingBasis = "controller";
+                        }
+                      }
+
+                      const isController = pricingBasis === "controller";
+
+                      return (
+                        <>
+                          {/* Time recap pill — taps back to step 1 to edit */}
+                          <button
+                            onClick={() => setStep("when")}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-colors text-left"
+                            style={{
+                              background: dark ? "rgba(16,185,129,0.10)" : "rgba(16,185,129,0.08)",
+                              border:     `1.5px solid ${dark ? "rgba(16,185,129,0.25)" : "rgba(16,185,129,0.30)"}`,
+                            }}
+                          >
+                            <Check className="h-4 w-4 shrink-0" style={{ color: "#10B981" }} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-base font-bold tabular-nums" style={{ color: textPri }}>
+                                {fmt(selectedSlots[0])} – {stopLabel}
+                              </p>
+                              <p className="text-xs" style={{ color: textSec }}>
+                                {selLabel} · tap to change
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: "#10B981" }}>Edit</span>
+                          </button>
+
+                          <div>
+                            <h4 className="text-2xl font-bold leading-tight" style={{ color: textPri }}>
+                              {isController ? "Select Controllers" : "How many are playing?"}
+                            </h4>
+                            <p className="text-sm mt-1" style={{ color: textSec }}>
+                              {isController
+                                ? "Choose controller count for your gaming session."
+                                : "Priced per head. We set the table for your group."}
                             </p>
                           </div>
-                          <span className="text-xs font-bold uppercase tracking-wide" style={{ color: "#10B981" }}>Edit</span>
-                        </button>
 
-                        <div>
-                          <h4 className="text-2xl font-bold leading-tight" style={{ color: textPri }}>
-                            How many are playing?
-                          </h4>
-                          <p className="text-sm mt-1" style={{ color: textSec }}>
-                            Priced per head. We set the table for your group.
-                          </p>
-                        </div>
+                          <div className="space-y-2">
+                            {pricingOptions.map((n, idx) => {
+                              const num = Number(n);
+                              let active = numPeople === n;
+                              let circleText = n;
 
-                        <div className="space-y-2">
-                          {pricingOptions.map((n, idx) => {
-                            const num = Number(n);
-                            let active = numPeople === n;
-                            let circleText = n;
+                              let noun = isController
+                                ? (n === "1" ? "controller" : "controllers")
+                                : (n === "1" ? "player" : "players");
+                              let heading = isController ? `${n} ${noun}` : noun;
+                              let sub = isController
+                                ? `${n} controller${n === "1" ? "" : "s"} ready`
+                                : `${n} cues & full rack set out`;
 
-                            const isPs5  = booking.type === "ps5";
-                            const isSimulator = isPs5 && booking.name.toLowerCase().includes("simulator");
-                            let noun = isSimulator
-                              ? (n === "1" ? "player" : "players")
-                              : isPs5
-                              ? (n === "1" ? "controller" : "controllers")
-                              : `${n} player${n === "1" ? "" : "s"}`;
-                            let heading = isSimulator || isPs5 ? `${n} ${noun}` : noun;
-                            let sub = isSimulator
-                              ? `${n} player setup ready`
-                              : isPs5
-                              ? `${n} controller${n === "1" ? "" : "s"} ready`
-                              : `${n} cues & full rack set out`;
+                              if (idx === 0 && num > 1 && !isController) {
+                                circleText = `1-${n}`;
+                                active = numPeople !== null && Number(numPeople) <= num;
+                                heading = `1-${n} players`;
+                                sub = `1-${n} cues & full rack set out`;
+                              }
 
-                            if (idx === 0 && num > 1) {
-                              circleText = `1-${n}`;
-                              active = numPeople !== null && Number(numPeople) <= num;
-                              noun = isSimulator ? "players" : isPs5 ? "controllers" : "players";
-                              heading = isSimulator || isPs5 ? `1-${n} ${noun}` : `1-${n} ${noun}`;
-                              sub = isSimulator
-                                ? `1-${n} players setup ready`
-                                : isPs5
-                                ? `1-${n} controllers ready`
-                                : `1-${n} cues & full rack set out`;
-                            }
-
-                            let is2PaxDisabled = false;
-                            // For ps5_simulator in ps5 mode: no cross-table pool check needed
-                            // Each table blocks itself only, so no 2-pax disabling logic required
-
-
-
-
-                            const rate   = booking.people_pricing?.[n] ?? (isSimulator && n === "2" ? booking.hourly_rate * 2 : booking.hourly_rate);
-                            const total  = formatCurrency((selMins / 60) * rate);
-                            return (
-                              <button
-                                key={n}
-                                onClick={() => {
-                                  if (!is2PaxDisabled) setNumPeople(n);
-                                }}
-                                disabled={is2PaxDisabled}
-                                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-left"
-                                style={{
-                                  background: is2PaxDisabled ? (resolvedTheme === "dark" ? "#1a1a1a" : "#f5f5f5") : active ? sheetType.accent : inputBg,
-                                  border:     `1.5px solid ${is2PaxDisabled ? (resolvedTheme === "dark" ? "#2a2a2a" : "#e5e5e5") : active ? sheetType.accent : inputBdr}`,
-                                  boxShadow:  (active && !is2PaxDisabled) ? `0 6px 18px ${sheetType.accent}40` : "none",
-                                  opacity:    is2PaxDisabled ? 0.5 : 1,
-                                  cursor:     is2PaxDisabled ? "not-allowed" : "pointer",
-                                }}
-                              >
-                                <div
-                                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shrink-0"
+                              const rate  = activePeoplePricing?.[n] ?? baseHourlyRate;
+                              const total = formatCurrency((selMins / 60) * rate);
+                              return (
+                                <button
+                                  key={n}
+                                  onClick={() => setNumPeople(n)}
+                                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-left"
                                   style={{
-                                    background: is2PaxDisabled ? "rgba(0,0,0,0.05)" : active ? "rgba(255,255,255,0.20)" : surface,
-                                    color:      is2PaxDisabled ? "#999" : active ? "#fff" : textPri,
-                                    border:     active ? "none" : `1.5px solid ${inputBdr}`,
+                                    background: active ? sheetType.accent : inputBg,
+                                    border:     `1.5px solid ${active ? sheetType.accent : inputBdr}`,
+                                    boxShadow:  active ? `0 6px 18px ${sheetType.accent}40` : "none",
+                                    cursor:     "pointer",
                                   }}
                                 >
-                                  {circleText}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold leading-tight" style={{ color: is2PaxDisabled ? "#999" : active ? "#fff" : textPri }}>
-                                    {heading} {is2PaxDisabled && " (Unavailable)"}
-                                  </p>
-                                  <p className="text-[11px] mt-0.5" style={{ color: is2PaxDisabled ? "#aaa" : active ? "rgba(255,255,255,0.85)" : textSec }}>
-                                    {is2PaxDisabled ? "Other console or simulator is already in use during these timings" : sub}
-                                  </p>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <p className="text-base font-bold tabular-nums" style={{ color: active ? "#fff" : textPri }}>
-                                    {total}
-                                  </p>
-                                  <p className="text-[10px] tabular-nums" style={{ color: active ? "rgba(255,255,255,0.75)" : textMut }}>
-                                    ₹{rate}/hr
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
+                                  <div
+                                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm"
+                                    style={{
+                                      background: active ? "rgba(255,255,255,0.20)" : surface,
+                                      color:      active ? "#fff" : textPri,
+                                      border:     active ? "none" : `1.5px solid ${inputBdr}`,
+                                    }}
+                                  >
+                                    {circleText}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold leading-tight" style={{ color: active ? "#fff" : textPri }}>
+                                      {heading}
+                                    </p>
+                                    <p className="text-[11px] mt-0.5" style={{ color: active ? "rgba(255,255,255,0.85)" : textSec }}>
+                                      {sub}
+                                    </p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className="text-base font-bold tabular-nums" style={{ color: active ? "#fff" : textPri }}>
+                                      {total}
+                                    </p>
+                                    <p className="text-[10px] tabular-nums" style={{ color: active ? "rgba(255,255,255,0.75)" : textMut }}>
+                                      ₹{rate}/hr
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </>
                 );
               })()}
