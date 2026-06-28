@@ -226,8 +226,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     let closeMins = ch * 60 + cm;
     if (closeMins <= openMins) closeMins += 24 * 60;
 
+    const isSim = isSimulator || selectedMode?.name?.toLowerCase().includes("simulator");
+    const stepMins = isSim ? 15 : 30;
+
     const list: { timeStr: string; label: string; isBlocked: boolean }[] = [];
-    for (let m = openMins; m < closeMins; m += 30) {
+    for (let m = openMins; m < closeMins; m += stepMins) {
       const norm = m % (24 * 60);
       const hh = String(Math.floor(norm / 60)).padStart(2, "0");
       const mm = String(norm % 60).padStart(2, "0");
@@ -249,7 +252,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       list.push({ timeStr, label, isBlocked });
     }
     return list;
-  }, [locationInfo, date, duration, blockedSlots]);
+  }, [locationInfo, date, duration, blockedSlots, isSimulator, selectedMode]);
 
   const create = useMutation({
     mutationFn: async () => {

@@ -389,7 +389,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }
 
   function addToCart(t: Table) {
-    const requiredSlots = 1; // all table types need at least 1 slot (15 min)
+    const isSim = t.type === "simulator" || t.name.toLowerCase().includes("simulator") || selectedMode?.name?.toLowerCase().includes("simulator");
+    const requiredSlots = isSim ? 1 : 2; // Simulators = 15m (1 slot), all other tables = 30m (2 slots)
     if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
@@ -433,6 +434,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const dateBg   = dark ? "#111"    : "#FFF";
 
   const sheetType = booking ? cfg(booking.type) : cfg("snooker");
+  const isSim     = booking ? (booking.type === "simulator" || booking.name.toLowerCase().includes("simulator") || (selectedMode as TableMode | null)?.name?.toLowerCase().includes("simulator")) : false;
+  const minSlots  = isSim ? 1 : 2;
 
   return (
     <div className="min-h-screen" style={{ background: bg }}>
@@ -1060,7 +1063,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
               {step === "when" ? (
                 <>
                   <div className="flex-1 min-w-0">
-                    {selectedSlots.length >= (booking?.name.toLowerCase().includes("simulator") ? 1 : 2) ? (
+                    {selectedSlots.length >= minSlots ? (
                       <>
                         <p className="text-sm font-bold tabular-nums" style={{ color: textPri }}>
                           {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
@@ -1069,8 +1072,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                           {selLabel} booked
                         </p>
                       </>
-                    ) : selectedSlots.length === 1 && !(booking?.name.toLowerCase().includes("simulator")) ? (
-                      <p className="text-xs" style={{ color: textMut }}>Pick a finish time to continue</p>
+                    ) : selectedSlots.length === 1 && !isSim ? (
+                      <p className="text-xs" style={{ color: textMut }}>Pick finish time (min 30m required)</p>
                     ) : (
                       <p className="text-xs" style={{ color: textMut }}>Pick a start time</p>
                     )}
@@ -1080,7 +1083,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       if (pricingOptions.length > 0) setStep("players");
                       else addToCart(booking);
                     }}
-                    disabled={selectedSlots.length < (booking?.name.toLowerCase().includes("simulator") ? 1 : 2)}
+                    disabled={selectedSlots.length < minSlots}
                     className="px-5 py-3 rounded-xl font-bold text-white text-sm transition-opacity disabled:opacity-40 flex items-center gap-1.5"
                     style={{ background: "#111111" }}
                   >

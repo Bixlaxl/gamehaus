@@ -8,7 +8,7 @@ import { NameMismatchModal } from "./name-mismatch-modal";
 import { X, Star } from "lucide-react";
 import { getShopWindow } from "@/lib/utils";
 import type { Table } from "@/lib/supabase/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, isSimulatorTable } from "@/lib/utils";
 
 interface CustomerLookup {
   name: string | null;
@@ -372,20 +372,26 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                       <div className="space-y-1.5">
                         <p className="text-xs text-gray-500 dark:text-[#666]">Duration</p>
                         <div className="flex gap-1.5">
-                          {DURATION_PRESETS.map((p) => (
-                            <button
-                              key={p.mins}
-                              onClick={() => setDurations((prev) => ({ ...prev, [table.id]: p.mins }))}
-                              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                dur === p.mins
-                                  ? "text-white"
-                                  : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-600 dark:text-[#666]"
-                              }`}
-                              style={dur === p.mins ? { background: "#D4541A" } : {}}
-                            >
-                              {p.label}
-                            </button>
-                          ))}
+                          {(() => {
+                            const chosenModeId = selectedModes[table.id];
+                            const chosenMode = table.modes?.find(m => m.id === chosenModeId);
+                            const isSim = isSimulatorTable(table) || chosenMode?.name?.toLowerCase().includes("simulator");
+                            const presets = isSim ? [{ label: "15m", mins: 15 }, ...DURATION_PRESETS] : DURATION_PRESETS;
+                            return presets.map((p) => (
+                              <button
+                                key={p.mins}
+                                onClick={() => setDurations((prev) => ({ ...prev, [table.id]: p.mins }))}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                  dur === p.mins
+                                    ? "text-white"
+                                    : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-600 dark:text-[#666]"
+                                }`}
+                                style={dur === p.mins ? { background: "#D4541A" } : {}}
+                              >
+                                {p.label}
+                              </button>
+                            ));
+                          })()}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
