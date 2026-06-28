@@ -94,7 +94,34 @@ function PanelWalkIn({
   const [durationInput, setDurationInput] = useState("60"); // raw string so it can be erased
   // People / controller count — keys into table.people_pricing. When set,
   // overrides table.hourly_rate with the tier rate.
+  const tableModes = useMemo(() => {
+    if (table.modes && Array.isArray(table.modes) && table.modes.length > 0) {
+      return table.modes as { id: string; name: string; hourly_rate: number; pricing_basis?: string; people_pricing?: Record<string, number> | null }[];
+    }
+    return [];
+  }, [table]);
+
+  const [selectedModeId, setSelectedModeId] = useState<string | null>(
+    tableModes.length > 0 ? tableModes[0].id : null
+  );
+  const selectedMode = useMemo(() =>
+    tableModes.find(m => m.id === selectedModeId) ?? tableModes[0] ?? null,
+    [tableModes, selectedModeId]
+  );
+
+  // People options: from selected mode if modes exist, else from table
   const peopleOptions = useMemo(() => {
+    if (selectedMode) {
+      if (selectedMode.people_pricing && typeof selectedMode.people_pricing === "object") {
+        const keys = Object.keys(selectedMode.people_pricing)
+          .filter(k => Boolean(selectedMode.people_pricing![k]))
+          .sort((a, b) => Number(a) - Number(b));
+        if (keys.length > 0) return keys;
+      }
+      if (selectedMode.pricing_basis === "controller") return ["1", "2"];
+      if (selectedMode.pricing_basis === "player") return ["1", "2", "3", "4"];
+      return [];
+    }
     if (isSimulatorTable(table)) {
       if (table.people_pricing && typeof table.people_pricing === "object") {
         const dbKeys = Object.keys(table.people_pricing)
@@ -106,10 +133,17 @@ function PanelWalkIn({
     }
     if (!table.people_pricing) return [];
     return Object.keys(table.people_pricing).sort((a, b) => Number(a) - Number(b));
-  }, [table]);
+  }, [table, selectedMode]);
   const peopleLabel   = table.type === "ps5" ? "controller" : "player";
   const [numPeople,   setNumPeople]   = useState<string | null>(null);
   const effectiveRate = (() => {
+    // Mode-aware rate: mode's people_pricing > mode's hourly_rate > table people_pricing > table hourly_rate
+    if (selectedMode) {
+      if (numPeople && selectedMode.people_pricing?.[numPeople]) {
+        return selectedMode.people_pricing[numPeople];
+      }
+      return selectedMode.hourly_rate;
+    }
     if (numPeople && table.people_pricing?.[numPeople]) {
       return table.people_pricing[numPeople];
     }
@@ -301,10 +335,11 @@ function PanelWalkIn({
         customer_name:  finalName,
         customer_phone: customerPhone.trim() || undefined,
         items: [{
-          table_id:      table.id,
-          duration_mins: duration,
-          rate_per_hour: effectiveRate,
-          num_people:    numPeople ? Number(numPeople) : undefined,
+          table_id:           table.id,
+          duration_mins:      duration,
+          rate_per_hour:      effectiveRate,
+          num_people:         numPeople ? Number(numPeople) : undefined,
+          selected_mode_name: selectedMode ? selectedMode.name : undefined,
         }],
       }),
     });
@@ -538,7 +573,40 @@ function PanelWalkIn({
           )}
         </div>
 
-        {/* People / controller count — only shown when the table has tiered pricing */}
+        {/* Mode selector — only shown when table has dynamic pricing modes */}
+        {tableModes.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
+                Pricing Mode
+              </p>
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-[#888]">
+                ₹{effectiveRate}/hr
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {tableModes.map((m) => {
+                const active = (selectedModeId ?? tableModes[0]?.id) === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => { setSelectedModeId(m.id); setNumPeople(null); }}
+                    className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+                      active
+                        ? "text-white"
+                        : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
+                    }`}
+                    style={active ? { background: "#7c3aed" } : {}}
+                  >
+                    {m.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* People / controller count — only shown when the table/mode has tiered pricing */}
         {peopleOptions.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-baseline justify-between">

@@ -147,14 +147,16 @@ export function MembershipsContent({
 
   // ─── Plan mutations ───────────────────────────────────────────────
   const planMutation = useMutation({
-    mutationFn: async (values: PlanForm & { editId?: string }) => {
+    mutationFn: async (values: PlanForm & { editId?: string; _selectedTableId?: string; _planCategory?: "pct" | "hours" }) => {
+      const cat = values._planCategory ?? planCategory;
+      const tid = values._selectedTableId ?? "";
       const payload = {
         name:            values.name,
         price:           parseFloat(values.price),
         duration_days:   parseInt(values.duration_days),
-        discount_pct:    planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
-        free_hrs:        planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
-        bound_table_ids: planCategory === "hours" ? (selectedTableId ? [selectedTableId] : values.bound_table_ids || []) : [],
+        discount_pct:    cat === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
+        free_hrs:        cat === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
+        bound_table_ids: cat === "hours" ? (tid ? [tid] : values.bound_table_ids || []) : [],
       };
       const url    = values.editId ? `/api/memberships/${values.editId}` : "/api/memberships";
       const method = values.editId ? "PATCH" : "POST";
@@ -181,9 +183,9 @@ export function MembershipsContent({
                   name:            values.name,
                   price:           parseFloat(values.price),
                   duration_days:   parseInt(values.duration_days),
-                  discount_pct:    planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
-                  free_hrs:        planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
-                  bound_table_ids: planCategory === "hours" ? (selectedTableId ? [selectedTableId] : values.bound_table_ids || []) : [],
+                  discount_pct:    (values._planCategory ?? planCategory) === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
+                  free_hrs:        (values._planCategory ?? planCategory) === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
+                  bound_table_ids: (values._planCategory ?? planCategory) === "hours" ? ((values._selectedTableId ?? "") ? [values._selectedTableId!] : values.bound_table_ids || []) : [],
                 }
               : p
           )
@@ -590,7 +592,14 @@ export function MembershipsContent({
                 alert("Please select an asset/table to bind to this template.");
                 return;
               }
-              planMutation.mutate({ ...planForm, editId: editingPlan?.id });
+              // Snapshot selectedTableId and planCategory at submit time so onMutate
+              // resetting these states doesn't corrupt the in-flight mutationFn.
+              planMutation.mutate({
+                ...planForm,
+                editId: editingPlan?.id,
+                _selectedTableId: selectedTableId,
+                _planCategory: planCategory,
+              });
             }}
             className="space-y-4"
           >
