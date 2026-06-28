@@ -371,7 +371,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
               className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
               style={{ background: "rgba(245,158,11,0.15)", color: "#d97706" }}
             >
-              → {table.upcomingBooking.order?.customer_name ?? "Booking"} · {fmtTime(table.upcomingBooking.scheduled_start)}
+              → {table.upcomingBooking.order?.customer_name ?? "Booking"} · {fmtTime(table.upcomingBooking.scheduled_start)} – {fmtTime(table.upcomingBooking.scheduled_end)}
             </span>
             {table.upcomingBooking.order?.customer_phone && (
               <button
@@ -756,7 +756,7 @@ const BillReadyCard = memo(BillReadyCardImpl, (a, b) =>
 
 type BookingRow = Booking & {
   order: Pick<Order, "customer_name" | "customer_phone" | "advance_paid">;
-  order_item: Pick<OrderItem, "table_id" | "status"> | null;
+  order_item: Pick<OrderItem, "table_id" | "status" | "selected_mode_name"> | null;
 };
 
 function UpcomingStrip({ locationId }: { locationId: string }) {
@@ -776,7 +776,7 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
   const seen     = new Set<string>();
   const upcoming = bookings
     .filter((b) => {
-      const oi = b.order_item as Pick<OrderItem, "table_id" | "status"> | null;
+      const oi = b.order_item as Pick<OrderItem, "table_id" | "status" | "selected_mode_name"> | null;
       if (oi?.status !== "scheduled") return false;
       const key = `${oi.table_id}:${b.scheduled_start}`;
       if (seen.has(key)) return false;
@@ -805,7 +805,7 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
 
       <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
         {upcoming.map((booking) => {
-          const oi         = booking.order_item as Pick<OrderItem, "table_id" | "status"> | null;
+          const oi         = booking.order_item as Pick<OrderItem, "table_id" | "status" | "selected_mode_name"> | null;
           const table      = tables.find((t) => t.id === oi?.table_id);
           const start      = new Date(booking.scheduled_start);
           const diffMs     = start.getTime() - now.getTime();
@@ -830,14 +830,14 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
                   className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide mb-1 inline-block"
                   style={{ background: "rgba(212,84,26,0.08)", color: "#D4541A" }}
                 >
-                  {table.name}
+                  {table.name}{oi?.selected_mode_name ? ` (${oi.selected_mode_name.replace(/ Mode$/i, "")})` : ""}
                 </span>
               )}
               <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
                 {booking.order?.customer_name}
               </p>
               <p className="font-mono text-xs font-bold tabular-nums mt-0.5" style={{ color: "#f59e0b" }}>
-                {fmtTime(booking.scheduled_start)}
+                {fmtTime(booking.scheduled_start)} – {fmtTime(booking.scheduled_end)}
               </p>
               <p
                 className="text-[10px] font-semibold mt-0.5"
