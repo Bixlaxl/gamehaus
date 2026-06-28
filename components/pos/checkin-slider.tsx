@@ -6,6 +6,13 @@ import { usePOSStore } from "@/store/pos";
 import { X, Search, QrCode } from "lucide-react";
 import type { Booking, Order } from "@/lib/supabase/types";
 
+interface MemberInfo {
+  membership_discount_pct: number;
+  free_hours_ledger: Record<string, number>;
+  bound_table_ids: string[];
+  memberships: { plan?: { free_hrs?: number } | null }[];
+}
+
 interface CheckinSliderProps {
   locationId: string;
 }
@@ -23,6 +30,8 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
   const [searching,  setSearching]  = useState(false);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [error,      setError]      = useState<string | null>(null);
+  // member info keyed by phone — loaded lazily as results load
+  const [memberMap,  setMemberMap]  = useState<Record<string, MemberInfo | null>>({});
 
   // Defense in depth: when staff opens the slider, force-refresh the upcoming
   // bookings cache. Realtime should keep this current, but if a booking
@@ -51,10 +60,6 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
 
   async function doSearch(q: string) {
     setSearching(true); setError(null);
-
-    // Server-side admin query — bypasses RLS, scoped to this location,
-    // covers today + tomorrow so post-midnight bookings still appear.
-    // Empty q returns ALL today/tomorrow bookings as the default list.
     const res = await fetch(
       `/api/pos/search-bookings?locationId=${encodeURIComponent(locationId)}&q=${encodeURIComponent(q.trim())}`
     );
@@ -65,6 +70,26 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
     if (!body.success) { setError(body.error); setSearching(false); return; }
     setResults(body.data);
     setSearching(false);
+
+    // Load member info for all phones in results that haven't been fetched yet
+    const phones = Array.from(new Set(
+      body.data
+        .map((b) => (b.order as { customer_phone?: string | null } | null)?.customer_phone)
+        .filter((p): p is string => !!p && !(p in memberMap))
+    ));
+    phones.forEach(async (phone) => {
+      const r = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(phone)}`);
+      const d = await r.json() as { found: boolean; customer: { membership_discount_pct: number; free_hours_ledger?: Record<string, number>; bound_table_ids?: string[] } | null };
+      setMemberMap((prev) => ({
+        ...prev,
+        [phone]: d.found && d.customer ? {
+          membership_discount_pct: d.customer.membership_discount_pct,
+          free_hours_ledger: (d.customer as any).free_hours_ledger ?? {},
+          bound_table_ids: (d.customer as any).bound_table_ids ?? [],
+          memberships: (d.customer as any).memberships ?? [],
+        } : null,
+      }));
+    });
   }
 
   async function checkIn(booking: BookingWithOrder) {
@@ -168,35 +193,52 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
           )}
 
           {/* Results */}
-          {results.map((booking) => (
-            <div
-              key={booking.id}
-              className="rounded-xl p-4 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]"
-              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white text-sm">{booking.order?.customer_name}</p>
-                  {booking.order?.customer_phone && (
-                    <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">{booking.order.customer_phone}</p>
-                  )}
-                  <p className="text-xs font-mono font-semibold mt-1.5 tabular-nums" style={{ color: "#f59e0b" }}>
-                    {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                    {" → "}
-                    {new Date(booking.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+          {results.map((booking) => {
+            const phone = (booking.order as { customer_phone?: string | null } | null)?.customer_phone ?? null;
+            const memberInfo = phone ? (memberMap[phone] ?? null) : null;
+            const memberPct = memberInfo?.membership_discount_pct ?? 0;
+            const hasFreeHrs = Object.values(memberInfo?.free_hours_ledger ?? {}).some((v) => v > 0);
+            return (
+              <div
+                key={booking.id}
+                className="rounded-xl p-4 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]"
+                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-900 dark:text-white text-sm">{booking.order?.customer_name}</p>
+                    {booking.order?.customer_phone && (
+                      <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">{booking.order.customer_phone}</p>
+                    )}
+                    <p className="text-xs font-mono font-semibold mt-1.5 tabular-nums" style={{ color: "#f59e0b" }}>
+                      {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      {" → "}
+                      {new Date(booking.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    {/* Membership preview */}
+                    {memberPct > 0 && (
+                      <p className="text-xs font-semibold mt-1.5" style={{ color: "#a78bfa" }}>
+                        Member — {memberPct}% off
+                      </p>
+                    )}
+                    {hasFreeHrs && (
+                      <p className="text-xs font-semibold mt-0.5" style={{ color: "#a78bfa" }}>
+                        Free hrs available
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => checkIn(booking)}
+                    disabled={checkingIn === booking.id}
+                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-85 disabled:opacity-40"
+                    style={{ background: "#10b981" }}
+                  >
+                    {checkingIn === booking.id ? "…" : "Check In"}
+                  </button>
                 </div>
-                <button
-                  onClick={() => checkIn(booking)}
-                  disabled={checkingIn === booking.id}
-                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-85 disabled:opacity-40"
-                  style={{ background: "#10b981" }}
-                >
-                  {checkingIn === booking.id ? "…" : "Check In"}
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

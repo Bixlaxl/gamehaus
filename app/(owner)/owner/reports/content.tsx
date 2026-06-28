@@ -265,7 +265,7 @@ export function ReportsContent({
         customerMap.set(o.customer_phone, {
           name:   existing.name,
           visits: existing.visits + 1,
-          spent:  existing.spent + (o.amount_due ?? 0),
+          spent:  existing.spent + (o.amount_due ?? 0) + (o.advance_paid ?? 0),
         });
       }
     }

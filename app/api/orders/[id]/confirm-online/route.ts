@@ -143,8 +143,15 @@ export async function POST(
         status: "open",
         subtotal: bill.subtotal,
         discount_amount: totalDiscount,
+        public_discount_amount: (order as any).public_discount_amount ?? 0,
         total_amount: netAdvancePaid,
-        advance_paid: netAdvancePaid,
+        // Guard: only overwrite advance_paid if the Razorpay webhook hasn't already
+        // written the real payment amount. Webhook fires async — if it won the race
+        // first (advance_paid > 0 on the order), preserve that value.
+        // For fully-free orders (free hours covering 100%), both values are 0 — safe.
+        ...(order.advance_paid > 0
+          ? {}
+          : { advance_paid: netAdvancePaid }),
         amount_due: 0,
         membership_id: order.membership_id ?? primaryMembership?.id ?? null,
       })

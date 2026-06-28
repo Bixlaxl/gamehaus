@@ -14,6 +14,7 @@ interface CustomerLookup {
   name: string | null;
   points_balance: number;
   visit_count: number;
+  membership_discount_pct?: number;
 }
 
 interface WalkInSliderProps {
@@ -258,14 +259,26 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
               />
               {lookingUp && <p className="text-xs text-gray-400 dark:text-[#555]">Looking up...</p>}
               {!lookingUp && customer && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                  style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.18)" }}
-                >
-                  <Star className="h-3 w-3 shrink-0" style={{ color: "#f59e0b" }} />
-                  <span className="text-xs font-medium" style={{ color: "#fbbf24" }}>
-                    {customer.points_balance} pts · {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
-                  </span>
+                <div className="space-y-1.5">
+                  <div
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                    style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.18)" }}
+                  >
+                    <Star className="h-3 w-3 shrink-0" style={{ color: "#f59e0b" }} />
+                    <span className="text-xs font-medium" style={{ color: "#fbbf24" }}>
+                      {customer.points_balance} pts · {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  {(customer.membership_discount_pct ?? 0) > 0 && (
+                    <div
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                      style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}
+                    >
+                      <span className="text-xs font-bold" style={{ color: "#a78bfa" }}>
+                        Member — {customer.membership_discount_pct}% off session + extras
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
               {!lookingUp && customerPhone.trim().length >= 6 && !customer && (
@@ -299,7 +312,25 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-sm text-gray-900 dark:text-white">{table.name}</span>
-                      <span className="text-xs text-gray-500 dark:text-[#666]">{formatCurrency(table.hourly_rate)}/hr</span>
+                      <div className="text-right">
+                        <span className="text-xs text-gray-500 dark:text-[#666]">{formatCurrency(table.hourly_rate)}/hr</span>
+                        {selected && (() => {
+                          const chosenModeId = selectedModes[table.id];
+                          const chosenMode = table.modes?.find(m => m.id === chosenModeId) ?? table.modes?.[0] ?? null;
+                          const rate = chosenMode ? chosenMode.hourly_rate : table.hourly_rate;
+                          const dur = durations[table.id] ?? 60;
+                          const gross = Math.round(rate * dur / 60 * 100) / 100;
+                          const memberPct = customer?.membership_discount_pct ?? 0;
+                          const net = memberPct > 0 ? Math.round(gross * (1 - memberPct / 100) * 100) / 100 : gross;
+                          return (
+                            <p className="text-xs font-semibold tabular-nums" style={{ color: memberPct > 0 ? "#a78bfa" : "#D4541A" }}>
+                              {memberPct > 0 ? (
+                                <><span className="line-through text-gray-400 mr-1">{formatCurrency(gross)}</span>{formatCurrency(net)}</>
+                              ) : formatCurrency(gross)}
+                            </p>
+                          );
+                        })()}
+                      </div>
                     </div>
                     {!selected && table.upcomingBooking && (
                       <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
