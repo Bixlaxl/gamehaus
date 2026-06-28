@@ -53,8 +53,8 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
     }, new Map<string, OrderExtra & { ids: string[] }>())
     .values()
   );
-  const bill         = calculateBill(activeItems, activeExtras, now, null, selectedOrder.advance_paid ?? 0);
-  const fullyPrePaid = bill.advancePaid > 0 && bill.advancePaid >= bill.scheduledSubtotal;
+  const bill         = calculateBill(activeItems, activeExtras, now, null, selectedOrder.advance_paid ?? 0, selectedOrder.discount_amount ?? 0);
+  const fullyPrePaid = bill.advancePaid > 0 && bill.advancePaid >= Math.max(0, bill.scheduledSubtotal - bill.discountAmount);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   async function stopSession(item: OrderItem) {

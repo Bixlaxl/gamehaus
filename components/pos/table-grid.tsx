@@ -683,7 +683,7 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
   const billDue = calculateBill(
     order.items.filter((i) => !i.is_deleted),
     order.extras.filter((e) => !e.is_deleted),
-    new Date(), null, order.advance_paid ?? 0
+    new Date(), null, order.advance_paid ?? 0, order.discount_amount ?? 0
   ).totalDue;
 
   return (

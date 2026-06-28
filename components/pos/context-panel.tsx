@@ -842,7 +842,7 @@ function PanelSession({
     }, new Map<string, OrderExtra & { ids: string[] }>())
     .values()
   );
-  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0);
+  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, order.discount_amount ?? 0);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
@@ -1506,6 +1506,14 @@ function PanelSession({
               </span>
             </div>
           ))}
+          {bill.discountAmount > 0 && (
+            <div className="flex justify-between items-baseline gap-2 py-0.5">
+              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Discount</span>
+              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>
+                −{formatCurrency(bill.discountAmount)}
+              </span>
+            </div>
+          )}
           {bill.advancePaid > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
               <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Advance paid</span>

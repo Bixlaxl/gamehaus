@@ -104,7 +104,8 @@ export async function POST(
     (extras ?? []) as OrderExtra[],
     now,
     coupon,
-    order.advance_paid
+    order.advance_paid,
+    order.discount_amount ?? 0
   );
 
   // Fetch ALL active memberships for this customer + points balance in parallel

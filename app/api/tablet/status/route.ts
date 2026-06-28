@@ -104,7 +104,8 @@ export async function GET(request: Request) {
       extras || [],
       new Date(),
       null,
-      item.order?.advance_paid ?? 0
+      item.order?.advance_paid ?? 0,
+      item.order?.discount_amount ?? 0
     );
 
     sessionData = {

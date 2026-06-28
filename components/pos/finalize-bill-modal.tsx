@@ -82,8 +82,8 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
   const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
 
-  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0);
-  const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= bill.scheduledSubtotal;
+  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, selectedOrder?.discount_amount ?? 0);
+  const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= Math.max(0, bill.scheduledSubtotal - bill.discountAmount);
   // Membership discount mirrors the server's finalize math: applied AFTER
   // bill.totalDue (which already absorbs the advance) and BEFORE points
   // redemption. Floor matches Math.floor in /api/orders/[id]/finalize.
