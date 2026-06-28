@@ -131,10 +131,8 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     }
 
     const durationHrs = (end.getTime() - start.getTime()) / (3600 * 1000);
-    let maxRedeem = Math.min(durationHrs, remainingFreeHrs);
-    if (typeof item.free_hours_to_redeem === "number" && item.free_hours_to_redeem >= 0) {
-      maxRedeem = Math.min(maxRedeem, item.free_hours_to_redeem);
-    }
+    // Free hours cover full duration (session + extensions) up to available ledger balance
+    const maxRedeem = Math.min(durationHrs, remainingFreeHrs);
 
     const freeHoursDiscount = maxRedeem * (item.rate_per_hour || 0);
     totalFreeHoursDiscount += freeHoursDiscount;

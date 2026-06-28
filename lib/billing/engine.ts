@@ -139,7 +139,8 @@ export function calculateBill(
       publicDiscount = coupon.discount_value;
     }
   }
-  publicDiscount = Math.min(publicDiscount, scheduledSubtotal);
+  const maxPublicDiscount = Math.max(0, scheduledSubtotal - freeHoursDiscountAmount);
+  publicDiscount = Math.min(publicDiscount, maxPublicDiscount);
 
   const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
   const remainingScheduledAfterPublic = Math.max(0, scheduledSubtotal - publicDiscount);

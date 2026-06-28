@@ -266,5 +266,27 @@ describe("billing engine", () => {
     expect(result.memberDiscountAmount).toBeCloseTo(15, 0);
     expect(result.totalDue).toBeCloseTo(135, 0);
   });
+
+  it("public coupon does not spill over onto extras when free hours cover scheduled table", () => {
+    // Session = 75 mins at ₹380/hr = ₹475. Scheduled = ₹380, Extension = ₹95.
+    // Extras = ₹90. Total subtotal = ₹565.
+    // Free hours covers ₹475 (or ₹380). If free hours covers ₹380 scheduled table,
+    // public coupon of ₹57 (15%) cannot spill over onto extras/extension.
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      actual_end: new Date("2024-01-01T11:15:00Z").toISOString(), // 75m
+      rate_per_hour: 380,
+      status: "finished",
+    });
+    const extra1 = makeExtra({ price: 70, quantity: 1 }); // ₹70
+    const extra2 = makeExtra({ price: 20, quantity: 1 }); // ₹20
+    const coupon = makeCoupon({ discount_type: "percent", discount_value: 15 }); // 15% = ₹57 on ₹380
+    // When free hours cover ₹475 (full session including extension)
+    const resultFullFree = calculateBill([item], [extra1, extra2], new Date(), coupon, 0, 0, 0, 475);
+    // freeHoursDiscountAmount = 475, publicDiscount capped to 0 because scheduled net is 0
+    expect(resultFullFree.freeHoursDiscountAmount).toBe(475);
+    expect(resultFullFree.discountAmount).toBe(0);
+    expect(resultFullFree.totalDue).toBe(90); // Only extras!
+  });
 });
 
