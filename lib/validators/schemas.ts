@@ -68,6 +68,14 @@ export const tableSchema = z.object({
   image_url: z.string().url().nullable().optional(),
   hourly_rate: z.number().positive(),
   people_pricing: z.record(z.string(), z.number()).nullable().optional(),
+  modes: z.array(z.object({
+    id: z.string(),
+    name: z.string().min(1),
+    icon: z.string().nullable().optional(),
+    hourly_rate: z.number().positive(),
+    pricing_basis: z.enum(["none", "player", "controller"]).optional(),
+    people_pricing: z.record(z.string(), z.number()).nullable().optional(),
+  })).nullable().optional(),
   sort_order: z.number().int().optional(),
   is_active: z.boolean().optional(),
 });

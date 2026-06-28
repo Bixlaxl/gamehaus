@@ -97,12 +97,13 @@ export interface Database {
           id: string;
           location_id: string;
           name: string;
-          type: "snooker" | "pool" | "ps5" | "foosball";
+          type: string;
           size: string | null;
           description: string | null;
           image_url: string | null;
           hourly_rate: number;
           people_pricing: Record<string, number> | null;
+          modes: TableMode[] | null;
           sort_order: number;
           is_active: boolean;
           created_at: string;
@@ -111,12 +112,13 @@ export interface Database {
           id?: string;
           location_id: string;
           name: string;
-          type: "snooker" | "pool" | "ps5" | "foosball";
+          type: string;
           size?: string | null;
           description?: string | null;
           image_url?: string | null;
           hourly_rate: number;
           people_pricing?: Record<string, number> | null;
+          modes?: TableMode[] | null;
           sort_order?: number;
           is_active?: boolean;
           created_at?: string;
@@ -125,12 +127,13 @@ export interface Database {
           id?: string;
           location_id?: string;
           name?: string;
-          type?: "snooker" | "pool" | "ps5" | "foosball";
+          type?: string;
           size?: string | null;
           description?: string | null;
           image_url?: string | null;
           hourly_rate?: number;
           people_pricing?: Record<string, number> | null;
+          modes?: TableMode[] | null;
           sort_order?: number;
           is_active?: boolean;
           created_at?: string;
@@ -861,3 +864,12 @@ export type MembershipPlan =
   Database["public"]["Tables"]["membership_plans"]["Row"];
 export type CustomerMembership =
   Database["public"]["Tables"]["customer_memberships"]["Row"];
+
+export interface TableMode {
+  id: string;
+  name: string;
+  icon?: string | null;
+  hourly_rate: number;
+  pricing_basis?: "none" | "player" | "controller";
+  people_pricing?: Record<string, number> | null;
+}
