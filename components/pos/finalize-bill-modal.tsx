@@ -141,8 +141,14 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
   }
 
-  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, selectedOrder?.discount_amount ?? 0, membershipPct, totalFreeHoursDiscount);
-  const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= Math.max(0, bill.scheduledSubtotal - bill.discountAmount);
+  // Use public_discount_amount (coupon-only portion stored at booking time).
+  // Member discount is always applied live via membershipPct so it covers
+  // extensions + extras added after the booking — matching the finalize route.
+  const publicFixedDiscount = (selectedOrder as any)?.public_discount_amount ?? selectedOrder?.discount_amount ?? 0;
+  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, publicFixedDiscount, membershipPct, totalFreeHoursDiscount);
+  // fullyPrePaid: all charges are already covered by advance (online full-pay).
+  // Use bill.totalDue which is already net of ALL discounts + advance.
+  const fullyPrePaid  = bill.totalDue <= 0 && (selectedOrder?.advance_paid ?? 0) > 0;
   const totalFreeHoursDiscountVal = bill.freeHoursDiscountAmount;
   const pctDiscount = bill.memberDiscountAmount;
   const membershipDiscount = Math.round((totalFreeHoursDiscountVal + pctDiscount) * 100) / 100;

@@ -424,9 +424,12 @@ export default function CheckoutPage() {
     return opts;
   }, [maxRedeemableHrs]);
 
-  const baseAfterFreeHours = Math.max(0, baseAfterCoupon - freeHoursDiscount);
+  // Member % discount base = subtotal - coupon only (mirrors orders/route.ts server logic).
+  // Free hours are a SEPARATE deduction stacked on top. The public discount (coupon)
+  // cannot reduce the member's base — only coupon reduces it for the % calculation.
+  // At finalize, member % is re-applied live to cover extensions + extras too.
   const membershipPctDiscount = isMembershipValid && customer?.membership_discount_pct
-    ? Math.floor(baseAfterFreeHours * customer.membership_discount_pct / 100)
+    ? Math.round(Math.max(0, baseAfterCoupon - freeHoursDiscount) * customer.membership_discount_pct / 100 * 100) / 100
     : 0;
   const totalMembershipDiscount = freeHoursDiscount + membershipPctDiscount;
   const baseAfterMembership = Math.max(0, baseAfterCoupon - totalMembershipDiscount);

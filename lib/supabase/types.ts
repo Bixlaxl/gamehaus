@@ -212,6 +212,7 @@ export interface Database {
           coupon_id: string | null;
           subtotal: number | null;
           discount_amount: number;
+          public_discount_amount: number;
           total_amount: number | null;
           advance_paid: number;
           amount_due: number | null;
@@ -231,6 +232,7 @@ export interface Database {
           coupon_id?: string | null;
           subtotal?: number | null;
           discount_amount?: number;
+          public_discount_amount?: number;
           total_amount?: number | null;
           advance_paid?: number;
           amount_due?: number | null;
@@ -250,6 +252,7 @@ export interface Database {
           coupon_id?: string | null;
           subtotal?: number | null;
           discount_amount?: number;
+          public_discount_amount?: number;
           total_amount?: number | null;
           advance_paid?: number;
           amount_due?: number | null;

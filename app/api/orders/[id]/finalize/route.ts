@@ -200,7 +200,10 @@ export async function POST(
     now,
     coupon,
     order.advance_paid,
-    order.discount_amount ?? 0,
+    // Use public_discount_amount (coupon-only) NOT discount_amount (which mixes in
+    // the member portion baked at booking time). Member discount is always applied
+    // live below so it correctly covers extensions + extra items added post-booking.
+    (order as any).public_discount_amount ?? 0,
     membershipDiscountPct,
     totalFreeHoursDiscount
   );

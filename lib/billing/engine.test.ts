@@ -217,4 +217,54 @@ describe("billing engine", () => {
     expect(result.memberDiscountAmount).toBe(27);
     expect(result.totalDue).toBe(243);
   });
+
+  it("no double-count: passing public_discount_amount (coupon-only) as fixedDiscount + live member % is correct", () => {
+    // Scenario: online booking, 15% coupon + 10% member both applied at booking time.
+    // At finalize, we pass publicDiscountAmount = coupon-only, and memberPct = 10% live.
+    // Result should be SAME as if applied fresh — no double-count.
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      actual_end: t60.toISOString(), // 60m
+      rate_per_hour: 200, // ₹200 session
+      status: "finished",
+    });
+    // publicDiscountAmount = 15% of 200 = 30 (coupon only)
+    const publicDiscount = 30;
+    const result = calculateBill([item], [], new Date(), null, 0, publicDiscount, 10);
+    // scheduledSubtotal = 200
+    // publicDiscount applied as fixedDiscountAmount = 30
+    // remainingScheduled = 200 - 30 = 170
+    // memberDiscountableBase = 170
+    // memberDiscountAmount = 10% of 170 = 17
+    // totalDue = 170 - 17 = 153
+    expect(result.discountAmount).toBe(30);
+    expect(result.memberDiscountAmount).toBeCloseTo(17, 0);
+    expect(result.totalDue).toBeCloseTo(153, 0);
+  });
+
+  it("free hours + member % stack: 1hr free on 2hr session, then 10% member on remainder + extras", () => {
+    // 2hr session at ₹100/hr = ₹200. 1hr free = ₹100 free hours discount.
+    // Then 10% member on remaining ₹100 session + ₹50 extras = ₹15.
+    // totalDue = 200 - 100 (free hrs) - 15 (member%) + 50 extras - 15 = 135? Let's compute carefully.
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      actual_end: new Date("2024-01-01T12:00:00Z").toISOString(), // 2hr
+      rate_per_hour: 100, // ₹200 session
+      status: "finished",
+    });
+    const extra = makeExtra({ price: 50, quantity: 1 }); // ₹50 extra
+    const freeHrsDiscount = 100; // 1hr free at ₹100/hr
+    const result = calculateBill([item], [extra], new Date(), null, 0, 0, 10, freeHrsDiscount);
+    // scheduledSubtotal = 200, extraTotal = 50
+    // publicDiscount = 0, freeHrsDiscount = 100
+    // remainingScheduledAfterPublic = 200
+    // remainingScheduledAfterFree = 200 - 100 = 100
+    // memberDiscountableBase = 100 (session remainder) + 0 (OT) + 50 (extras) = 150
+    // memberDiscountAmount = 10% of 150 = 15
+    // totalDue = 100 + 50 - 15 = 135
+    expect(result.freeHoursDiscountAmount).toBe(100);
+    expect(result.memberDiscountAmount).toBeCloseTo(15, 0);
+    expect(result.totalDue).toBeCloseTo(135, 0);
+  });
 });
+

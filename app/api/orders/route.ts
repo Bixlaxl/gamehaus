@@ -199,12 +199,17 @@ export async function POST(request: Request) {
       location_id,
       type,
       customer_name,
-      customer_phone:  customer_phone ?? null,
-      membership_id:   membership_id ?? null,
-      points_redeemed: points_redeemed ?? 0,
-      coupon_id:       resolvedCouponId,
-      subtotal:        roundedSubtotal > 0 ? roundedSubtotal : null,
-      discount_amount: discountAmount,
+      customer_phone:         customer_phone ?? null,
+      membership_id:          membership_id ?? null,
+      points_redeemed:        points_redeemed ?? 0,
+      coupon_id:              resolvedCouponId,
+      subtotal:               roundedSubtotal > 0 ? roundedSubtotal : null,
+      // discount_amount = coupon + member combined (for reporting/display).
+      // public_discount_amount = coupon portion ONLY — used at finalize so the
+      // billing engine can apply member % live (covering extensions + extras)
+      // without double-counting the member portion baked in at booking time.
+      discount_amount:        discountAmount,
+      public_discount_amount: publicDiscountAmount,
       total_amount:    roundedSubtotal > 0 ? Math.max(0, Math.round((roundedSubtotal - discountAmount) * 100) / 100) : null,
       created_by:      createdBy,
     })
