@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       .single(),
     admin
       .from("customer_memberships")
-      .select("id, short_id, bound_table_ids, free_hours_ledger, plan:membership_plans(name, discount_pct, free_hrs)")
+      .select("id, short_id, bound_table_ids, free_hours_ledger, plan:membership_plans(*)")
       .eq("customer_phone", phone)
       .eq("is_active", true)
       .lte("starts_at", nowIso)

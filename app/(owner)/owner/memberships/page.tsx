@@ -12,7 +12,7 @@ export default async function MembershipsPage() {
     admin.from("membership_plans").select("*").order("price"),
     admin
       .from("customer_memberships")
-      .select(`*, plan:membership_plans(name, discount_pct, free_hrs)`)
+      .select(`*, plan:membership_plans(*)`)
       .eq("is_active", true)
       .gte("expires_at", now)
       .order("created_at", { ascending: false })
