@@ -814,12 +814,12 @@ function PanelSession({
   });
 
   // Cached across order opens — same phone won't re-fetch within 60s
-  const { data: customerInfo } = useQuery<{ points_balance: number } | null>({
+  const { data: customerInfo } = useQuery<{ points_balance: number; membership_discount_pct?: number } | null>({
     queryKey: ["customer-lookup", order.customer_phone],
     queryFn: async () => {
       if (!order.customer_phone) return null;
       const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
-      const body = await res.json() as { found: boolean; customer: { points_balance: number } | null };
+      const body = await res.json() as { found: boolean; customer: { points_balance: number; membership_discount_pct?: number } | null };
       return body.customer;
     },
     enabled: !!order.customer_phone,
@@ -842,7 +842,7 @@ function PanelSession({
     }, new Map<string, OrderExtra & { ids: string[] }>())
     .values()
   );
-  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, order.discount_amount ?? 0);
+  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, order.discount_amount ?? 0, customerInfo?.membership_discount_pct ?? 0);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
@@ -1508,9 +1508,25 @@ function PanelSession({
           ))}
           {bill.discountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Discount</span>
+              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Coupon Discount</span>
               <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>
                 −{formatCurrency(bill.discountAmount)}
+              </span>
+            </div>
+          )}
+          {bill.freeHoursDiscountAmount > 0 && (
+            <div className="flex justify-between items-baseline gap-2 py-0.5">
+              <span className="text-xs font-semibold" style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+              <span className="text-xs font-semibold tabular-nums" style={{ color: "#8b5cf6" }}>
+                −{formatCurrency(bill.freeHoursDiscountAmount)}
+              </span>
+            </div>
+          )}
+          {bill.memberDiscountAmount > 0 && (
+            <div className="flex justify-between items-baseline gap-2 py-0.5">
+              <span className="text-xs font-semibold" style={{ color: "#8b5cf6" }}>Member Discount ({customerInfo?.membership_discount_pct}% Off)</span>
+              <span className="text-xs font-semibold tabular-nums" style={{ color: "#8b5cf6" }}>
+                −{formatCurrency(bill.memberDiscountAmount)}
               </span>
             </div>
           )}

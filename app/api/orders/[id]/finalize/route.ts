@@ -99,14 +99,6 @@ export async function POST(
   }
 
   const now = new Date();
-  const bill = calculateBill(
-    activeItems as OrderItem[],
-    (extras ?? []) as OrderExtra[],
-    now,
-    coupon,
-    order.advance_paid,
-    order.discount_amount ?? 0
-  );
 
   // Fetch ALL active memberships for this customer + points balance in parallel
   const [allMembershipsResult, pointsProfileResult] = await Promise.all([
@@ -150,7 +142,6 @@ export async function POST(
     });
   });
 
-
   let totalFreeHoursDiscount = 0;
 
   // For each active item, find which membership covers it (via item.membership_id or bound_table_ids)
@@ -158,7 +149,6 @@ export async function POST(
     const table = (item as any).table;
     if (!table) continue;
 
-    // Find the membership that covers this item — prefer the one explicitly linked, then fall back to any bound membership
     const itemMembershipId = (item as any).membership_id;
     const isBound = (m: any) => !m.bound_table_ids || m.bound_table_ids.length === 0 || m.bound_table_ids.includes(table.id);
     let coveringMembership = itemMembershipId
@@ -200,25 +190,19 @@ export async function POST(
     ledgerEntry.ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
   }
 
-  // Calculate net session due (table lines only) for applying the % discount on top
-  const sessionTotal = bill.tableLines.reduce((sum, l) => sum + l.amount, 0);
-  const scheduledSubtotal = bill.tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0);
-  const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
+  const bill = calculateBill(
+    activeItems as OrderItem[],
+    (extras ?? []) as OrderExtra[],
+    now,
+    coupon,
+    order.advance_paid,
+    order.discount_amount ?? 0,
+    membershipDiscountPct,
+    totalFreeHoursDiscount
+  );
 
-  const remainingScheduledAfterFree = Math.max(0, scheduledSubtotal - totalFreeHoursDiscount);
-  const pctDiscount = membershipDiscountPct > 0
-    ? Math.floor(remainingScheduledAfterFree * membershipDiscountPct / 100)
-    : 0;
-
-  const totalMembershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
-  const orderDiscount = Math.max(Number(order.discount_amount) || 0, bill.discountAmount);
-  const netScheduledDue = bill.advancePaid > 0
-    ? Math.max(0, remainingScheduledAfterFree - pctDiscount - orderDiscount - bill.advancePaid)
-    : Math.max(0, remainingScheduledAfterFree - pctDiscount - orderDiscount);
-
-  const extrasTotal = bill.extraLines.reduce((sum, l) => sum + l.amount, 0);
-  const membershipDiscount = totalMembershipDiscount;
-  const billAfterMembership = Math.max(0, Math.round((netScheduledDue + overtimeTotal + extrasTotal) * 100) / 100);
+  const membershipDiscount = Math.round((bill.freeHoursDiscountAmount + bill.memberDiscountAmount) * 100) / 100;
+  const billAfterMembership = bill.totalDue;
 
 
 

@@ -82,11 +82,6 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
   const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
 
-  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, selectedOrder?.discount_amount ?? 0);
-  const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= Math.max(0, bill.scheduledSubtotal - bill.discountAmount);
-  // Membership discount mirrors the server's finalize math: applied AFTER
-  // bill.totalDue (which already absorbs the advance) and BEFORE points
-  // redemption. Floor matches Math.floor in /api/orders/[id]/finalize.
   const allMemberships = customerInfo?.active_memberships ?? [];
   const membershipPct = allMemberships.reduce((max, m) => {
     const pct = m.plan?.discount_pct ?? 0;
@@ -146,24 +141,12 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
   }
 
-  const sessionTotal = bill.tableLines.reduce((sum, l) => sum + l.amount, 0);
-  const scheduledSubtotal = bill.tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0);
-  const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
-
-  const remainingScheduledAfterFree = Math.max(0, scheduledSubtotal - totalFreeHoursDiscount);
-  const pctDiscount = membershipPct > 0
-    ? Math.floor(remainingScheduledAfterFree * membershipPct / 100)
-    : 0;
-
-  const totalMembershipDiscount = Math.round((totalFreeHoursDiscount + pctDiscount) * 100) / 100;
-  const orderDiscount = Math.max(Number(selectedOrder?.discount_amount) || 0, bill.discountAmount);
-  const netScheduledDue = bill.advancePaid > 0
-    ? Math.max(0, remainingScheduledAfterFree - pctDiscount - orderDiscount - bill.advancePaid)
-    : Math.max(0, remainingScheduledAfterFree - pctDiscount - orderDiscount);
-
-  const extrasTotal = bill.extraLines.reduce((sum, l) => sum + l.amount, 0);
-  const membershipDiscount = totalMembershipDiscount;
-  const billAfterMembership = Math.max(0, Math.round((netScheduledDue + overtimeTotal + extrasTotal) * 100) / 100);
+  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, selectedOrder?.discount_amount ?? 0, membershipPct, totalFreeHoursDiscount);
+  const fullyPrePaid  = bill.advancePaid > 0 && bill.advancePaid >= Math.max(0, bill.scheduledSubtotal - bill.discountAmount);
+  const totalFreeHoursDiscountVal = bill.freeHoursDiscountAmount;
+  const pctDiscount = bill.memberDiscountAmount;
+  const membershipDiscount = Math.round((totalFreeHoursDiscountVal + pctDiscount) * 100) / 100;
+  const billAfterMembership = bill.totalDue;
 
 
 

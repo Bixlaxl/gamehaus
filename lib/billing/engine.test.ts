@@ -195,4 +195,26 @@ describe("billing engine", () => {
     expect(result.discountAmount).toBeLessThanOrEqual(result.subtotal);
     expect(result.totalDue).toBe(0);
   });
+
+  it("member discount stacks with public coupon and covers extra items", () => {
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      actual_end: t60.toISOString(), // 60m
+      rate_per_hour: 200, // ₹200 session
+      status: "finished",
+    });
+    const extra = makeExtra({ price: 100, quantity: 1 }); // ₹100 extra
+    const coupon = makeCoupon({ discount_type: "flat", discount_value: 30 }); // ₹30 public coupon
+    // Pass 10% member discount (memberDiscountPct = 10)
+    const result = calculateBill([item], [extra], new Date(), coupon, 0, 0, 10);
+    // scheduledSubtotal = 200
+    // publicDiscount = 30 -> remainingScheduled = 170
+    // extraTotal = 100
+    // memberDiscountableBase = 170 + 100 = 270
+    // memberDiscountAmount = 10% of 270 = 27
+    // totalDue = (200 - 30) + 100 - 27 = 243
+    expect(result.discountAmount).toBe(30);
+    expect(result.memberDiscountAmount).toBe(27);
+    expect(result.totalDue).toBe(243);
+  });
 });

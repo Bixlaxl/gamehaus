@@ -151,6 +151,47 @@ export async function POST(request: Request) {
     discountAmount = Math.round(discountAmount * 100) / 100;
   }
 
+  let publicDiscountAmount = discountAmount;
+  let memberDiscountAmount = 0;
+
+  if (customer_phone || membership_id) {
+    const nowISO = new Date().toISOString();
+    let query = admin
+      .from("customer_memberships")
+      .select("*, plan:membership_plans(*)")
+      .eq("is_active", true)
+      .gte("expires_at", nowISO);
+    
+    if (membership_id) {
+      query = query.eq("id", membership_id);
+    } else if (customer_phone) {
+      query = query.eq("customer_phone", customer_phone);
+    }
+
+    const { data: memberShipList } = await query;
+    if (memberShipList && memberShipList.length > 0) {
+      const bookedTableIds = scheduledItems.map((i) => i.table_id);
+      let highestMemberPct = 0;
+
+      for (const m of memberShipList) {
+        const planPct = Number(m.plan?.discount_pct || 0);
+        if (planPct <= 0) continue;
+        const boundIds: string[] = m.bound_table_ids || m.plan?.bound_table_ids || [];
+        const isApplicable = boundIds.length === 0 || bookedTableIds.some((id) => boundIds.includes(id));
+        if (isApplicable && planPct > highestMemberPct) {
+          highestMemberPct = planPct;
+        }
+      }
+
+      if (highestMemberPct > 0) {
+        const netAfterPublic = Math.max(0, roundedSubtotal - publicDiscountAmount);
+        memberDiscountAmount = Math.round((netAfterPublic * highestMemberPct) / 100 * 100) / 100;
+      }
+    }
+  }
+
+  discountAmount = Math.round((publicDiscountAmount + memberDiscountAmount) * 100) / 100;
+
   // Create order
   const { data: order, error: orderError } = await admin
     .from("orders")

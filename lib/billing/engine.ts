@@ -32,6 +32,8 @@ export interface BillResult {
   subtotal: number;
   scheduledSubtotal: number;
   discountAmount: number;
+  memberDiscountAmount: number;
+  freeHoursDiscountAmount: number;
   advancePaid: number;
   totalDue: number;
 }
@@ -46,7 +48,9 @@ export interface BillResult {
  * @param now       Current time — pass new Date() for live, actual_end for final
  * @param coupon    Optional coupon (only for full-prepay online orders)
  * @param advancePaid  Amount paid online at booking time
- * @param fixedDiscountAmount  Existing discount amount saved on order
+ * @param fixedDiscountAmount  Existing public discount amount saved on order
+ * @param memberDiscountPct    Member discount percentage (applies to session, overtime & extras)
+ * @param freeHoursDiscountAmount  Free hours discount amount
  */
 export function calculateBill(
   items: OrderItem[],
@@ -54,7 +58,9 @@ export function calculateBill(
   now: Date,
   coupon: Coupon | null = null,
   advancePaid: number = 0,
-  fixedDiscountAmount: number = 0
+  fixedDiscountAmount: number = 0,
+  memberDiscountPct: number = 0,
+  freeHoursDiscountAmount: number = 0
 ): BillResult {
   const tableLines: BillingLineItem[] = [];
 
@@ -125,32 +131,39 @@ export function calculateBill(
     tableLines.reduce((sum, l) => sum + l.scheduledAmount, 0) * 100
   ) / 100;
 
-  let discountAmount = fixedDiscountAmount || 0;
+  let publicDiscount = fixedDiscountAmount || 0;
   if (coupon) {
     if (coupon.discount_type === "percent") {
-      discountAmount = Math.round((scheduledSubtotal * coupon.discount_value) / 100 * 100) / 100;
+      publicDiscount = Math.round((scheduledSubtotal * coupon.discount_value) / 100 * 100) / 100;
     } else {
-      discountAmount = coupon.discount_value;
+      publicDiscount = coupon.discount_value;
     }
   }
-  discountAmount = Math.min(discountAmount, scheduledSubtotal);
+  publicDiscount = Math.min(publicDiscount, scheduledSubtotal);
 
-  // Advance deducted from scheduled session cost after discount (fixed, known at booking time).
-  // Overtime accrues on top of that — not absorbed by advance or discount.
   const overtimeTotal = Math.max(0, sessionTotal - scheduledSubtotal);
-  const scheduledSessionNet = Math.max(0, scheduledSubtotal - discountAmount);
-  const netSessionDue = advancePaid > 0
-    ? Math.max(0, scheduledSessionNet - advancePaid) + overtimeTotal
-    : Math.max(0, sessionTotal - discountAmount);
+  const remainingScheduledAfterPublic = Math.max(0, scheduledSubtotal - publicDiscount);
+  const remainingScheduledAfterFree = Math.max(0, remainingScheduledAfterPublic - freeHoursDiscountAmount);
 
-  const totalDue = Math.max(0, netSessionDue + extraTotal);
+  // Member discount applies to session (scheduled + overtime) AND extra items
+  const memberDiscountableBase = remainingScheduledAfterFree + overtimeTotal + extraTotal;
+  const memberDiscountAmount = memberDiscountPct > 0
+    ? Math.round(memberDiscountableBase * (memberDiscountPct / 100) * 100) / 100
+    : 0;
+
+  const grossNet = Math.max(0, remainingScheduledAfterFree + overtimeTotal + extraTotal - memberDiscountAmount);
+  const totalDue = advancePaid > 0
+    ? Math.max(0, grossNet - advancePaid)
+    : grossNet;
 
   return {
     tableLines,
     extraLines,
     subtotal,
     scheduledSubtotal,
-    discountAmount: Math.round(discountAmount * 100) / 100,
+    discountAmount: Math.round(publicDiscount * 100) / 100,
+    memberDiscountAmount,
+    freeHoursDiscountAmount,
     advancePaid,
     totalDue: Math.round(totalDue * 100) / 100,
   };
