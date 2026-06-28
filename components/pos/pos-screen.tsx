@@ -41,14 +41,6 @@ interface POSScreenProps {
 const supabase = createClient();
 
 export function POSScreen({ locationId, locationName, openingTime, closingTime, staffName }: POSScreenProps) {
-  // Sync location config into the store so global modals + panels can read it
-  if (usePOSStore.getState().closingTime !== closingTime) {
-    usePOSStore.setState({ closingTime });
-  }
-  if (usePOSStore.getState().openingTime !== openingTime) {
-    usePOSStore.setState({ openingTime });
-  }
-
   const router = useRouter();
 
   const qc                    = useQueryClient();
@@ -111,6 +103,27 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   }, []);
 
   // Data queries
+  const { data: liveLoc } = useQuery<{ opening_time: string; closing_time: string } | null>({
+    queryKey: ["pos-location", locationId],
+    queryFn: async () => {
+      const res = await fetch("/api/locations", { cache: "no-store" });
+      const body = await res.json();
+      const list = body.success ? body.data : [];
+      const found = list.find((l: any) => l.id === locationId);
+      return found ? { opening_time: found.opening_time, closing_time: found.closing_time } : null;
+    },
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const effectiveOpeningTime = liveLoc?.opening_time ?? openingTime;
+  const effectiveClosingTime = liveLoc?.closing_time ?? closingTime;
+
+  useEffect(() => {
+    usePOSStore.setState({ openingTime: effectiveOpeningTime, closingTime: effectiveClosingTime });
+  }, [effectiveOpeningTime, effectiveClosingTime]);
+
   const { data: rawTables } = useQuery({
     queryKey: ["pos-tables", locationId],
     queryFn: async () => {
@@ -295,10 +308,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
                 // Compute on click — no per-second subscription needed in the
                 // header. Worst case the button looks enabled for one minute
                 // after closing; the toast catches it. Server enforces it too.
-                const win = getShopWindow(new Date(), openingTime, closingTime);
+                const win = getShopWindow(new Date(), effectiveOpeningTime, effectiveClosingTime);
                 if (win.outsideHours) {
                   toast.error(win.beforeOpen
-                    ? `Shop opens at ${openingTime} — walk-ins disabled`
+                    ? `Shop opens at ${effectiveOpeningTime} — walk-ins disabled`
                     : "Shop closed for the day — walk-ins disabled");
                   return;
                 }

@@ -1,11 +1,12 @@
 export const runtime = 'edge';
+export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import Loading from "./loading";
 
-const POSScreen = dynamic(
+const POSScreen = nextDynamic(
   () => import("@/components/pos/pos-screen").then((mod) => mod.POSScreen),
   { ssr: false, loading: () => <Loading /> }
 );

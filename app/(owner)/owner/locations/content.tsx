@@ -204,6 +204,8 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
     },
     onSuccess: (_, values) => {
       qc.invalidateQueries({ queryKey: ["locations"] });
+      qc.invalidateQueries({ queryKey: ["pos-location"] });
+      qc.invalidateQueries({ queryKey: ["location-info-detail"] });
       toast.success(values.editId ? "Location updated" : "Location created");
       newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
       setNewFiles([]);
