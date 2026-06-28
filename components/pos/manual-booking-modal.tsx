@@ -6,18 +6,10 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarPlus, Banknote, Smartphone } from "lucide-react";
-import type { Table } from "@/lib/supabase/types";
+import { CalendarPlus, Banknote, Smartphone, CheckCircle, Gamepad2 } from "lucide-react";
+import type { Table, TableMode } from "@/lib/supabase/types";
 import { isSimulatorTable } from "@/lib/utils";
 
-
-const DURATION_PRESETS = [
-  { mins: 30,  label: "30m" },
-  { mins: 60,  label: "1h"  },
-  { mins: 90,  label: "1.5h" },
-  { mins: 120, label: "2h"  },
-  { mins: 180, label: "3h"  },
-];
 
 interface Props {
   locationId: string;
@@ -39,12 +31,38 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   const [name,  setName]  = useState("");
   const [phone, setPhone] = useState("");
   const [tableId, setTableId] = useState("");
+  const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
   const [date,    setDate]    = useState(defaultDate ?? todayLocalDateStr());
   const [time,    setTime]    = useState("18:00");
   const [duration, setDuration] = useState(60);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<"cash" | "upi" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [lookingUpPhone, setLookingUpPhone] = useState(false);
+
+  // Customer phone lookup & autofill
+  useEffect(() => {
+    if (phone.length === 10) {
+      setLookingUpPhone(true);
+      fetch(`/api/customers/lookup?phone=${encodeURIComponent(phone)}`)
+        .then((res) => res.json())
+        .then((data: { found: boolean; customer: { name: string | null } | null }) => {
+          if (data.found && data.customer?.name) {
+            setName(data.customer.name);
+            setIsRegistered(true);
+            toast.success(`Registered customer: ${data.customer.name}`);
+          } else {
+            setIsRegistered(false);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLookingUpPhone(false));
+  } else {
+      setIsRegistered(false);
+    }
+  }, [phone]);
 
   // Load this location's tables for the picker
   const { data: tables = [] } = useQuery<Table[]>({
@@ -64,6 +82,28 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   }, [tables, tableId]);
 
   const chosenTable = useMemo(() => tables.find((t) => t.id === tableId), [tables, tableId]);
+
+  // Handle modes for multi-mode tables
+  const tableModes = useMemo(() => {
+    if (chosenTable?.modes && Array.isArray(chosenTable.modes) && chosenTable.modes.length > 0) {
+      return chosenTable.modes as TableMode[];
+    }
+    return [];
+  }, [chosenTable]);
+
+  useEffect(() => {
+    if (tableModes.length > 0) {
+      setSelectedModeId(tableModes[0].id);
+    } else {
+      setSelectedModeId(null);
+    }
+  }, [tableModes]);
+
+  const selectedMode = useMemo(() => {
+    if (tableModes.length === 0 || !selectedModeId) return null;
+    return tableModes.find((m) => m.id === selectedModeId) ?? null;
+  }, [tableModes, selectedModeId]);
+
   const isSimulator = chosenTable ? isSimulatorTable(chosenTable) : false;
   const durationPresets = useMemo(() => {
     const base = [
@@ -73,13 +113,25 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       { mins: 120, label: "2h"  },
       { mins: 180, label: "3h"  },
     ];
-    if (isSimulator) {
+    if (isSimulator || selectedMode?.name?.toLowerCase().includes("simulator")) {
       return [{ mins: 15, label: "15m" }, ...base];
     }
     return base;
-  }, [isSimulator]);
-  // Default-pick num_people to the table's smallest tier if it has tiered pricing
+  }, [isSimulator, selectedMode]);
+
+  // Default-pick num_people to the table/mode's smallest tier
   const peopleOptions = useMemo(() => {
+    if (selectedMode) {
+      if (selectedMode.people_pricing && typeof selectedMode.people_pricing === "object") {
+        const dbKeys = Object.keys(selectedMode.people_pricing)
+          .filter((k) => Boolean(selectedMode.people_pricing![k]))
+          .sort((a, b) => Number(a) - Number(b));
+        if (dbKeys.length > 0) return dbKeys;
+      }
+      if (selectedMode.pricing_basis === "controller") return ["1", "2"];
+      if (selectedMode.pricing_basis === "player") return ["1", "2", "3", "4"];
+      return [];
+    }
     if (!chosenTable) return [];
     if (isSimulatorTable(chosenTable)) {
       if (chosenTable.people_pricing && typeof chosenTable.people_pricing === "object") {
@@ -92,14 +144,20 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     }
     if (!chosenTable.people_pricing) return [];
     return Object.keys(chosenTable.people_pricing).sort((a, b) => Number(a) - Number(b));
-  }, [chosenTable]);
+  }, [chosenTable, selectedMode]);
+
   const [numPeople, setNumPeople] = useState<string | null>(null);
   useEffect(() => {
     setNumPeople(peopleOptions[0] ?? null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableId, peopleOptions]);
+  }, [tableId, selectedModeId, peopleOptions]);
 
   const effectiveRate = (() => {
+    if (selectedMode) {
+      if (numPeople && selectedMode.people_pricing?.[numPeople]) {
+        return selectedMode.people_pricing[numPeople];
+      }
+      return selectedMode.hourly_rate;
+    }
     if (!chosenTable) return 0;
     if (numPeople && chosenTable.people_pricing?.[numPeople]) {
       return chosenTable.people_pricing[numPeople];
@@ -135,15 +193,16 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          location_id:     locationId,
-          customer_name:   name.trim(),
-          customer_phone:  phone.trim(),
-          table_id:        tableId,
-          scheduled_start: scheduledStart,
-          scheduled_end:   scheduledEnd,
-          rate_per_hour:   effectiveRate,
-          num_people:      numPeople ? Number(numPeople) : undefined,
-          advance_paid:    wantAdvance ? { amount: advanceNum, method: advanceMethod } : undefined,
+          location_id:        locationId,
+          customer_name:      name.trim(),
+          customer_phone:     phone.trim(),
+          table_id:           tableId,
+          scheduled_start:    scheduledStart,
+          scheduled_end:      scheduledEnd,
+          rate_per_hour:      effectiveRate,
+          num_people:         numPeople ? Number(numPeople) : undefined,
+          selected_mode_name: selectedMode?.name ?? undefined,
+          advance_paid:       wantAdvance ? { amount: advanceNum, method: advanceMethod } : undefined,
         }),
       });
       const body = await res.json() as { success: true; data: unknown } | { success: false; error: string };
@@ -151,8 +210,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       return body.data;
     },
     onSuccess: () => {
-      toast.success("Manual booking created");
-      // Refresh bookings on every surface that lists them.
+      toast.success("Manual booking created & WhatsApp sent");
       qc.invalidateQueries({ queryKey: ["owner-bookings"] });
       qc.invalidateQueries({ queryKey: ["pos-bookings"] });
       qc.invalidateQueries({ queryKey: ["staff-bookings"] });
@@ -173,20 +231,30 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
         <div className="px-5 py-4 space-y-4 max-h-[75vh] overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Customer name</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
-                placeholder="Full name"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Phone (10 digits)</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Phone (10 digits)</Label>
+                {lookingUpPhone && <span className="text-[10px] text-gray-400">Looking up…</span>}
+              </div>
               <Input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder="9XXXXXXXXX"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Customer name</Label>
+                {isRegistered && (
+                  <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
+                    <CheckCircle className="h-2.5 w-2.5" /> Registered
+                  </span>
+                )}
+              </div>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
+                placeholder="Full name"
               />
             </div>
           </div>
@@ -196,7 +264,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             <select
               value={tableId}
               onChange={(e) => setTableId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-medium"
             >
               {tables.length === 0 && <option value="">Loading…</option>}
               {tables.map((t) => (
@@ -207,10 +275,43 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             </select>
           </div>
 
+          {/* Game Mode Selector for multi-mode tables */}
+          {tableModes.length > 0 && (
+            <div className="space-y-1.5 p-3 rounded-xl bg-orange-50/50 border border-orange-200/60 dark:bg-orange-950/10 dark:border-orange-900/30">
+              <Label className="text-xs font-bold text-orange-900 dark:text-orange-300 flex items-center gap-1.5">
+                <Gamepad2 className="h-3.5 w-3.5" /> Select Game Mode
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                {tableModes.map((m) => {
+                  const active = selectedModeId === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedModeId(m.id)}
+                      className={`p-2.5 rounded-lg text-left transition-all ${
+                        active
+                          ? "bg-[#D4541A] text-white shadow-sm"
+                          : "bg-white dark:bg-[#1f1f1f] text-gray-700 dark:text-[#ccc] border border-gray-200 dark:border-gray-800 hover:border-orange-300"
+                      }`}
+                    >
+                      <p className="text-xs font-bold leading-tight">{m.name}</p>
+                      <p className={`text-[10px] mt-0.5 ${active ? "text-orange-100" : "text-gray-500 dark:text-[#888]"}`}>
+                        ₹{m.hourly_rate}/hr
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {peopleOptions.length > 0 && (
             <div className="space-y-1.5">
               <Label className="text-xs">
-                {isSimulator ? "Players" : chosenTable?.type === "ps5" ? "Controllers" : "Players"}
+                {selectedMode?.pricing_basis === "controller" || chosenTable?.type === "ps5"
+                  ? "Controllers"
+                  : "Players"}
               </Label>
               <div className="flex flex-wrap gap-2">
                 {peopleOptions.map((n, idx) => {
@@ -223,15 +324,18 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                     active = numPeople !== null && Number(numPeople) <= num;
                   }
 
-                  const rate   = chosenTable!.people_pricing?.[n] ?? (isSimulator && n === "2" ? chosenTable!.hourly_rate * 2 : chosenTable!.hourly_rate);
+                  const rate = selectedMode
+                    ? (selectedMode.people_pricing?.[n] ?? selectedMode.hourly_rate)
+                    : (chosenTable!.people_pricing?.[n] ?? (isSimulator && n === "2" ? chosenTable!.hourly_rate * 2 : chosenTable!.hourly_rate));
                   return (
                     <button
                       key={n}
+                      type="button"
                       onClick={() => setNumPeople(n)}
                       className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                         active
                           ? "bg-[#D4541A] text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
                       }`}
                     >
                       {labelText} · ₹{rate}/hr
@@ -259,11 +363,12 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
               {durationPresets.map((p) => (
                 <button
                   key={p.mins}
+                  type="button"
                   onClick={() => setDuration(p.mins)}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                     duration === p.mins
                       ? "bg-[#D4541A] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
                   }`}
                 >
                   {p.label}
@@ -289,17 +394,19 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                 className="flex-1"
               />
               <button
+                type="button"
                 onClick={() => setAdvanceMethod((m) => m === "cash" ? null : "cash")}
                 className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 ${
-                  advanceMethod === "cash" ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300" : "bg-gray-100 text-gray-700"
+                  advanceMethod === "cash" ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
                 <Banknote className="h-3 w-3" /> Cash
               </button>
               <button
+                type="button"
                 onClick={() => setAdvanceMethod((m) => m === "upi" ? null : "upi")}
                 className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 ${
-                  advanceMethod === "upi" ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300" : "bg-gray-100 text-gray-700"
+                  advanceMethod === "upi" ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
                 <Smartphone className="h-3 w-3" /> UPI
@@ -315,14 +422,16 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           )}
         </div>
 
-        <div className="px-5 py-3 border-t flex justify-end gap-2 bg-gray-50">
+        <div className="px-5 py-3 border-t flex justify-end gap-2 bg-gray-50 dark:bg-[#161616]">
           <button
+            type="button"
             onClick={onClose}
-            className="px-3 py-2 rounded-md text-sm font-semibold bg-white border hover:bg-gray-100"
+            className="px-3 py-2 rounded-md text-sm font-semibold bg-white dark:bg-[#1f1f1f] border hover:bg-gray-100"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={() => { setError(null); create.mutate(); }}
             disabled={create.isPending}
             className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"

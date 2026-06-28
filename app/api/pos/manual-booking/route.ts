@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 
+import { sendWhatsAppConfirmation } from "@/lib/whatsapp";
+
 export const runtime = "edge";
 
 
@@ -17,7 +19,7 @@ export const runtime = "edge";
  *   {
  *     location_id, customer_name, customer_phone,
  *     table_id, scheduled_start, scheduled_end,
- *     rate_per_hour, num_people?,
+ *     rate_per_hour, num_people?, selected_mode_name?,
  *     advance_paid?:        { amount, method: "cash" | "upi" }   // optional
  *   }
  *
@@ -30,15 +32,16 @@ export const runtime = "edge";
  *     order if any later step fails)
  */
 const schema = z.object({
-  location_id:     z.string().uuid(),
-  customer_name:   z.string().min(1).max(100),
-  customer_phone:  z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
-  table_id:        z.string().uuid(),
-  scheduled_start: z.string().datetime(),
-  scheduled_end:   z.string().datetime(),
-  rate_per_hour:   z.number().positive(),
-  num_people:      z.number().int().positive().max(20).optional(),
-  advance_paid:    z.object({
+  location_id:        z.string().uuid(),
+  customer_name:      z.string().min(1).max(100),
+  customer_phone:     z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
+  table_id:           z.string().uuid(),
+  scheduled_start:    z.string().datetime(),
+  scheduled_end:      z.string().datetime(),
+  rate_per_hour:      z.number().positive(),
+  num_people:         z.number().int().positive().max(20).optional(),
+  selected_mode_name: z.string().optional(),
+  advance_paid:       z.object({
     amount: z.number().positive(),
     method: z.enum(["cash", "upi"]),
   }).optional(),
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
-  const { location_id, customer_name, customer_phone, table_id, scheduled_start, scheduled_end, rate_per_hour, num_people, advance_paid } = parsed.data;
+  const { location_id, customer_name, customer_phone, table_id, scheduled_start, scheduled_end, rate_per_hour, num_people, selected_mode_name, advance_paid } = parsed.data;
 
   const admin = createAdminClient();
   const { data: viewer } = await admin
@@ -155,6 +158,7 @@ export async function POST(request: Request) {
       scheduled_start,
       scheduled_end,
       scheduled_duration_mins: durationMins,
+      selected_mode_name:      selected_mode_name ?? null,
       status:                  "scheduled" as const,
     })
     .select("id")
@@ -202,6 +206,11 @@ export async function POST(request: Request) {
     await admin.from("orders").update({ status: "cancelled" }).eq("id", order.id);
     return NextResponse.json(err(bookingErr?.message ?? payErr?.message ?? "Failed to finalize booking", "DB_ERROR"), { status: 500 });
   }
+
+  // Trigger WhatsApp notification asynchronously so staff doesn't wait
+  sendWhatsAppConfirmation(order.id).catch((e) => {
+    console.error("[WhatsApp] Failed to send manual booking confirmation:", e);
+  });
 
   return NextResponse.json(ok({ order_id: order.id, order_item_id: orderItem.id }));
 }
