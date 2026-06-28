@@ -27,7 +27,7 @@ type Assignment = {
   starts_at: string;
   expires_at: string;
   is_active?: boolean;
-  plan: { name: string; discount_pct: number; free_hrs: number } | null;
+  plan: { name: string; discount_pct: number; free_hrs: number; bound_table_ids?: string[] } | null;
   bound_table_ids?: string[];
   free_hours_ledger?: any;
   free_hrs_used?: number;
@@ -325,7 +325,10 @@ export function MembershipsContent({
 
   function openManagePerks(a: Assignment) {
     setSelectedAssignment(a);
-    setBoundTableIds(a.bound_table_ids || []);
+    const initialBound = (a.bound_table_ids && a.bound_table_ids.length > 0)
+      ? a.bound_table_ids
+      : (a.plan?.bound_table_ids || []);
+    setBoundTableIds(initialBound);
     const initialLedger: Record<string, string> = {};
     TABLE_TYPES.forEach(t => {
       initialLedger[t] = String(a.free_hours_ledger?.[t] ?? 0);

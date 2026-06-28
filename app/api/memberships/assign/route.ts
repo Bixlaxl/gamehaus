@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
   // Query the table types to initialize the free hours ledger
   let initialLedger: Record<string, number> = {};
-  let boundIds: string[] = plan.bound_table_ids ?? [];
+  const boundIds: string[] = plan.bound_table_ids ?? [];
 
   if (boundIds.length > 0) {
     const { data: tables } = await admin
@@ -78,7 +78,6 @@ export async function POST(request: Request) {
   } else {
     const { data: allTables } = await admin.from("tables").select("id, type").eq("is_active", true);
     if (allTables && allTables.length > 0) {
-      boundIds = allTables.map((t) => t.id);
       allTables.forEach((t) => {
         initialLedger[t.type] = Number(plan.free_hrs) || 0;
       });

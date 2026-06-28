@@ -71,7 +71,7 @@ export async function GET(request: Request) {
     return {
       id: m.id,
       short_id: m.short_id || "",
-      bound_table_ids: m.bound_table_ids || [],
+      bound_table_ids: (m.bound_table_ids && m.bound_table_ids.length > 0) ? m.bound_table_ids : (planObj?.bound_table_ids || []),
       free_hours_ledger: ledger,
       plan: planObj,
     };
