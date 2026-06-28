@@ -199,14 +199,14 @@ export default function CheckoutPage() {
 
   // Auto-switch to full pay when subtotal is at or below the advance threshold
   // so the customer never gets stuck on an invalid payment mode.
-  const subtotalForForce = cart.items.reduce((s, i) => s + i.amount, 0);
   useEffect(() => {
     const advanceAmt = advancePerTable * cart.items.length;
-    if (cart.items.length > 0 && subtotalForForce <= advanceAmt) {
+    const currentSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
+    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMembership) {
       setPaymentMode("full");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subtotalForForce, advancePerTable, cart.items.length]);
+  }, [advancePerTable, cart.items, validatedMembership]);
 
   // Any cart item whose start time has already passed by the time the user reaches checkout
   const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
@@ -277,7 +277,7 @@ export default function CheckoutPage() {
   const advanceAmount = advancePerTable * cart.items.length;
   // When total cost is at or below the advance fee, there's nothing to reserve.
   // Force full pay and hide the advance option entirely.
-  const forceFullPay  = cart.items.length > 0 && subtotal <= advanceAmount;
+  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || !!validatedMembership;
   const baseAmount    = paymentMode === "advance" ? advanceAmount : subtotal;
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
@@ -1052,7 +1052,9 @@ export default function CheckoutPage() {
                     <p className="text-xs mt-0.5" style={{ color: textSec }}>{formatCurrency(subtotal)}</p>
                   </div>
                   <p className="text-xs mt-2 px-1" style={{ color: textMut }}>
-                    Reserve option unavailable — booking total ({formatCurrency(subtotal)}) is at or below the advance threshold ({formatCurrency(advanceAmount)}).
+                    {validatedMembership
+                      ? "Reserve option disabled when membership is applied — paying in full applies your membership credits directly."
+                      : `Reserve option unavailable — booking total (${formatCurrency(subtotal)}) is at or below the advance threshold (${formatCurrency(advanceAmount)}).`}
                   </p>
                 </div>
               ) : (
@@ -1283,9 +1285,11 @@ export default function CheckoutPage() {
                   <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#10B981" }}>
                     {Object.entries(appliedLedgerDeductions).map(([type, hrs]) => {
                       const rem = clientUpdatedLedger[type] !== undefined ? clientUpdatedLedger[type] : 0;
+                      const matchingItem = cart.items.find(i => (i.tableType || "") === type);
+                      const displayName = matchingItem ? matchingItem.tableName : (type === "snooker" || type === "standard" ? "Standard Table" : type.toUpperCase());
                       return (
                         <p key={type} className="text-xs font-semibold" style={{ color: "#10B981" }}>
-                          Redeemed {hrs} {hrs === 1 ? 'hr' : 'hrs'} for {type.toUpperCase()} ({rem} hrs remaining)
+                          Redeemed {hrs} {hrs === 1 ? 'hr' : 'hrs'} for {displayName} ({rem} hrs remaining)
                         </p>
                       );
                     })}
