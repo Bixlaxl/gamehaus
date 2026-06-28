@@ -852,7 +852,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                               // The start slot itself keeps its start time (with the START label
                               // above it) so the customer can still tell when their session begins.
                               const hasStart      = selectedSlots.length > 0;
-                              const display       = (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s);
+                              const display       = isSim
+                                ? `${fmt(s)} – ${fmt(slotEndTime(s))}`
+                                : (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s);
 
                               // Booked elsewhere — hatched, non-interactive
                               if (serverBlocked) {

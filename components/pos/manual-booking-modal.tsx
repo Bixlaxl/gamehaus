@@ -96,7 +96,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     staleTime: 10 * 60 * 1000,
   });
 
-  // Load blocked slots for selected table and date
+  // Load blocked slots for selected table and date (refetches every 5s for live updates)
   const { data: blockedSlots = [], isLoading: slotsLoading } = useQuery<{ start: string; end: string }[]>({
     queryKey: ["manual-table-slots", tableId, date],
     queryFn: async () => {
@@ -106,6 +106,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       return body.success ? body.data : [];
     },
     enabled: !!tableId && !!date,
+    refetchInterval: 5000,
   });
 
   // Handle modes for multi-mode tables
@@ -229,6 +230,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     const isSim = isSimulator || selectedMode?.name?.toLowerCase().includes("simulator");
     const stepMins = isSim ? 15 : 30;
 
+    const isToday = date === todayLocalDateStr();
+    const nowMs = Date.now();
+    // Allow slots starting within 5 minutes ago so current boundary is selectable
+    const minStartMs = isToday ? nowMs - 5 * 60 * 1000 : 0;
+
     const list: { timeStr: string; label: string; isBlocked: boolean }[] = [];
     for (let m = openMins; m < closeMins; m += stepMins) {
       const norm = m % (24 * 60);
@@ -237,12 +243,15 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       const timeStr = `${hh}:${mm}`;
 
       const slotStartMs = new Date(`${date}T${timeStr}:00+05:30`).getTime();
-      const slotEndMs = slotStartMs + duration * 60_000;
+      // Skip past slots for today
+      if (isToday && slotStartMs < minStartMs) continue;
+
+      const slotWindowEndMs = slotStartMs + duration * 60_000;
 
       const isBlocked = blockedSlots.some((b) => {
         const bStart = new Date(b.start).getTime();
         const bEnd = new Date(b.end).getTime();
-        return slotStartMs < bEnd && slotEndMs > bStart;
+        return slotStartMs < bEnd && slotWindowEndMs > bStart;
       });
 
       const label = new Date(`${date}T${timeStr}:00+05:30`).toLocaleTimeString("en-IN", {
@@ -253,6 +262,17 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     }
     return list;
   }, [locationInfo, date, duration, blockedSlots, isSimulator, selectedMode]);
+
+  // Auto-select first available unblocked time if currently selected time is past or blocked
+  useEffect(() => {
+    if (slotPills.length > 0) {
+      const currentValid = slotPills.find((s) => s.timeStr === time && !s.isBlocked);
+      if (!currentValid) {
+        const firstAvailable = slotPills.find((s) => !s.isBlocked) ?? slotPills[0];
+        if (firstAvailable) setTime(firstAvailable.timeStr);
+      }
+    }
+  }, [slotPills, time]);
 
   const create = useMutation({
     mutationFn: async () => {
