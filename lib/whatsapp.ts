@@ -411,7 +411,7 @@ export async function sendWhatsAppInvoice(orderId: string): Promise<{ success: b
     throw new Error("Order or customer phone number not found");
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gamehaus.app";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gamehaus.vercel.app";
   const billUrl = `${baseUrl}/bill/${orderId}`;
   
   let cleanedPhone = order.customer_phone.replace(/\D/g, "");
