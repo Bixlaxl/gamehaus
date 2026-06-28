@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, isSimulatorActive } from "@/lib/utils";
 
 
 
@@ -405,7 +405,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }
 
   function addToCart(t: Table) {
-    const isSim = t.type === "simulator" || t.name.toLowerCase().includes("simulator") || selectedMode?.name?.toLowerCase().includes("simulator");
+    const isSim = isSimulatorActive(t, selectedMode);
     const requiredSlots = isSim ? 1 : 2; // Simulators = 15m (1 slot), all other tables = 30m (2 slots)
     if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
@@ -450,7 +450,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const dateBg   = dark ? "#111"    : "#FFF";
 
   const sheetType = booking ? cfg(booking.type) : cfg("snooker");
-  const isSim     = booking ? (booking.type === "simulator" || booking.name.toLowerCase().includes("simulator") || (selectedMode as TableMode | null)?.name?.toLowerCase().includes("simulator")) : false;
+  const isSim     = isSimulatorActive(booking, selectedMode);
   const minSlots  = isSim ? 1 : 2;
 
   return (

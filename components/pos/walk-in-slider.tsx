@@ -8,7 +8,7 @@ import { NameMismatchModal } from "./name-mismatch-modal";
 import { X, Star } from "lucide-react";
 import { getShopWindow } from "@/lib/utils";
 import type { Table } from "@/lib/supabase/types";
-import { formatCurrency, isSimulatorTable } from "@/lib/utils";
+import { formatCurrency, isSimulatorActive } from "@/lib/utils";
 
 interface CustomerLookup {
   name: string | null;
@@ -375,7 +375,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                           {(() => {
                             const chosenModeId = selectedModes[table.id];
                             const chosenMode = table.modes?.find(m => m.id === chosenModeId);
-                            const isSim = isSimulatorTable(table) || chosenMode?.name?.toLowerCase().includes("simulator");
+                            const isSim = isSimulatorActive(table, chosenMode);
                             const presets = isSim ? [{ label: "15m", mins: 15 }, ...DURATION_PRESETS] : DURATION_PRESETS;
                             return presets.map((p) => (
                               <button

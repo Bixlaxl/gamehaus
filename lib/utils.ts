@@ -122,4 +122,19 @@ export function isSimulatorTable(table: { name: string; type: string }): boolean
   return t === "simulator" || table.name.toLowerCase().includes("simulator");
 }
 
+/**
+ * Returns true ONLY if the active table or selected mode is specifically a Simulator.
+ * If a mode is selected (e.g. PS5 mode on a PS5 & Simulator table), checks ONLY the mode name.
+ */
+export function isSimulatorActive(
+  table: { name?: string; type: string } | null | undefined,
+  selectedMode?: { name?: string } | null | undefined
+): boolean {
+  if (!table) return false;
+  if (selectedMode?.name) {
+    return selectedMode.name.toLowerCase().includes("simulator");
+  }
+  return (table.type as string) === "simulator" || (table.type !== "ps5_simulator" && table.name?.toLowerCase().includes("simulator") === true);
+}
+
 

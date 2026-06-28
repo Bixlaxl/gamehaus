@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarPlus, Banknote, Smartphone, CheckCircle, Gamepad2, Clock, AlertTriangle } from "lucide-react";
 import type { Table, TableMode } from "@/lib/supabase/types";
-import { isSimulatorTable } from "@/lib/utils";
+import { isSimulatorActive, isSimulatorTable } from "@/lib/utils";
 
 
 interface Props {
@@ -130,7 +130,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     return tableModes.find((m) => m.id === selectedModeId) ?? null;
   }, [tableModes, selectedModeId]);
 
-  const isSimulator = chosenTable ? isSimulatorTable(chosenTable) : false;
+  const isSimulator = chosenTable ? isSimulatorActive(chosenTable, selectedMode) : false;
   const durationPresets = useMemo(() => {
     const base = [
       { mins: 30,  label: "30m" },
@@ -139,11 +139,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       { mins: 120, label: "2h"  },
       { mins: 180, label: "3h"  },
     ];
-    if (isSimulator || selectedMode?.name?.toLowerCase().includes("simulator")) {
+    if (isSimulator) {
       return [{ mins: 15, label: "15m" }, ...base];
     }
     return base;
-  }, [isSimulator, selectedMode]);
+  }, [isSimulator]);
 
   // Default-pick num_people to the table/mode's smallest tier
   const peopleOptions = useMemo(() => {
@@ -227,7 +227,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     let closeMins = ch * 60 + cm;
     if (closeMins <= openMins) closeMins += 24 * 60;
 
-    const isSim = isSimulator || selectedMode?.name?.toLowerCase().includes("simulator");
+    const isSim = isSimulatorActive(chosenTable, selectedMode);
     const stepMins = isSim ? 15 : 30;
 
     const isToday = date === todayLocalDateStr();
