@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarPlus, Banknote, Smartphone, CheckCircle, Gamepad2 } from "lucide-react";
+import { CalendarPlus, Banknote, Smartphone, CheckCircle, Gamepad2, Clock, AlertTriangle } from "lucide-react";
 import type { Table, TableMode } from "@/lib/supabase/types";
 import { isSimulatorTable } from "@/lib/utils";
 
@@ -59,7 +59,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
         })
         .catch(() => {})
         .finally(() => setLookingUpPhone(false));
-  } else {
+    } else {
       setIsRegistered(false);
     }
   }, [phone]);
@@ -82,6 +82,31 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   }, [tables, tableId]);
 
   const chosenTable = useMemo(() => tables.find((t) => t.id === tableId), [tables, tableId]);
+
+  // Load location opening/closing times
+  const { data: locationInfo } = useQuery<{ opening_time: string; closing_time: string }>({
+    queryKey: ["location-info-detail", locationId],
+    queryFn: async () => {
+      const res = await fetch("/api/locations", { cache: "no-store" });
+      const body = await res.json();
+      const list = body.success ? body.data : [];
+      const found = list.find((l: any) => l.id === locationId);
+      return found ? { opening_time: found.opening_time, closing_time: found.closing_time } : { opening_time: "10:00", closing_time: "23:00" };
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Load blocked slots for selected table and date
+  const { data: blockedSlots = [], isLoading: slotsLoading } = useQuery<{ start: string; end: string }[]>({
+    queryKey: ["manual-table-slots", tableId, date],
+    queryFn: async () => {
+      if (!tableId || !date) return [];
+      const res = await fetch(`/api/tables/${tableId}/slots?date=${date}`, { cache: "no-store" });
+      const body = await res.json();
+      return body.success ? body.data : [];
+    },
+    enabled: !!tableId && !!date,
+  });
 
   // Handle modes for multi-mode tables
   const tableModes = useMemo(() => {
@@ -179,12 +204,60 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     ? new Date(new Date(scheduledStart).getTime() + duration * 60_000).toISOString()
     : "";
 
+  // Check if current selection has conflict
+  const slotConflict = useMemo(() => {
+    if (!scheduledStart || !scheduledEnd) return false;
+    const reqStart = new Date(scheduledStart).getTime();
+    const reqEnd = new Date(scheduledEnd).getTime();
+    return blockedSlots.some((b) => {
+      const bStart = new Date(b.start).getTime();
+      const bEnd = new Date(b.end).getTime();
+      return reqStart < bEnd && reqEnd > bStart;
+    });
+  }, [scheduledStart, scheduledEnd, blockedSlots]);
+
+  // Generate slots grid for visual picking
+  const slotPills = useMemo(() => {
+    const opening = locationInfo?.opening_time ?? "10:00";
+    const closing = locationInfo?.closing_time ?? "23:00";
+    const [oh, om] = opening.split(":").map(Number);
+    const [ch, cm] = closing.split(":").map(Number);
+    let openMins = oh * 60 + om;
+    let closeMins = ch * 60 + cm;
+    if (closeMins <= openMins) closeMins += 24 * 60;
+
+    const list: { timeStr: string; label: string; isBlocked: boolean }[] = [];
+    for (let m = openMins; m < closeMins; m += 30) {
+      const norm = m % (24 * 60);
+      const hh = String(Math.floor(norm / 60)).padStart(2, "0");
+      const mm = String(norm % 60).padStart(2, "0");
+      const timeStr = `${hh}:${mm}`;
+
+      const slotStartMs = new Date(`${date}T${timeStr}:00+05:30`).getTime();
+      const slotEndMs = slotStartMs + duration * 60_000;
+
+      const isBlocked = blockedSlots.some((b) => {
+        const bStart = new Date(b.start).getTime();
+        const bEnd = new Date(b.end).getTime();
+        return slotStartMs < bEnd && slotEndMs > bStart;
+      });
+
+      const label = new Date(`${date}T${timeStr}:00+05:30`).toLocaleTimeString("en-IN", {
+        hour: "2-digit", minute: "2-digit", hour12: true,
+      });
+
+      list.push({ timeStr, label, isBlocked });
+    }
+    return list;
+  }, [locationInfo, date, duration, blockedSlots]);
+
   const create = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error("Customer name is required");
       if (!/^\d{10}$/.test(phone.trim())) throw new Error("Phone must be exactly 10 digits");
       if (!tableId) throw new Error("Pick a table");
       if (!chosenTable) throw new Error("Selected table not found");
+      if (slotConflict) throw new Error("Selected time window overlaps with an existing booking");
       const advanceNum = parseFloat(advanceAmount);
       const wantAdvance = !!advanceAmount && Number.isFinite(advanceNum) && advanceNum > 0;
       if (wantAdvance && !advanceMethod) throw new Error("Pick cash or UPI for the advance");
@@ -357,6 +430,48 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             </div>
           </div>
 
+          {/* Interactive Available Slots Visual Grid */}
+          <div className="space-y-2 p-3 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold flex items-center gap-1.5 text-gray-900 dark:text-white">
+                <Clock className="h-3.5 w-3.5 text-[#D4541A]" /> Table Slots Grid
+              </Label>
+              <span className="text-[10px] text-gray-400">
+                {slotsLoading ? "Checking slots…" : `${slotPills.filter(s => !s.isBlocked).length} available`}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto pr-1">
+              {slotPills.map((s) => {
+                const isSelected = time === s.timeStr;
+                return (
+                  <button
+                    key={s.timeStr}
+                    type="button"
+                    disabled={s.isBlocked}
+                    onClick={() => setTime(s.timeStr)}
+                    className={`py-2 px-1.5 rounded-lg text-[11px] font-mono font-bold transition-all text-center ${
+                      isSelected
+                        ? "bg-[#D4541A] text-white shadow"
+                        : s.isBlocked
+                        ? "bg-red-50 dark:bg-red-950/20 text-red-400 dark:text-red-400/60 border border-red-200/50 dark:border-red-900/30 line-through opacity-60 cursor-not-allowed"
+                        : "bg-white dark:bg-[#222] text-gray-800 dark:text-[#ddd] border border-gray-200 dark:border-gray-700 hover:border-[#D4541A]"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Conflict Warning */}
+          {slotConflict && (
+            <div className="rounded-lg p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-2 text-red-700 dark:text-red-400 text-xs font-semibold">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>This table already has an active session or booking during this selected time window. Please pick a different slot.</span>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label className="text-xs">Duration</Label>
             <div className="flex flex-wrap gap-1.5">
@@ -433,7 +548,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           <button
             type="button"
             onClick={() => { setError(null); create.mutate(); }}
-            disabled={create.isPending}
+            disabled={create.isPending || slotConflict}
             className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"
           >
             {create.isPending ? "Creating…" : "Create booking"}
