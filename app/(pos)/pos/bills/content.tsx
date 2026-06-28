@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Banknote, Smartphone, Phone } from "lucide-react";
+import { Search, X, Banknote, Smartphone, Phone, MessageSquare, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -76,6 +77,7 @@ function tableNameOf(t: BillRow["items"][number]["table"]): string {
 export function BillsContent({ locationId, locationName, initial }: Props) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<BillRow | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   const { data: bills = initial } = useQuery<BillRow[]>({
     queryKey: ["staff-bills", locationId, search],
@@ -98,6 +100,31 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
     const revenue = bills.reduce((s, b) => s + (b.amount_due + b.advance_paid), 0);
     return { count, revenue };
   }, [bills]);
+
+  async function handleSendWhatsApp(e: React.MouseEvent, bill: BillRow) {
+    e.stopPropagation();
+    if (!bill.customer_phone) {
+      toast.error("Customer has no phone number attached");
+      return;
+    }
+    setSendingId(bill.id);
+    try {
+      const res = await fetch(`/api/pos/bills/${bill.id}/send-whatsapp`, { method: "POST" });
+      const body = await res.json();
+      if (body.success) {
+        toast.success("WhatsApp Bill link sent & opened!");
+        if (body.data?.waMeUrl) {
+          window.open(body.data.waMeUrl, "_blank");
+        }
+      } else {
+        toast.error(body.error || "Failed to send WhatsApp bill");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send WhatsApp bill");
+    } finally {
+      setSendingId(null);
+    }
+  }
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
@@ -124,18 +151,19 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
           {search ? "No matching bills" : "No finalized bills yet at this location."}
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-hidden bg-white">
+        <div className="rounded-2xl border overflow-hidden bg-white dark:bg-[#111]">
           <table className="w-full text-sm">
-            <thead className="bg-gray-100 border-b">
+            <thead className="bg-gray-100 dark:bg-[#181818] border-b dark:border-[#222]">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">When</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Tables</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Payment</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Paid</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-[#aaa] uppercase text-[11px] tracking-wide">When</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-[#aaa] uppercase text-[11px] tracking-wide">Customer</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-[#aaa] uppercase text-[11px] tracking-wide">Tables</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-[#aaa] uppercase text-[11px] tracking-wide">Payment</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-[#aaa] uppercase text-[11px] tracking-wide">Paid</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-[#aaa] uppercase text-[11px] tracking-wide">Send Bill</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y dark:divide-[#222]">
               {bills.map((b) => {
                 const tablesList = b.items
                   .map((i) => tableNameOf(i.table))
@@ -150,7 +178,7 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
                   <tr
                     key={b.id}
                     onClick={() => setSelected(b)}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    className="hover:bg-gray-50 dark:hover:bg-[#181818] cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-sm font-medium">{fmtDateTime(b.finalized_at)}</td>
                     <td className="px-4 py-3">
@@ -177,6 +205,22 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums">{formatCurrency(total)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {b.customer_phone ? (
+                        <button
+                          type="button"
+                          disabled={sendingId === b.id}
+                          onClick={(e) => handleSendWhatsApp(e, b)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
+                          title="Send Bill link via WhatsApp"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          {sendingId === b.id ? "…" : "WhatsApp"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">No phone</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -186,7 +230,12 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
       )}
 
       {selected && (
-        <BillDetailModal bill={selected} onClose={() => setSelected(null)} />
+        <BillDetailModal
+          bill={selected}
+          onClose={() => setSelected(null)}
+          onSendWhatsApp={(e) => handleSendWhatsApp(e, selected)}
+          sending={sendingId === selected.id}
+        />
       )}
     </div>
   );
@@ -196,17 +245,19 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
 //  Detail modal — read-only view of a finalized bill
 // ────────────────────────────────────────────────────────────────────────────
 function BillDetailModal({
-  bill, onClose,
+  bill, onClose, onSendWhatsApp, sending,
 }: {
   bill: BillRow;
   onClose: () => void;
+  onSendWhatsApp: (e: React.MouseEvent) => void;
+  sending?: boolean;
 }) {
   const activeExtras = bill.extras.filter((e) => !e.is_deleted);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-5 py-4 border-b">
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border dark:border-[#222]">
+        <DialogHeader className="px-5 py-4 border-b dark:border-[#222]">
           <DialogTitle className="text-base font-bold flex items-center gap-2">
             Bill <span className="font-mono text-xs opacity-60">#{bill.id.slice(0, 8)}</span>
             <span className="ml-auto text-xs font-normal opacity-60">{fmtDateTime(bill.finalized_at)}</span>
@@ -215,16 +266,29 @@ function BillDetailModal({
 
         <div className="max-h-[70vh] overflow-y-auto">
           {/* Customer */}
-          <section className="px-5 py-4 border-b">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Customer</h3>
-            <p className="font-semibold text-base text-gray-900">{bill.customer_name ?? "—"}</p>
+          <section className="px-5 py-4 border-b dark:border-[#222] flex items-center justify-between">
+            <div>
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">Customer</h3>
+              <p className="font-semibold text-base text-gray-900 dark:text-white">{bill.customer_name ?? "—"}</p>
+              {bill.customer_phone && (
+                <p className="text-sm font-mono text-gray-700 dark:text-[#aaa] mt-0.5">{bill.customer_phone}</p>
+              )}
+            </div>
             {bill.customer_phone && (
-              <p className="text-sm font-mono text-gray-700 mt-1">{bill.customer_phone}</p>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={onSendWhatsApp}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-400 transition-all active:scale-95"
+              >
+                <MessageSquare className="h-4 w-4" />
+                {sending ? "Sending…" : "Send WhatsApp Bill"}
+              </button>
             )}
           </section>
 
           {/* Tables */}
-          <section className="px-5 py-4 border-b space-y-2">
+          <section className="px-5 py-4 border-b dark:border-[#222] space-y-2">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Tables</h3>
             <ul className="space-y-1.5 text-sm">
               {bill.items.map((it) => {
@@ -250,7 +314,7 @@ function BillDetailModal({
 
           {/* Extras */}
           {activeExtras.length > 0 && (
-            <section className="px-5 py-4 border-b space-y-2">
+            <section className="px-5 py-4 border-b dark:border-[#222] space-y-2">
               <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Extras</h3>
               <ul className="space-y-1.5 text-sm">
                 {activeExtras.map((e) => (
@@ -267,7 +331,7 @@ function BillDetailModal({
           )}
 
           {/* Totals */}
-          <section className="px-5 py-4 border-b text-sm space-y-1.5">
+          <section className="px-5 py-4 border-b dark:border-[#222] text-sm space-y-1.5">
             <div className="flex justify-between"><span className="opacity-70">Subtotal</span><span className="tabular-nums">{formatCurrency(bill.subtotal)}</span></div>
             {bill.discount_amount > 0 && (
               <div className="flex justify-between text-emerald-600"><span>Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
@@ -278,7 +342,7 @@ function BillDetailModal({
             {bill.points_redeemed > 0 && (
               <div className="flex justify-between text-amber-600"><span>Points redeemed ({bill.points_redeemed} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed)}</span></div>
             )}
-            <div className="flex justify-between pt-2 border-t font-bold text-base">
+            <div className="flex justify-between pt-2 border-t dark:border-[#222] font-bold text-base">
               <span>Collected at venue</span>
               <span className="tabular-nums text-[#D4541A]">{formatCurrency(bill.amount_due)}</span>
             </div>
@@ -314,10 +378,18 @@ function BillDetailModal({
           </section>
         </div>
 
-        <div className="px-5 py-3 border-t flex items-center justify-end bg-gray-50">
+        <div className="px-5 py-3 border-t dark:border-[#222] flex items-center justify-between bg-gray-50 dark:bg-[#161616]">
+          <a
+            href={`/bill/${bill.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-[#aaa] hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> View Public Bill Link
+          </a>
           <button
             onClick={onClose}
-            className="px-3 py-2 rounded-md text-sm font-semibold bg-white border hover:bg-gray-100"
+            className="px-3 py-2 rounded-md text-sm font-semibold bg-white dark:bg-[#222] border dark:border-gray-800 hover:bg-gray-100"
           >
             <X className="h-4 w-4 inline mr-1" /> Close
           </button>
@@ -327,5 +399,4 @@ function BillDetailModal({
   );
 }
 
-// Convenience re-export so `Phone` icon can be used in cell, etc.
 export { Phone };

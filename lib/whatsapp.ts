@@ -394,3 +394,80 @@ export async function sendWhatsAppCancellation(
     return false;
   }
 }
+
+/**
+ * Send digital bill / invoice WhatsApp message for a finalized order.
+ * Returns both API status and a wa.me pre-filled fallback URL so staff can send via click-to-chat if desired.
+ */
+export async function sendWhatsAppInvoice(orderId: string): Promise<{ success: boolean; billUrl: string; waMeUrl: string }> {
+  const admin = createAdminClient();
+  const { data: order } = await admin
+    .from("orders")
+    .select("*, locations(name, slug, timezone)")
+    .eq("id", orderId)
+    .single();
+
+  if (!order || !order.customer_phone) {
+    throw new Error("Order or customer phone number not found");
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gamehaus.app";
+  const billUrl = `${baseUrl}/bill/${orderId}`;
+  
+  let cleanedPhone = order.customer_phone.replace(/\D/g, "");
+  if (cleanedPhone.length === 10) cleanedPhone = "91" + cleanedPhone;
+
+  const customerName = order.customer_name || "Valued Customer";
+  const totalPaid = Math.round((Number(order.advance_paid) || 0) + (Number(order.amount_due) || 0));
+  const locationName = (order.locations as any)?.name || "Gamehaus";
+
+  const messageText = `Hello ${customerName},\n\nThank you for visiting ${locationName}! 🎮\n\nTotal Amount: ₹${totalPaid}\n\nView & Download your Digital Bill PDF here:\n${billUrl}\n\nSee you again soon! 🎱`;
+  const waMeUrl = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
+
+  // Attempt Meta Cloud API send if configured
+  let apiSuccess = false;
+  const accessToken = process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (accessToken && phoneNumberId) {
+    try {
+      const templateName = (order.locations as any)?.slug === "nerf-turf" ? "nerfturf_invoice" : "gamehaus_invoice";
+      const payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanedPhone,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: "en" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: customerName },
+                { type: "text", text: order.id.slice(0, 8).toUpperCase() },
+                { type: "text", text: totalPaid.toString() },
+                { type: "text", text: billUrl },
+              ],
+            },
+          ],
+        },
+      };
+
+      const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      apiSuccess = response.ok;
+    } catch (e) {
+      console.error("[WhatsApp Invoice API error]", e);
+    }
+  }
+
+  return { success: apiSuccess, billUrl, waMeUrl };
+}
+
