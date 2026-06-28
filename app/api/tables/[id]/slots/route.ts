@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { addOneDay } from "@/lib/utils";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -16,11 +17,10 @@ export async function GET(
 
   const admin = createAdminClient();
 
-  // IST is UTC+5:30. Use a wide enough window (±1 day) and post-filter by IST date.
-  const dayStart = `${date}T00:00:00+05:30`;
-  const dayEnd   = `${date}T23:59:59+05:30`;
-  const dayStartMs = new Date(dayStart).getTime();
-  const dayEndMs   = new Date(dayEnd).getTime();
+  // IST is UTC+5:30. Operating hours can cross midnight up to 04:00 AM next day.
+  // Query up to noon of the next day so all overnight bookings are captured.
+  const dayStartMs = new Date(`${date}T00:00:00+05:30`).getTime();
+  const dayEndMs   = new Date(`${addOneDay(date)}T12:00:00+05:30`).getTime();
 
   // Fetch both running/scheduled order_items and confirmed bookings for this table.
   // We deduplicate by order_item id so a booking row + its order_item are never double-counted.

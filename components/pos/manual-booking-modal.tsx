@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarPlus, Banknote, Smartphone, CheckCircle, Gamepad2, Clock, AlertTriangle } from "lucide-react";
 import type { Table, TableMode } from "@/lib/supabase/types";
-import { isSimulatorActive, isSimulatorTable } from "@/lib/utils";
+import { isSimulatorActive, isSimulatorTable, addOneDay } from "@/lib/utils";
 
 
 interface Props {
@@ -197,26 +197,6 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   const estimatedTotal = Math.round((duration / 60) * effectiveRate);
 
-  // Build the ISO strings the server expects (IST local time → ISO with offset)
-  const scheduledStart = date && time
-    ? new Date(`${date}T${time}:00+05:30`).toISOString()
-    : "";
-  const scheduledEnd = scheduledStart
-    ? new Date(new Date(scheduledStart).getTime() + duration * 60_000).toISOString()
-    : "";
-
-  // Check if current selection has conflict
-  const slotConflict = useMemo(() => {
-    if (!scheduledStart || !scheduledEnd) return false;
-    const reqStart = new Date(scheduledStart).getTime();
-    const reqEnd = new Date(scheduledEnd).getTime();
-    return blockedSlots.some((b) => {
-      const bStart = new Date(b.start).getTime();
-      const bEnd = new Date(b.end).getTime();
-      return reqStart < bEnd && reqEnd > bStart;
-    });
-  }, [scheduledStart, scheduledEnd, blockedSlots]);
-
   // Generate slots grid for visual picking
   const slotPills = useMemo(() => {
     const opening = locationInfo?.opening_time ?? "10:00";
@@ -235,14 +215,16 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     // Allow slots starting within 5 minutes ago so current boundary is selectable
     const minStartMs = isToday ? nowMs - 5 * 60 * 1000 : 0;
 
-    const list: { timeStr: string; label: string; isBlocked: boolean }[] = [];
+    const list: { timeStr: string; label: string; isBlocked: boolean; startIso: string; endIso: string }[] = [];
     for (let m = openMins; m < closeMins; m += stepMins) {
+      const isNextDay = m >= 24 * 60;
       const norm = m % (24 * 60);
       const hh = String(Math.floor(norm / 60)).padStart(2, "0");
       const mm = String(norm % 60).padStart(2, "0");
       const timeStr = `${hh}:${mm}`;
 
-      const slotStartMs = new Date(`${date}T${timeStr}:00+05:30`).getTime();
+      const slotDate = isNextDay ? addOneDay(date) : date;
+      const slotStartMs = new Date(`${slotDate}T${timeStr}:00+05:30`).getTime();
       // Skip past slots for today
       if (isToday && slotStartMs < minStartMs) continue;
 
@@ -254,14 +236,37 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
         return slotStartMs < bEnd && slotWindowEndMs > bStart;
       });
 
-      const label = new Date(`${date}T${timeStr}:00+05:30`).toLocaleTimeString("en-IN", {
+      const label = new Date(slotStartMs).toLocaleTimeString("en-IN", {
         hour: "2-digit", minute: "2-digit", hour12: true,
       });
 
-      list.push({ timeStr, label, isBlocked });
+      list.push({
+        timeStr,
+        label,
+        isBlocked,
+        startIso: new Date(slotStartMs).toISOString(),
+        endIso: new Date(slotWindowEndMs).toISOString(),
+      });
     }
     return list;
-  }, [locationInfo, date, duration, blockedSlots, isSimulator, selectedMode]);
+  }, [locationInfo, date, duration, blockedSlots, chosenTable, selectedMode]);
+
+  // Build the ISO strings from the selected pill
+  const selectedPill = useMemo(() => slotPills.find((s) => s.timeStr === time), [slotPills, time]);
+  const scheduledStart = selectedPill ? selectedPill.startIso : (date && time ? new Date(`${date}T${time}:00+05:30`).toISOString() : "");
+  const scheduledEnd   = selectedPill ? selectedPill.endIso   : (scheduledStart ? new Date(new Date(scheduledStart).getTime() + duration * 60_000).toISOString() : "");
+
+  // Check if current selection has conflict
+  const slotConflict = useMemo(() => {
+    if (!scheduledStart || !scheduledEnd) return false;
+    const reqStart = new Date(scheduledStart).getTime();
+    const reqEnd = new Date(scheduledEnd).getTime();
+    return blockedSlots.some((b) => {
+      const bStart = new Date(b.start).getTime();
+      const bEnd = new Date(b.end).getTime();
+      return reqStart < bEnd && reqEnd > bStart;
+    });
+  }, [scheduledStart, scheduledEnd, blockedSlots]);
 
   // Auto-select first available unblocked time if currently selected time is past or blocked
   useEffect(() => {

@@ -21,7 +21,7 @@ export async function GET() {
 
   const { data: viewer } = await supabase
     .from("users").select("role").eq("id", session.user.id).single();
-  if (viewer?.role !== "owner") {
+  if (viewer?.role !== "owner" && viewer?.role !== "staff") {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
   }
 

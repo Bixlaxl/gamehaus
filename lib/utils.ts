@@ -137,4 +137,14 @@ export function isSimulatorActive(
   return (table.type as string) === "simulator" || (table.type !== "ps5_simulator" && table.name?.toLowerCase().includes("simulator") === true);
 }
 
+export function addOneDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const next = new Date(y, m - 1, d + 1);
+  return [
+    next.getFullYear(),
+    String(next.getMonth() + 1).padStart(2, "0"),
+    String(next.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 
