@@ -49,6 +49,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   const [customerName,     setCustomerName]     = useState("");
   const [customerPhone,    setCustomerPhone]     = useState("");
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+  const [selectedModes,    setSelectedModes]    = useState<Record<string, string>>({});
   const [durations,        setDurations]        = useState<Record<string, number>>({});
   const [loading,          setLoading]          = useState(false);
   const [error,            setError]            = useState<string | null>(null);
@@ -76,8 +77,12 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
     if (walkInPrefilledTableId) {
       setSelectedTableIds([walkInPrefilledTableId]);
       setDurations({ [walkInPrefilledTableId]: 60 });
+      const table = tables.find(t => t.id === walkInPrefilledTableId);
+      if (table?.modes && Array.isArray(table.modes) && table.modes.length > 0) {
+        setSelectedModes({ [walkInPrefilledTableId]: table.modes[0].id });
+      }
     }
-  }, [walkInPrefilledTableId]);
+  }, [walkInPrefilledTableId, tables]);
 
   function handlePhoneChange(val: string) {
     setCustomerPhone(val);
@@ -98,7 +103,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   }
 
   function reset() {
-    setCustomerName(""); setCustomerPhone(""); setSelectedTableIds([]);
+    setCustomerName(""); setCustomerPhone(""); setSelectedTableIds([]); setSelectedModes({});
     setDurations({}); setError(null); setCustomer(null); setLookingUp(false);
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
   }
@@ -106,7 +111,15 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   function close() { reset(); setWalkInOpen(false); usePOSStore.setState({ walkInPrefilledTableId: null }); }
 
   function toggleTable(id: string) {
-    setSelectedTableIds((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]);
+    const table = tables.find(t => t.id === id);
+    const hasModes = Boolean(table?.modes && Array.isArray(table.modes) && table.modes.length > 0);
+    setSelectedTableIds((prev) => {
+      const isSelecting = !prev.includes(id);
+      if (isSelecting && hasModes && table?.modes?.[0]) {
+        setSelectedModes((m) => ({ ...m, [id]: table.modes![0].id }));
+      }
+      return isSelecting ? [...prev, id] : prev.filter((t) => t !== id);
+    });
     setDurations((prev) => ({ ...prev, [id]: prev[id] ?? 60 }));
   }
 
@@ -136,7 +149,16 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
 
     const items = selectedTableIds.map((tid) => {
       const table = tables.find((t) => t.id === tid) as Table;
-      return { table_id: tid, duration_mins: durations[tid] ?? 60, rate_per_hour: table.hourly_rate };
+      const hasModes = Boolean(table?.modes && Array.isArray(table.modes) && table.modes.length > 0);
+      const chosenModeId = selectedModes[tid];
+      const chosenMode = hasModes ? (table.modes!.find(m => m.id === chosenModeId) || table.modes![0]) : null;
+      const ratePerHour = chosenMode ? chosenMode.hourly_rate : table.hourly_rate;
+      return {
+        table_id: tid,
+        duration_mins: durations[tid] ?? 60,
+        rate_per_hour: ratePerHour,
+        selected_mode_name: chosenMode ? chosenMode.name : undefined,
+      };
     });
 
     const res = await fetch("/api/walkin", {
@@ -291,23 +313,49 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                   </button>
 
                   {selected && (
-                    <div className="px-1 space-y-2">
-                      <p className="text-xs text-gray-500 dark:text-[#666]">Duration</p>
-                      <div className="flex gap-1.5">
-                        {DURATION_PRESETS.map((p) => (
-                          <button
-                            key={p.mins}
-                            onClick={() => setDurations((prev) => ({ ...prev, [table.id]: p.mins }))}
-                            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                              dur === p.mins
-                                ? "text-white"
-                                : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-600 dark:text-[#666]"
-                            }`}
-                            style={dur === p.mins ? { background: "#D4541A" } : {}}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
+                    <div className="px-1 space-y-3">
+                      {table.modes && Array.isArray(table.modes) && table.modes.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-gray-500 dark:text-[#666]">Pricing Mode</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {table.modes.map((m) => {
+                              const active = (selectedModes[table.id] ?? table.modes![0].id) === m.id;
+                              return (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => setSelectedModes((prev) => ({ ...prev, [table.id]: m.id }))}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                    active
+                                      ? "bg-purple-600 text-white shadow-sm"
+                                      : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#888]"
+                                  }`}
+                                >
+                                  {m.name} ({formatCurrency(m.hourly_rate)}/hr)
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-gray-500 dark:text-[#666]">Duration</p>
+                        <div className="flex gap-1.5">
+                          {DURATION_PRESETS.map((p) => (
+                            <button
+                              key={p.mins}
+                              onClick={() => setDurations((prev) => ({ ...prev, [table.id]: p.mins }))}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                dur === p.mins
+                                  ? "text-white"
+                                  : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-600 dark:text-[#666]"
+                              }`}
+                              style={dur === p.mins ? { background: "#D4541A" } : {}}
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <input

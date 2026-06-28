@@ -154,7 +154,7 @@ export function MembershipsContent({
         duration_days:   parseInt(values.duration_days),
         discount_pct:    planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
         free_hrs:        planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
-        bound_table_ids: planCategory === "hours" && selectedTableId ? [selectedTableId] : [],
+        bound_table_ids: planCategory === "hours" ? (selectedTableId ? [selectedTableId] : values.bound_table_ids || []) : [],
       };
       const url    = values.editId ? `/api/memberships/${values.editId}` : "/api/memberships";
       const method = values.editId ? "PATCH" : "POST";
@@ -183,7 +183,7 @@ export function MembershipsContent({
                   duration_days:   parseInt(values.duration_days),
                   discount_pct:    planCategory === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
                   free_hrs:        planCategory === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
-                  bound_table_ids: planCategory === "hours" && selectedTableId ? [selectedTableId] : [],
+                  bound_table_ids: planCategory === "hours" ? (selectedTableId ? [selectedTableId] : values.bound_table_ids || []) : [],
                 }
               : p
           )
@@ -325,9 +325,10 @@ export function MembershipsContent({
 
   function openManagePerks(a: Assignment) {
     setSelectedAssignment(a);
+    const planObj = a.plan ? (Array.isArray(a.plan) ? (a.plan as any)[0] : a.plan) : null;
     const initialBound = (a.bound_table_ids && a.bound_table_ids.length > 0)
       ? a.bound_table_ids
-      : (a.plan?.bound_table_ids || []);
+      : (planObj?.bound_table_ids || []);
     setBoundTableIds(initialBound);
     const initialLedger: Record<string, string> = {};
     TABLE_TYPES.forEach(t => {

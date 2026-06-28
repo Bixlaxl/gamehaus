@@ -12,10 +12,11 @@ const schema = z.object({
   customer_name:  z.string().min(1),
   customer_phone: z.string().optional(),
   items: z.array(z.object({
-    table_id:      z.string().uuid(),
-    duration_mins: z.number().int().min(15).max(480),
-    rate_per_hour: z.number().positive(),
-    num_people:    z.number().int().positive().max(20).optional(),
+    table_id:           z.string().uuid(),
+    duration_mins:      z.number().int().min(15).max(480),
+    rate_per_hour:      z.number().positive(),
+    num_people:         z.number().int().positive().max(20).optional(),
+    selected_mode_name: z.string().optional(),
   })).min(1),
 });
 
@@ -176,6 +177,7 @@ export async function POST(request: Request) {
       table_id:                item.table_id,
       rate_per_hour:           item.rate_per_hour,
       num_people:              item.num_people ?? null,
+      selected_mode_name:     item.selected_mode_name ?? null,
       scheduled_duration_mins: item.duration_mins,
       status:                  "running" as const,
       actual_start:            now.toISOString(),
