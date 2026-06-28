@@ -135,6 +135,7 @@ export async function POST(
       actual_start: actualStart.toISOString(),
       expected_end: expectedEnd.toISOString(),
     }).eq("id", booking.order_item_id),
+    admin.from("orders").update({ status: "open" }).eq("id", booking.order_id),
   ]);
 
   return NextResponse.json(ok({ order_id: booking.order_id }));

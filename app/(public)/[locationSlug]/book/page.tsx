@@ -558,19 +558,17 @@ export default function CheckoutPage() {
 
     if (amountToPay === 0) {
       try {
-        const finRes = await fetch(`/api/orders/${order_id}/finalize`, {
+        const finRes = await fetch(`/api/orders/${order_id}/confirm-online`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            payments: [],
             coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
-            points_redeemed: clampedRedeem,
             customer_phone: phone.trim(),
           }),
         });
         const finBody = await finRes.json();
         if (!finBody.success) {
-          setError(finBody.error || "Failed to finalize order");
+          setError(finBody.error || "Failed to confirm booking");
           setLoading(false);
           submitting.current = false;
           return;
