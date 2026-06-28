@@ -338,9 +338,10 @@ fun ExtendDialog(
 ) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedPreset by remember { mutableStateOf(30) }
+    var isSubmitting by remember { mutableStateOf(false) }
     val presets = listOf(15, 30, 45, 60, 90, 120)
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
         Card(
             modifier = Modifier
                 .widthIn(max = 400.dp)
@@ -370,7 +371,7 @@ fun ExtendDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(44.dp)
-                                .clickable { selectedPreset = mins },
+                                .clickable(enabled = !isSubmitting) { selectedPreset = mins },
                             colors = CardDefaults.cardColors(
                                 containerColor = if (active) MaterialTheme.colorScheme.primary else Color(0xFF2A2A2A)
                             ),
@@ -398,6 +399,7 @@ fun ExtendDialog(
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
+                        enabled = !isSubmitting,
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
@@ -407,17 +409,28 @@ fun ExtendDialog(
 
                     Button(
                         onClick = {
+                            if (isSubmitting) return@Button
+                            isSubmitting = true
+                            errorMsg = null
                             viewModel.extendSession(
                                 minutes = selectedPreset,
                                 onSuccess = onDismiss,
-                                onError = { errorMsg = it }
+                                onError = {
+                                    isSubmitting = false
+                                    errorMsg = it
+                                }
                             )
                         },
+                        enabled = !isSubmitting,
                         modifier = Modifier.weight(1.2f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Confirm", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        if (isSubmitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Confirm", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -434,11 +447,12 @@ fun PlayerCountDialog(
     onDismiss: () -> Unit
 ) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var isSubmitting by remember { mutableStateOf(false) }
     val pricing = table.people_pricing ?: emptyMap()
     val options = pricing.keys.mapNotNull { it.toIntOrNull() }.sorted()
     var selectedCount by remember { mutableStateOf(currentCount) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
         Card(
             modifier = Modifier
                 .widthIn(max = 400.dp)
@@ -467,7 +481,7 @@ fun PlayerCountDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp)
-                                .clickable { selectedCount = opt },
+                                .clickable(enabled = !isSubmitting) { selectedCount = opt },
                             colors = CardDefaults.cardColors(
                                 containerColor = if (active) MaterialTheme.colorScheme.primary else Color(0xFF2A2A2A)
                             ),
@@ -495,6 +509,7 @@ fun PlayerCountDialog(
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
+                        enabled = !isSubmitting,
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
@@ -504,17 +519,28 @@ fun PlayerCountDialog(
 
                     Button(
                         onClick = {
+                            if (isSubmitting) return@Button
+                            isSubmitting = true
+                            errorMsg = null
                             viewModel.changePlayerCount(
                                 count = selectedCount,
                                 onSuccess = onDismiss,
-                                onError = { errorMsg = it }
+                                onError = {
+                                    isSubmitting = false
+                                    errorMsg = it
+                                }
                             )
                         },
+                        enabled = !isSubmitting,
                         modifier = Modifier.weight(1.2f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Update", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        if (isSubmitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Update", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -532,8 +558,9 @@ fun BeverageOrderDialog(
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedItem by remember { mutableStateOf<BeverageItem?>(null) }
     var quantity by remember { mutableStateOf(1) }
+    var isSubmitting by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
         Card(
             modifier = Modifier
                 .widthIn(max = 550.dp)
@@ -648,14 +675,16 @@ fun BeverageOrderDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             FilledIconButton(
-                                onClick = { if (quantity > 1) quantity-- },
+                                onClick = { if (quantity > 1 && !isSubmitting) quantity-- },
+                                enabled = !isSubmitting,
                                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF2A2A2A))
                             ) {
                                 Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White)
                             }
                             Text(quantity.toString(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             FilledIconButton(
-                                onClick = { if (quantity < drink.stock_count) quantity++ },
+                                onClick = { if (quantity < drink.stock_count && !isSubmitting) quantity++ },
+                                enabled = !isSubmitting,
                                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF2A2A2A))
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White)
@@ -673,6 +702,7 @@ fun BeverageOrderDialog(
                     ) {
                         OutlinedButton(
                             onClick = { selectedItem = null },
+                            enabled = !isSubmitting,
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(horizontal = 8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
@@ -682,22 +712,34 @@ fun BeverageOrderDialog(
 
                         Button(
                             onClick = {
+                                if (isSubmitting) return@Button
+                                isSubmitting = true
+                                errorMsg = null
                                 viewModel.orderBeverage(
                                     item = drink,
                                     quantity = quantity,
                                     onSuccess = {
+                                        isSubmitting = false
                                         selectedItem = null
                                         quantity = 1
                                         onDismiss()
                                     },
-                                    onError = { errorMsg = it }
+                                    onError = {
+                                        isSubmitting = false
+                                        errorMsg = it
+                                    }
                                 )
                             },
+                            enabled = !isSubmitting,
                             modifier = Modifier.weight(1.2f),
                             contentPadding = PaddingValues(horizontal = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Place Order", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                            if (isSubmitting) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Place Order", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                            }
                         }
                     }
                 }
@@ -713,8 +755,9 @@ fun ConfirmStopDialog(
     onDismiss: () -> Unit
 ) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var isSubmitting by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
         Card(
             modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth(0.9f),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
@@ -737,6 +780,7 @@ fun ConfirmStopDialog(
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
+                        enabled = !isSubmitting,
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
@@ -746,16 +790,27 @@ fun ConfirmStopDialog(
 
                     Button(
                         onClick = {
+                            if (isSubmitting) return@Button
+                            isSubmitting = true
+                            errorMsg = null
                             viewModel.stopSession(
                                 onSuccess = onDismiss,
-                                onError = { errorMsg = it }
+                                onError = {
+                                    isSubmitting = false
+                                    errorMsg = it
+                                }
                             )
                         },
+                        enabled = !isSubmitting,
                         modifier = Modifier.weight(1.2f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Yes, Finish", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        if (isSubmitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Yes, Finish", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        }
                     }
                 }
             }
