@@ -311,6 +311,7 @@ export interface Database {
           created_at: string;
           free_hours_to_redeem?: number | null;
           membership_id?: string | null;
+          selected_mode_name?: string | null;
         };
         Insert: {
           id?: string;
@@ -332,6 +333,7 @@ export interface Database {
           created_at?: string;
           free_hours_to_redeem?: number | null;
           membership_id?: string | null;
+          selected_mode_name?: string | null;
         };
         Update: {
           id?: string;
@@ -353,6 +355,7 @@ export interface Database {
           created_at?: string;
           free_hours_to_redeem?: number | null;
           membership_id?: string | null;
+          selected_mode_name?: string | null;
         };
         Relationships: [
           {

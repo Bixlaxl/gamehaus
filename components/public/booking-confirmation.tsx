@@ -8,6 +8,7 @@ import { CheckCircle, Calendar, Clock, MapPin, ChevronRight } from "lucide-react
 interface BookingItem {
   id: string;
   table: { name: string; type: string } | null;
+  selected_mode_name?: string | null;
   booking: Array<{ scheduled_start: string; scheduled_end: string }> | null;
   rate_per_hour: number | null;
   scheduled_duration_mins: number | null;
@@ -103,7 +104,7 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
                   {TYPE_EMOJI[item.table?.type ?? ""] ?? "🎯"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold capitalize" style={{ color: textPri }}>{item.table?.name}</p>
+                  <p className="font-semibold capitalize" style={{ color: textPri }}>{item.table?.name}{item.selected_mode_name ? ` (${item.selected_mode_name})` : ""}</p>
                   {item.booking?.[0] && (
                     <div className="space-y-0.5 mt-0.5">
                       <p className="flex items-center gap-1.5 text-xs" style={{ color: textSec }}>

@@ -536,6 +536,7 @@ export default function CheckoutPage() {
             rate_per_hour:          i.ratePerHour,
             num_people:             i.numPeople,
             free_hours_to_redeem:   isBound ? redeemHoursInput : undefined,
+            selected_mode_name:     i.selectedModeName ?? undefined,
           };
         }),
         coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
@@ -831,7 +832,7 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold capitalize" style={{ color: textPri }}>{item.tableName}</p>
+                      <p className="font-semibold capitalize" style={{ color: textPri }}>{item.tableName}{item.selectedModeName ? ` (${item.selectedModeName})` : ""}</p>
                       {isExpired && (
                         <span
                           className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"

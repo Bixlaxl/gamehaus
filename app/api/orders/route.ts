@@ -188,6 +188,7 @@ export async function POST(request: Request) {
         num_people:    item.num_people ?? null,
         free_hours_to_redeem: item.free_hours_to_redeem ?? null,
         membership_id: item.membership_id ?? null,
+        selected_mode_name: item.selected_mode_name ?? null,
       }))
     )
     .select("id, table_id, scheduled_start, scheduled_end");

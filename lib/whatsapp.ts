@@ -65,8 +65,11 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
         scheduled_start,
         scheduled_end,
         rate_per_hour,
+        selected_mode_name,
         tables (
-          name
+          name,
+          type,
+          modes
         )
       `)
       .eq("order_id", orderId)
@@ -154,9 +157,18 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
 
     // Combine multiple tables/slots if multiple tables are booked under the same order
     const itemStrings = items.map((item) => {
-      const tableName = (item.tables as unknown as { name: string } | null)?.name || "Table";
+      const tableObj = item.tables as unknown as { name: string; type?: string; modes?: any[] } | null;
+      const tableName = tableObj?.name || "Table";
+      let modeName = item.selected_mode_name;
+      
+      if (!modeName && tableObj?.modes && Array.isArray(tableObj.modes) && tableObj.modes.length > 0) {
+        const matched = tableObj.modes.find((m: any) => m.hourly_rate === item.rate_per_hour || (m.people_pricing && Object.values(m.people_pricing).includes(item.rate_per_hour)));
+        if (matched) modeName = matched.name;
+      }
+      
+      const modeBracket = modeName ? ` (${modeName.replace(/ Mode$/i, "")})` : "";
       const slot = formatTimeSlot(item.scheduled_start!, item.scheduled_end!, timezone);
-      return `${tableName} (${slot})`;
+      return `${tableName}${modeBracket} (${slot})`;
     });
     const resourceAndTime = itemStrings.join(", ");
 

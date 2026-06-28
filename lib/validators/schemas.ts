@@ -106,6 +106,7 @@ export const createOrderSchema = z.object({
       num_people: z.number().int().positive().max(20).optional(),
       free_hours_to_redeem: z.number().nonnegative().optional(),
       membership_id: z.string().uuid().optional().nullable(),
+      selected_mode_name: z.string().optional().nullable(),
     })
   ),
 });
