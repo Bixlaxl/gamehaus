@@ -39,6 +39,77 @@ export interface BillResult {
 }
 
 /**
+ * Compute total free hours discount amount for a list of active order items.
+ */
+export function computeFreeHoursDiscount(
+  items: OrderItem[],
+  allMemberships: any[],
+  now: Date,
+  tablesRef: any[] = []
+): number {
+  if (!allMemberships || allMemberships.length === 0) return 0;
+  let totalFreeHoursDiscount = 0;
+  const ledgerUpdates = new Map<string, Record<string, number>>();
+
+  for (const m of allMemberships) {
+    const planObj = m.plan ? (Array.isArray(m.plan) ? m.plan[0] : m.plan) : null;
+    const planFreeHrs = Number(planObj?.free_hrs || 0);
+    const ledger: Record<string, number> = { ...(m.free_hours_ledger || {}) };
+    if (planFreeHrs > 0 && Object.keys(ledger).length === 0) {
+      ["snooker", "pool", "ps5", "foosball", "simulator", "standard"].forEach((t) => {
+        ledger[t] = planFreeHrs;
+      });
+    }
+    ledgerUpdates.set(m.id, ledger);
+  }
+
+  for (const item of items) {
+    if (item.status === "cancelled" || item.is_deleted) continue;
+    const tableId = item.table_id;
+    const storeTable = tablesRef.find((t: any) => t.id === tableId);
+    const tableMeta = (item as any).table as { id?: string; type?: string; name?: string } | null;
+    const tableType = tableMeta?.type || storeTable?.type || "";
+
+    const itemMembershipId = (item as any).membership_id;
+    const isBound = (m: any) => !m.bound_table_ids || m.bound_table_ids.length === 0 || m.bound_table_ids.includes(tableId ?? "");
+    let coveringMembership = itemMembershipId
+      ? allMemberships.find(m => m.id === itemMembershipId && isBound(m))
+      : allMemberships.find(m => isBound(m));
+
+    if (!coveringMembership) continue;
+
+    const ledger = ledgerUpdates.get(coveringMembership.id);
+    if (!ledger) continue;
+    const remainingFreeHrs = Number(ledger[tableType]) || 0;
+    if (remainingFreeHrs <= 0) continue;
+
+    let start: Date;
+    let end: Date;
+    if (item.actual_start) {
+      start = new Date(item.actual_start);
+      end = item.expected_end
+        ? new Date(item.expected_end)
+        : item.actual_end
+        ? new Date(item.actual_end)
+        : now;
+    } else if (item.scheduled_start && item.scheduled_end) {
+      start = new Date(item.scheduled_start);
+      end = new Date(item.scheduled_end);
+    } else {
+      continue;
+    }
+
+    const durationHrs = (end.getTime() - start.getTime()) / (3600 * 1000);
+    const maxRedeem = Math.min(durationHrs, remainingFreeHrs);
+    const freeHoursDiscount = maxRedeem * (item.rate_per_hour || 0);
+    totalFreeHoursDiscount += freeHoursDiscount;
+    ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
+  }
+
+  return totalFreeHoursDiscount;
+}
+
+/**
  * Calculate the bill for an order.
  * Pure function — no side effects, no async.
  * Called every second on POS for live preview, and once at finalize.

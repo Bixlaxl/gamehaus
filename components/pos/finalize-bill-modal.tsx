@@ -457,7 +457,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
             {bill.discountAmount > 0 && (
               <div className="flex justify-between">
-                <span style={{ color: "#10b981" }}>Discount</span>
+                <span style={{ color: "#10b981" }}>Public Coupon / Discount</span>
                 <span style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
               </div>
             )}

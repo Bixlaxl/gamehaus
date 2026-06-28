@@ -179,12 +179,32 @@ export function ClientBillView({ order }: ClientBillViewProps) {
               <span>Subtotal</span>
               <span className="font-mono font-semibold">{formatCurrency(subtotal)}</span>
             </div>
-            {discountAmount > 0 && (
-              <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                <span>Discount / Coupon</span>
-                <span className="font-mono font-semibold">−{formatCurrency(discountAmount)}</span>
-              </div>
-            )}
+            {(() => {
+              const pubDisc = Number(order.public_discount_amount) || 0;
+              const memDisc = Math.max(0, discountAmount - pubDisc);
+              return (
+                <>
+                  {pubDisc > 0 && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Public Coupon / Discount</span>
+                      <span className="font-mono font-semibold">−{formatCurrency(pubDisc)}</span>
+                    </div>
+                  )}
+                  {memDisc > 0 && (
+                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium">
+                      <span>Membership Discount / Free Hours</span>
+                      <span className="font-mono font-semibold">−{formatCurrency(memDisc)}</span>
+                    </div>
+                  )}
+                  {pubDisc === 0 && memDisc === 0 && discountAmount > 0 && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Discount / Coupon</span>
+                      <span className="font-mono font-semibold">−{formatCurrency(discountAmount)}</span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {pointsRedeemed > 0 && (
               <div className="flex justify-between text-amber-600 dark:text-amber-400">
                 <span>Points Redeemed ({pointsRedeemed} pts)</span>

@@ -5,7 +5,7 @@ import NextImage from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
-import { calculateBill } from "@/lib/billing/engine";
+import { calculateBill, computeFreeHoursDiscount } from "@/lib/billing/engine";
 import { formatSignedCountdown, formatCurrency } from "@/lib/utils";
 import { CalendarClock, Phone } from "lucide-react";
 import { toast } from "sonner";
@@ -221,7 +221,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
       if (!order?.customer_phone) return null;
       const res = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
       if (!res.ok) return null;
-      const body = await res.json() as { found: boolean; customer: { points_balance: number } | null };
+      const body = await res.json() as { found: boolean; customer: { points_balance: number; membership_discount_pct?: number; active_memberships?: any[] } | null };
       return body.found ? body.customer : null;
     },
     enabled: !!order?.customer_phone,
@@ -229,8 +229,14 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   });
 
   const points = customerInfo?.points_balance ?? order?.customer_points ?? 0;
-
-  const liveBill = calculateBill([item], [], now).subtotal;
+  const posTablesRef = usePOSStore((s) => s.tables);
+  const activeItems = (order?.items ?? [item]).filter((i) => !i.is_deleted && i.status !== "cancelled");
+  const activeExtras = (order?.extras ?? []).filter((e) => !e.is_deleted);
+  const publicDiscount = (order as any)?.public_discount_amount ?? order?.discount_amount ?? 0;
+  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, customerInfo?.active_memberships ?? [], now, posTablesRef);
+  const liveBill = order
+    ? calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, customerInfo?.membership_discount_pct ?? 0, freeHrsDiscount).totalDue
+    : calculateBill([item], [], now).subtotal;
   const startedAt = item.actual_start
     ? new Date(item.actual_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
     : "";
@@ -679,11 +685,33 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
 }) {
   const setFinalizeOrderId = usePOSStore((s) => s.setFinalizeOrderId);
 
-  // Bill is slot-based and fixed once session ends — `now` has no effect on finished items
+  const { data: customerInfo } = useQuery({
+    queryKey: ["customer-points", order?.customer_phone],
+    queryFn: async () => {
+      if (!order?.customer_phone) return null;
+      const res = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
+      if (!res.ok) return null;
+      const body = await res.json() as { found: boolean; customer: { points_balance: number; membership_discount_pct?: number; active_memberships?: any[] } | null };
+      return body.found ? body.customer : null;
+    },
+    enabled: !!order?.customer_phone,
+    staleTime: 10000,
+  });
+
+  const posTablesRef = usePOSStore((s) => s.tables);
+  const activeItems = order.items.filter((i) => !i.is_deleted && i.status !== "cancelled");
+  const activeExtras = order.extras.filter((e) => !e.is_deleted);
+  const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
+  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, customerInfo?.active_memberships ?? [], new Date(), posTablesRef);
   const billDue = calculateBill(
-    order.items.filter((i) => !i.is_deleted),
-    order.extras.filter((e) => !e.is_deleted),
-    new Date(), null, order.advance_paid ?? 0, order.discount_amount ?? 0
+    activeItems,
+    activeExtras,
+    new Date(),
+    null,
+    order.advance_paid ?? 0,
+    publicDiscount,
+    customerInfo?.membership_discount_pct ?? 0,
+    freeHrsDiscount
   ).totalDue;
 
   return (

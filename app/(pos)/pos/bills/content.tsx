@@ -21,6 +21,7 @@ export interface BillRow {
   status: string;
   subtotal: number;
   discount_amount: number;
+  public_discount_amount?: number;
   total_amount: number;
   amount_due: number;
   advance_paid: number;
@@ -333,9 +334,23 @@ function BillDetailModal({
           {/* Totals */}
           <section className="px-5 py-4 border-b dark:border-[#222] text-sm space-y-1.5">
             <div className="flex justify-between"><span className="opacity-70">Subtotal</span><span className="tabular-nums">{formatCurrency(bill.subtotal)}</span></div>
-            {bill.discount_amount > 0 && (
-              <div className="flex justify-between text-emerald-600"><span>Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
-            )}
+            {(() => {
+              const pubDisc = bill.public_discount_amount ?? 0;
+              const memDisc = Math.max(0, bill.discount_amount - pubDisc);
+              return (
+                <>
+                  {pubDisc > 0 && (
+                    <div className="flex justify-between text-emerald-600"><span>Public Coupon / Discount</span><span className="tabular-nums">−{formatCurrency(pubDisc)}</span></div>
+                  )}
+                  {memDisc > 0 && (
+                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium"><span>Membership Discount / Free Hours</span><span className="tabular-nums">−{formatCurrency(memDisc)}</span></div>
+                  )}
+                  {pubDisc === 0 && memDisc === 0 && bill.discount_amount > 0 && (
+                    <div className="flex justify-between text-emerald-600"><span>Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
+                  )}
+                </>
+              );
+            })()}
             {bill.advance_paid > 0 && (
               <div className="flex justify-between text-emerald-600"><span>Advance paid</span><span className="tabular-nums">−{formatCurrency(bill.advance_paid)}</span></div>
             )}

@@ -6,7 +6,7 @@ import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
 import { NameMismatchModal } from "./name-mismatch-modal";
 import type { InventoryItem } from "@/lib/supabase/types";
-import { calculateBill } from "@/lib/billing/engine";
+import { calculateBill, computeFreeHoursDiscount } from "@/lib/billing/engine";
 
 import { formatCurrency, formatSignedCountdown, getShopWindow, isSimulatorTable } from "@/lib/utils";
 
@@ -883,12 +883,12 @@ function PanelSession({
   });
 
   // Cached across order opens — same phone won't re-fetch within 60s
-  const { data: customerInfo } = useQuery<{ points_balance: number; membership_discount_pct?: number } | null>({
+  const { data: customerInfo } = useQuery<{ points_balance: number; membership_discount_pct?: number; active_memberships?: any[] } | null>({
     queryKey: ["customer-lookup", order.customer_phone],
     queryFn: async () => {
       if (!order.customer_phone) return null;
       const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
-      const body = await res.json() as { found: boolean; customer: { points_balance: number; membership_discount_pct?: number } | null };
+      const body = await res.json() as { found: boolean; customer: { points_balance: number; membership_discount_pct?: number; active_memberships?: any[] } | null };
       return body.customer;
     },
     enabled: !!order.customer_phone,
@@ -911,7 +911,10 @@ function PanelSession({
     }, new Map<string, OrderExtra & { ids: string[] }>())
     .values()
   );
-  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, order.discount_amount ?? 0, customerInfo?.membership_discount_pct ?? 0);
+  const posTablesStore = usePOSStore((s) => s.tables);
+  const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
+  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, customerInfo?.active_memberships ?? [], now, posTablesStore);
+  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, customerInfo?.membership_discount_pct ?? 0, freeHrsDiscount);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
