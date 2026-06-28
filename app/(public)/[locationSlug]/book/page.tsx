@@ -1360,11 +1360,15 @@ export default function CheckoutPage() {
             disabled={loading || cart.items.length === 0 || hasExpired}
             className="w-full py-4 rounded-2xl font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40"
             style={{
-              background: "#D4541A",
-              boxShadow: cart.items.length > 0 && !hasExpired ? "0 8px 28px rgba(212,84,26,0.35)" : "none",
+              background: amountToPay === 0 ? "linear-gradient(135deg, #10B981 0%, #059669 100%)" : "#D4541A",
+              boxShadow: cart.items.length > 0 && !hasExpired 
+                ? (amountToPay === 0 ? "0 8px 28px rgba(16,185,129,0.35)" : "0 8px 28px rgba(212,84,26,0.35)") 
+                : "none",
             }}
           >
-            {loading ? "Processing..." : hasExpired ? "Remove expired slots to continue" : (
+            {loading ? "Processing…" : hasExpired ? "Remove expired slots to continue" : amountToPay === 0 ? (
+              <>⚡ Confirm Booking with Free Hours <ChevronRight className="h-5 w-5" /></>
+            ) : (
               <>Pay {formatCurrency(amountToPay)} <ChevronRight className="h-5 w-5" /></>
             )}
           </button>
@@ -1372,7 +1376,7 @@ export default function CheckoutPage() {
 
 
           <p className="text-center text-xs pb-6" style={{ color: textMut }}>
-            Secured by Razorpay · UPI, Cards, Netbanking accepted
+            {amountToPay === 0 ? "Verified by Gamehaus Membership System" : "Secured by Razorpay · UPI, Cards, Netbanking accepted"}
           </p>
         </div>
       </div>

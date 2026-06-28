@@ -30,10 +30,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: orderId } = await params;
-  const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
-  const user = session.user;
+  const admin = createAdminClient();
 
   const body: unknown = await request.json();
   const parsed = schema.safeParse(body);
@@ -42,7 +39,6 @@ export async function POST(
   }
 
   const { payments, coupon_code, points_redeemed, customer_phone: phoneOverride } = parsed.data;
-  const admin = createAdminClient();
 
   // Fetch order, items, and extras in parallel — 3 round trips → 1
   const [
@@ -60,6 +56,14 @@ export async function POST(
   }
   if (order.status !== "open") {
     return NextResponse.json(err("Order is not open", "INVALID_STATE"), { status: 400 });
+  }
+
+  let staffUserId: string | null = null;
+  if (order.type !== "online") {
+    const supabase = await createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
+    staffUserId = session.user.id;
   }
 
   const activeItems = (items ?? []).filter((i) => i.status !== "cancelled");
@@ -248,7 +252,7 @@ export async function POST(
       amount:       Math.round(p.amount * 100) / 100,
       method:       p.method,
       status:       "completed" as const,
-      collected_by: user.id,
+      collected_by: staffUserId,
       collected_at: now.toISOString(),
     }));
 
