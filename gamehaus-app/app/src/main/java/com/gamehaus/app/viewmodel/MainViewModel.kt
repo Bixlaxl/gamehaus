@@ -171,40 +171,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val tableId = prefs.tableId ?: return
         val locationId = prefs.locationId ?: return
 
-        // Fetch beverages list
-        viewModelScope.launch {
-            try {
-                val res = client.getService().getBeverages(locationId)
-                if (res.success && res.data != null) {
-                    _beverages.value = res.data
-                }
-            } catch (e: Exception) {
-                // ignore
-            }
-        }
+        // Fetch beverages list once on start
+        fetchBeverages()
 
-        // Poll status and beverages every 5 seconds
+        // Poll status every 5 seconds
         pollJob = viewModelScope.launch {
             while (isActive) {
                 try {
                     val res = client.getService().getStatus(tableId)
                     if (res.success && res.data != null) {
                         val oldSession = _status.value?.session
-                        _status.value = res.data
+                        if (_status.value != res.data) {
+                            _status.value = res.data
+                        }
 
                         // Reset beep flag if new session started
                         if (res.data.session?.order_item_id != oldSession?.order_item_id) {
                             hasBeepedThisSession = false
                         }
-                    }
-                } catch (e: Exception) {
-                    // silent retry
-                }
-
-                try {
-                    val res = client.getService().getBeverages(locationId)
-                    if (res.success && res.data != null) {
-                        _beverages.value = res.data
                     }
                 } catch (e: Exception) {
                     // silent retry
@@ -296,6 +280,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 if (res.success) {
                     refreshStatus()
+                    fetchBeverages()
                     onSuccess()
                 } else {
                     onError(res.error ?: "Failed to order item")
@@ -337,6 +322,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         } catch (e: Exception) {
             // ignore
+        }
+    }
+
+    fun fetchBeverages() {
+        val locationId = prefs.locationId ?: return
+        viewModelScope.launch {
+            try {
+                val res = client.getService().getBeverages(locationId)
+                if (res.success && res.data != null) {
+                    _beverages.value = res.data
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
         }
     }
 

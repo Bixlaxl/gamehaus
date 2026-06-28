@@ -5,8 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatCurrency } from "@/lib/utils";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Banknote, Smartphone, Star, CheckCircle2 } from "lucide-react";
+import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
 import type { Order, Booking } from "@/lib/supabase/types";
 
 interface FinalizeBillModalProps {
@@ -76,6 +77,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const [handoverBookings, setHandoverBookings] = useState<HandoverBooking[]>([]);
   const [handoverLoading,  setHandoverLoading]  = useState<string | null>(null);
   const [manualPhone,      setManualPhone]      = useState("");
+  const [confirmCancel,    setConfirmCancel]    = useState(false);
 
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
@@ -230,6 +232,34 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     setSplitMode(false);
     setCashInput("");
     setUpiInput("");
+  }
+
+  async function handleEmergencyCancel() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emergency: true }),
+      });
+      const body = await res.json() as { success: boolean; error?: string };
+      if (!body.success) {
+        setError(body.error ?? "Failed to cancel order");
+        setLoading(false);
+        return;
+      }
+      toast.success("Bill and table session cancelled successfully");
+      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      selectOrder_fn(null);
+      close();
+    } catch (e: any) {
+      setError(e.message ?? "Unexpected error during cancellation");
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Sum of the split inputs — used both for validation and for the
@@ -677,6 +707,48 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               ? "Finalize Bill"
               : `Collect ${formatCurrency(finalDue)}`}
           </button>
+
+          <div className="pt-2 border-t border-gray-100 dark:border-[#1A1A1A]">
+            {!confirmCancel ? (
+              <button
+                type="button"
+                onClick={() => setConfirmCancel(true)}
+                disabled={loading}
+                className="w-full py-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Cancel Bill / Emergency Release
+              </button>
+            ) : (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-2">
+                <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-300 font-bold text-xs">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Confirm Emergency Cancellation?</span>
+                </div>
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 leading-snug">
+                  This will cancel the order, release the table slots back to available state, and restore any redeemed points.
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleEmergencyCancel}
+                    disabled={loading}
+                    className="flex-1 py-1.5 rounded-lg bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors disabled:opacity-40"
+                  >
+                    {loading ? "Cancelling…" : "Yes, Cancel Order"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancel(false)}
+                    disabled={loading}
+                    className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-[#2A2A2A] text-gray-700 dark:text-gray-200 font-semibold text-xs hover:opacity-80 transition-colors"
+                  >
+                    No, keep bill
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

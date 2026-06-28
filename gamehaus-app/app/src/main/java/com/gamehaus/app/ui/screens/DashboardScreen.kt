@@ -564,7 +564,7 @@ fun BeverageOrderDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(items) { drink ->
+                        items(items, key = { it.id }) { drink ->
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()

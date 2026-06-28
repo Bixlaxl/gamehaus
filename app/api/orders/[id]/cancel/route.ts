@@ -13,6 +13,12 @@ export async function POST(
   const { id: orderId } = await params;
   const admin = createAdminClient();
 
+  let isEmergency = false;
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (body?.emergency === true) isEmergency = true;
+  } catch {}
+
   try {
     // 1. Fetch Order and Location details
     const { data: order, error: orderError } = await admin
@@ -39,7 +45,7 @@ export async function POST(
       return NextResponse.json(err("Order not found", "NOT_FOUND"), { status: 404 });
     }
 
-    if (order.status !== "open") {
+    if (order.status !== "open" && !isEmergency) {
       return NextResponse.json(
         err(`Order cannot be cancelled because its status is '${order.status}'`, "INVALID_STATE"),
         { status: 400 }
@@ -62,14 +68,14 @@ export async function POST(
       .filter(Boolean)
       .map((s) => new Date(s!).getTime());
 
-    if (scheduledStarts.length === 0) {
+    if (scheduledStarts.length === 0 && !isEmergency) {
       return NextResponse.json(err("This order does not contain scheduled bookings", "INVALID_STATE"), { status: 400 });
     }
 
-    const earliestStartMs = Math.min(...scheduledStarts);
+    const earliestStartMs = scheduledStarts.length > 0 ? Math.min(...scheduledStarts) : Date.now();
     const nowMs = Date.now();
 
-    if (nowMs >= earliestStartMs) {
+    if (nowMs >= earliestStartMs && !isEmergency) {
       return NextResponse.json(err("Booking has already started and cannot be cancelled", "INVALID_STATE"), { status: 400 });
     }
 
