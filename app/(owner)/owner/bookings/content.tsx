@@ -141,6 +141,9 @@ export function BookingsContent({
       // the POS caches too so a quick tab back shows the running session.
       qc.invalidateQueries({ queryKey: ["pos-orders"] });
       qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+      qc.invalidateQueries({ queryKey: ["owner-bookings"] });
+      qc.invalidateQueries({ queryKey: ["staff-bookings"] });
+      qc.invalidateQueries({ queryKey: ["manual-table-slots"] });
     }
     setBusyBookingId(null);
   }
@@ -156,6 +159,9 @@ export function BookingsContent({
       toast.success("Marked no-show");
       void refetch();
       qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+      qc.invalidateQueries({ queryKey: ["owner-bookings"] });
+      qc.invalidateQueries({ queryKey: ["staff-bookings"] });
+      qc.invalidateQueries({ queryKey: ["manual-table-slots"] });
     }
     setBusyBookingId(null);
   }

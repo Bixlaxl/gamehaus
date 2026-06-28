@@ -211,6 +211,8 @@ export function TablesContent({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tables"] });
+      qc.invalidateQueries({ queryKey: ["pos-tables"] });
+      qc.invalidateQueries({ queryKey: ["manual-booking-tables"] });
       setDialogOpen(false);
       setEditing(null);
       setForm(defaultForm);
@@ -226,7 +228,11 @@ export function TablesContent({
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["tables"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["tables"] });
+      qc.invalidateQueries({ queryKey: ["pos-tables"] });
+      qc.invalidateQueries({ queryKey: ["manual-booking-tables"] });
+    },
   });
 
   const reactivateMutation = useMutation({
@@ -239,7 +245,11 @@ export function TablesContent({
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["tables"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["tables"] });
+      qc.invalidateQueries({ queryKey: ["pos-tables"] });
+      qc.invalidateQueries({ queryKey: ["manual-booking-tables"] });
+    },
   });
 
   const permanentDeleteMutation = useMutation({
@@ -248,7 +258,11 @@ export function TablesContent({
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) throw new Error(body.error);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["tables"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["tables"] });
+      qc.invalidateQueries({ queryKey: ["pos-tables"] });
+      qc.invalidateQueries({ queryKey: ["manual-booking-tables"] });
+    },
   });
 
   function openAdd() {
