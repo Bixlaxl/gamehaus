@@ -93,7 +93,7 @@ export async function POST(
     const notYetActive = coupon.valid_from  && new Date(coupon.valid_from).getTime()  > nowMs;
     const overCap      = coupon.max_uses !== null && coupon.used_count >= coupon.max_uses;
     const wrongLoc     = coupon.location_id && coupon.location_id !== order.location_id;
-    if (!coupon.is_active || expired || notYetActive || overCap || wrongLoc) {
+    if (order.type !== "online" || !coupon.is_active || expired || notYetActive || overCap || wrongLoc) {
       coupon = null;
     }
   }

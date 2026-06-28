@@ -134,11 +134,11 @@ export function calculateBill(
   let discountAmount = 0;
   if (coupon) {
     if (coupon.discount_type === "percent") {
-      discountAmount = Math.round((subtotal * coupon.discount_value) / 100 * 100) / 100;
+      discountAmount = Math.round((scheduledSubtotal * coupon.discount_value) / 100 * 100) / 100;
     } else {
       discountAmount = coupon.discount_value;
     }
-    discountAmount = Math.min(discountAmount, subtotal);
+    discountAmount = Math.min(discountAmount, scheduledSubtotal);
   }
 
   const totalDue = Math.max(0, netSessionDue + extraTotal - discountAmount);

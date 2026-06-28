@@ -114,7 +114,7 @@ export async function POST(request: Request) {
   // every rule here so a tampered request can't sneak through.
   let resolvedCouponId: string | null = null;
   if (coupon_code) {
-    if (type === "online" && payment_mode !== "full") {
+    if (type !== "online" || payment_mode !== "full") {
       return NextResponse.json(err("Coupons are only available for online bookings that are fully paid", "INVALID_COUPON"), { status: 400 });
     }
     const normalized = coupon_code.trim().toUpperCase();

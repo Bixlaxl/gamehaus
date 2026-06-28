@@ -35,6 +35,8 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       .select(`
         customer_name,
         customer_phone,
+        subtotal,
+        total_amount,
         advance_paid,
         discount_amount,
         points_redeemed,
@@ -87,8 +89,8 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
     const slug = locationInfo?.slug || "gamehaus";
     const timezone = locationInfo?.timezone || "Asia/Kolkata";
 
-    // Calculate total cost of order items
-    const totalCost = items.reduce((sum, item) => {
+    // Calculate total cost of order items (fallback to live sum if subtotal column is null)
+    const itemsTotalCost = items.reduce((sum, item) => {
       const start = new Date(item.scheduled_start!);
       const end = new Date(item.scheduled_end!);
       const hrs = (end.getTime() - start.getTime()) / (3600 * 1000);
@@ -96,13 +98,16 @@ export async function sendWhatsAppConfirmation(orderId: string): Promise<boolean
       return sum + (itemRate * hrs);
     }, 0);
 
+    const roundedTotalCost = (order.subtotal !== null && order.subtotal !== undefined)
+      ? Math.round(Number(order.subtotal))
+      : Math.round(itemsTotalCost);
+
     // Fetch active settings for the loyalty point redemption rate
     const settings = await getAppSettings(admin);
     const pointsRedeemed = Number(order.points_redeemed) || 0;
     const redeemRate = settings.loyalty.redeem_rupees_per_point;
     const pointsDiscountVal = pointsRedeemed * redeemRate;
 
-    const roundedTotalCost = Math.round(totalCost);
     const amountPaidVal = Math.round(order.advance_paid);
     const discountVal = Math.round(Number(order.discount_amount) || 0);
     const totalDiscountVal = discountVal + pointsDiscountVal;
