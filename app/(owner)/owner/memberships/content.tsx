@@ -521,6 +521,7 @@ export function MembershipsContent({
                   <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Phone</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Plan</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Benefit</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Available Hours</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-600 whitespace-nowrap">Expires</th>
                 </tr>
               </thead>
@@ -553,7 +554,7 @@ export function MembershipsContent({
                           {hasFreeHrs && (
                             <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
                               <Clock className="h-3 w-3" />
-                              {a.plan!.free_hrs} hrs
+                              {a.plan!.free_hrs} hrs total
                             </span>
                           )}
                           {hasDiscount && (
@@ -566,6 +567,25 @@ export function MembershipsContent({
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {hasFreeHrs ? (() => {
+                          const ledger = a.free_hours_ledger && typeof a.free_hours_ledger === "object" ? a.free_hours_ledger : {};
+                          const ledgerVals = Object.values(ledger).map(v => Number(v)).filter(v => !isNaN(v));
+                          const remainingHrs = ledgerVals.length > 0 ? Math.max(...ledgerVals) : (a.plan?.free_hrs ?? 0);
+                          return (
+                            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                              remainingHrs > 0
+                                ? "text-purple-700 bg-purple-50 border border-purple-200"
+                                : "text-gray-500 bg-gray-100 border border-gray-200"
+                            }`}>
+                              <Clock className="h-3 w-3" />
+                              {remainingHrs} hrs avail
+                            </span>
+                          );
+                        })() : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500 text-xs whitespace-nowrap">
                         {fmtDate(a.expires_at)}

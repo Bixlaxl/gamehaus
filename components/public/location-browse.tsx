@@ -57,6 +57,22 @@ function fmt(t: string) {
   const hr = h % 12 || 12;
   return `${hr}${m ? `:${String(m).padStart(2, "0")}` : ""} ${ap}`;
 }
+function fmtRange(startStr: string, endStr: string): string {
+  const [sh, sm] = startStr.split(":").map(Number);
+  const [eh, em] = endStr.split(":").map(Number);
+  const sAp = sh >= 12 ? "PM" : "AM";
+  const eAp = eh >= 12 ? "PM" : "AM";
+  const sHr = sh % 12 || 12;
+  const eHr = eh % 12 || 12;
+
+  const sMin = sm ? `:${String(sm).padStart(2, "0")}` : "";
+  const eMin = em ? `:${String(em).padStart(2, "0")}` : "";
+
+  if (sAp === eAp) {
+    return `${sHr}${sMin} – ${eHr}${eMin} ${eAp}`;
+  }
+  return `${sHr}${sMin} ${sAp} – ${eHr}${eMin} ${eAp}`;
+}
 
 /* Returns the HH:MM string 15 minutes after slotStart */
 function slotEndTime(slotStart: string): string {
@@ -831,15 +847,15 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
                         {/* Slot grid */}
                         {slotsLoading ? (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
-                            {Array.from({ length: 9 }).map((_, i) => (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-2.5">
+                            {Array.from({ length: 8 }).map((_, i) => (
                               <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: inputBg, opacity: 1 - i * 0.08 }} />
                             ))}
                           </div>
                         ) : allSlots.length === 0 ? (
                           <p className="text-sm text-center py-6" style={{ color: textMut }}>No slots available for this date</p>
                         ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-2.5">
                             {allSlots.map(s => {
                               const serverBlocked = isServerBlocked(date, s);
                               const cartOccupied  = isCartOccupied(booking.id, date, s);
@@ -847,13 +863,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                               const isStartSlot   = selectedSlots.length > 0 && s === selectedSlots[0];
                               const isStopSlot    = selectedSlots.length > 1 && s === selectedSlots[selectedSlots.length - 1];
                               const isInterior    = selected && !isStartSlot && !isStopSlot;
-                              // Once a start has been picked, every OTHER slot displays its
-                              // END time so clicking "8:45 PM" reads as "session ends at 8:45".
-                              // The start slot itself keeps its start time (with the START label
-                              // above it) so the customer can still tell when their session begins.
                               const hasStart      = selectedSlots.length > 0;
                               const display       = isSim
-                                ? `${fmt(s)} – ${fmt(slotEndTime(s))}`
+                                ? fmtRange(s, slotEndTime(s))
                                 : (hasStart && !isStartSlot) ? fmt(slotEndTime(s)) : fmt(s);
 
                               // Booked elsewhere — hatched, non-interactive
