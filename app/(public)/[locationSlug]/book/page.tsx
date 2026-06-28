@@ -128,6 +128,8 @@ export default function CheckoutPage() {
   const [publicCoupons, setPublicCoupons] = useState<any[]>([]);
   const [publicCouponRemoved, setPublicCouponRemoved] = useState(false);
   const [showPrivateInput, setShowPrivateInput] = useState(false);
+  const [checkoutAddons, setCheckoutAddons] = useState<any[]>([]);
+  const [selectedExtras, setSelectedExtras] = useState<Record<string, number>>({});
   // Owner-configurable booking knobs. Defaults match the pre-settings world
   // (₹100/table advance, 3hr/1hr cancellation tiers) so the page renders
   // sensibly even before /api/settings resolves.
@@ -170,6 +172,21 @@ export default function CheckoutPage() {
         if (abort) return;
         if (body.success && Array.isArray(body.data)) {
           setPublicCoupons(body.data);
+        }
+      })
+      .catch(() => {});
+    return () => { abort = true; };
+  }, [cart.locationId]);
+
+  useEffect(() => {
+    if (!cart.locationId) return;
+    let abort = false;
+    fetch(`/api/inventory/checkout-addons?location_id=${encodeURIComponent(cart.locationId)}`)
+      .then((res) => res.json())
+      .then((body: any) => {
+        if (abort) return;
+        if (body.success && Array.isArray(body.data)) {
+          setCheckoutAddons(body.data);
         }
       })
       .catch(() => {});
@@ -273,7 +290,17 @@ export default function CheckoutPage() {
   const inputBdr= dark ? "#2A2A2A" : "#DDD";
   const chipBg  = dark ? "#1A1A1A" : "#EFEFEF";
 
-  const subtotal      = cart.items.reduce((s, i) => s + i.amount, 0);
+  const extrasTotal   = useMemo(() => {
+    let total = 0;
+    for (const item of checkoutAddons) {
+      const qty = selectedExtras[item.id] || 0;
+      if (qty > 0) total += item.selling_price * qty;
+    }
+    return total;
+  }, [checkoutAddons, selectedExtras]);
+
+  const tableSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
+  const subtotal      = tableSubtotal + extrasTotal;
   const advanceAmount = advancePerTable * cart.items.length;
   // When total cost is at or below the advance fee, there's nothing to reserve.
   // Force full pay and hide the advance option entirely.
@@ -542,6 +569,9 @@ export default function CheckoutPage() {
             selected_mode_name:     i.selectedModeName ?? undefined,
           };
         }),
+        extras: Object.entries(selectedExtras)
+          .filter(([_, qty]) => qty > 0)
+          .map(([invId, qty]) => ({ inventory_item_id: invId, quantity: qty })),
         coupon_code: (paymentMode === "full" && couponState.status === "valid") ? couponState.code : undefined,
       }),
     });
@@ -876,6 +906,45 @@ export default function CheckoutPage() {
               })
             )}
           </Section>
+
+          {/* Session Gear & Add-ons */}
+          {checkoutAddons.length > 0 && (
+            <Section surface={surface} border={border} dark={dark}>
+              <SectionHeader title="Gear & Extras" border={border} textMut={textMut} />
+              <div className="p-4 space-y-3">
+                {checkoutAddons.map((item) => {
+                  const qty = selectedExtras[item.id] || 0;
+                  return (
+                    <div key={item.id} className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-gray-100 bg-gray-50/60 transition-all">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm text-gray-900">{item.name}</p>
+                        <p className="text-xs text-gray-500 font-medium">{formatCurrency(item.selling_price)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {qty > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExtras(prev => ({ ...prev, [item.id]: Math.max(0, (prev[item.id] || 0) - 1) }))}
+                            className="w-7 h-7 rounded-lg bg-gray-200 text-gray-700 font-bold text-sm flex items-center justify-center hover:bg-gray-300 active:scale-95 transition-all"
+                          >
+                            -
+                          </button>
+                        )}
+                        {qty > 0 && <span className="text-sm font-bold text-gray-900 w-4 text-center tabular-nums">{qty}</span>}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedExtras(prev => ({ ...prev, [item.id]: Math.min(item.stock_count, (prev[item.id] || 0) + 1) }))}
+                          className="px-3 py-1.5 rounded-lg bg-[#111] text-white font-bold text-xs flex items-center gap-1 hover:bg-black active:scale-95 transition-all shadow-sm"
+                        >
+                          {qty === 0 ? "+ Add" : "+"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
 
           {/* Customer details */}
           <Section surface={surface} border={border} dark={dark}>

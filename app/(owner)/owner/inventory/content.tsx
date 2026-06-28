@@ -28,6 +28,7 @@ type ItemForm = {
   selling_price: string;
   cost_price: string;
   sort_order: string;
+  show_at_checkout: boolean;
   image_file: File | null;
 };
 
@@ -38,6 +39,7 @@ const defaultForm: ItemForm = {
   selling_price: "",
   cost_price: "",
   sort_order: "0",
+  show_at_checkout: false,
   image_file: null,
 };
 
@@ -110,12 +112,13 @@ export function InventoryContent({
   const upsertMutation = useMutation({
     mutationFn: async (values: ItemForm & { editId?: string }) => {
       const payload = {
-        location_id:    values.location_id,
-        name:           values.name,
-        category:       values.category,
-        selling_price:  parseFloat(values.selling_price),
-        cost_price:     parseFloat(values.cost_price) || 0,
-        sort_order:     parseInt(values.sort_order) || 0,
+        location_id:      values.location_id,
+        name:             values.name,
+        category:         values.category,
+        selling_price:    parseFloat(values.selling_price),
+        cost_price:       parseFloat(values.cost_price) || 0,
+        sort_order:       parseInt(values.sort_order) || 0,
+        show_at_checkout: values.show_at_checkout,
       };
 
       if (values.editId) {
@@ -254,13 +257,14 @@ export function InventoryContent({
   function openEdit(item: InventoryItem) {
     setEditing(item);
     setForm({
-      location_id:   item.location_id,
-      name:          item.name,
-      category:      item.category,
-      selling_price: String(item.selling_price),
-      cost_price:    String(item.cost_price),
-      sort_order:    String(item.sort_order),
-      image_file:    null,
+      location_id:      item.location_id,
+      name:             item.name,
+      category:         item.category,
+      selling_price:    String(item.selling_price),
+      cost_price:       String(item.cost_price),
+      sort_order:       String(item.sort_order),
+      show_at_checkout: Boolean(item.show_at_checkout),
+      image_file:       null,
     });
     setDialogOpen(true);
   }
@@ -351,11 +355,18 @@ export function InventoryContent({
                     )}
                   </div>
                   <div className="p-4 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1">
                       <p className="font-semibold text-gray-900 text-sm truncate">{item.name}</p>
-                      <Badge variant={item.is_active ? "success" : "secondary"}>
-                        {item.is_active ? "Active" : "Off"}
-                      </Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {item.show_at_checkout && (
+                          <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-200 bg-purple-50">
+                            Online Checkout
+                          </Badge>
+                        )}
+                        <Badge variant={item.is_active ? "success" : "secondary"}>
+                          {item.is_active ? "Active" : "Off"}
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-xs text-gray-400">{loc?.name ?? "—"}</p>
                     <div className="flex items-center justify-between">
@@ -480,6 +491,19 @@ export function InventoryContent({
                   placeholder="e.g. 30"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 pb-1">
+              <input
+                type="checkbox"
+                id="show_at_checkout"
+                checked={form.show_at_checkout}
+                onChange={(e) => setForm({ ...form, show_at_checkout: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-[#D4541A] focus:ring-[#D4541A]"
+              />
+              <Label htmlFor="show_at_checkout" className="cursor-pointer text-sm font-semibold text-gray-900">
+                Offer as Add-on at Online Checkout
+              </Label>
             </div>
 
             <div className="space-y-2">

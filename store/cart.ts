@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+export interface CartExtra {
+  inventoryItemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
 export interface CartItem {
   tableId: string;
   tableName: string;
@@ -14,6 +21,7 @@ export interface CartItem {
   scheduledEnd: string;   // ISO string
   durationMins: number;
   amount: number;
+  selectedExtras?: CartExtra[];
 }
 
 interface CartStore {
@@ -22,6 +30,7 @@ interface CartStore {
   setLocation: (locationId: string) => void;
   addItem: (item: CartItem) => void;
   removeItem: (tableId: string, scheduledStart: string) => void;
+  updateItemExtras: (tableId: string, scheduledStart: string, extras: CartExtra[]) => void;
   clearCart: () => void;
 }
 
@@ -41,6 +50,14 @@ export const useCartStore = create<CartStore>()(
         set((state) => ({
           items: state.items.filter(
             (i) => !(i.tableId === tableId && i.scheduledStart === scheduledStart)
+          ),
+        })),
+      updateItemExtras: (tableId, scheduledStart, extras) =>
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.tableId === tableId && i.scheduledStart === scheduledStart
+              ? { ...i, selectedExtras: extras }
+              : i
           ),
         })),
       clearCart: () => set({ items: [], locationId: null }),

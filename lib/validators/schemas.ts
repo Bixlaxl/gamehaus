@@ -96,6 +96,12 @@ export const createOrderSchema = z.object({
     .default(0),
   coupon_code: z.string().optional(),
   payment_mode: z.enum(["advance", "full"]).optional(),
+  extras: z.array(
+    z.object({
+      inventory_item_id: z.string().uuid(),
+      quantity: z.number().int().positive(),
+    })
+  ).optional(),
   items: z.array(
     z.object({
       table_id: z.string().uuid(),
@@ -167,6 +173,7 @@ export const inventoryItemSchema = z.object({
   image_url: z.string().url().nullable().optional(),
   sort_order: z.number().int().optional(),
   is_active: z.boolean().optional(),
+  show_at_checkout: z.boolean().optional(),
 });
 
 export const updateInventoryItemSchema = inventoryItemSchema.partial();

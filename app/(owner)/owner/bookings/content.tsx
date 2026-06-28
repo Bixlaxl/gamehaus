@@ -30,11 +30,13 @@ const TYPE_LABELS: Record<string, string> = {
   all: "All types", snooker: "Snooker", pool: "Pool", ps5: "PS5", foosball: "Foosball",
 };
 const STATUS_LABELS: Record<string, string> = {
-  confirmed: "Confirmed", checked_in: "Checked in", no_show: "No show", cancelled: "Cancelled",
+  confirmed: "Confirmed", checked_in: "Checked in", finished: "Finished", completed: "Finished", no_show: "No show", cancelled: "Cancelled",
 };
 const STATUS_DOT: Record<string, string> = {
   confirmed:  "bg-green-500",
   checked_in: "bg-blue-500",
+  finished:   "bg-purple-500",
+  completed:  "bg-purple-500",
   no_show:    "bg-red-500",
   cancelled:  "bg-gray-400",
 };
@@ -374,6 +376,7 @@ export function BookingsContent({
                         variant={
                           b.status === "confirmed"  ? "success"     :
                           b.status === "checked_in" ? "outline"     :
+                          (b.status === "finished" || b.status === "completed") ? "secondary" :
                           b.status === "no_show"    ? "destructive" : "secondary"
                         }
                       >

@@ -442,7 +442,7 @@ export interface Database {
           scheduled_start: string;
           scheduled_end: string;
           held_until: string;
-          status: "confirmed" | "checked_in" | "no_show" | "cancelled";
+          status: "confirmed" | "checked_in" | "finished" | "completed" | "no_show" | "cancelled";
           no_show_marked_by: string | null;
           no_show_marked_at: string | null;
           created_at: string;
@@ -454,7 +454,7 @@ export interface Database {
           scheduled_start: string;
           scheduled_end: string;
           held_until: string;
-          status?: "confirmed" | "checked_in" | "no_show" | "cancelled";
+          status?: "confirmed" | "checked_in" | "finished" | "completed" | "no_show" | "cancelled";
           no_show_marked_by?: string | null;
           no_show_marked_at?: string | null;
           created_at?: string;
@@ -466,7 +466,7 @@ export interface Database {
           scheduled_start?: string;
           scheduled_end?: string;
           held_until?: string;
-          status?: "confirmed" | "checked_in" | "no_show" | "cancelled";
+          status?: "confirmed" | "checked_in" | "finished" | "completed" | "no_show" | "cancelled";
           no_show_marked_by?: string | null;
           no_show_marked_at?: string | null;
           created_at?: string;
@@ -643,6 +643,7 @@ export interface Database {
           cost_price: number;
           image_url: string | null;
           is_active: boolean;
+          show_at_checkout: boolean;
           sort_order: number;
           stock_count: number;
           low_stock_threshold: number;
@@ -657,6 +658,7 @@ export interface Database {
           cost_price?: number;
           image_url?: string | null;
           is_active?: boolean;
+          show_at_checkout?: boolean;
           sort_order?: number;
           stock_count?: number;
           low_stock_threshold?: number;
@@ -671,6 +673,7 @@ export interface Database {
           cost_price?: number;
           image_url?: string | null;
           is_active?: boolean;
+          show_at_checkout?: boolean;
           sort_order?: number;
           stock_count?: number;
           low_stock_threshold?: number;

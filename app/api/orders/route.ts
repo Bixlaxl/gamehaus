@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
 
 
-  const { location_id, type, customer_name, customer_phone, membership_id, items, points_redeemed, coupon_code, payment_mode } = parsed.data;
+  const { location_id, type, customer_name, customer_phone, membership_id, items, extras, points_redeemed, coupon_code, payment_mode } = parsed.data;
 
   // Online orders: public customers aren't logged in, use admin client
   // Walk-in orders: require staff authentication
@@ -266,7 +266,36 @@ export async function POST(request: Request) {
       )
     : Promise.resolve();
 
-  await Promise.all([bookingsPromise, profilePromise]);
+  const extrasPromise = (extras && extras.length > 0) ? (async () => {
+    const itemIds = extras.map(e => e.inventory_item_id);
+    const { data: invItems } = await admin
+      .from("inventory_items")
+      .select("id, name, selling_price, cost_price, stock_count")
+      .in("id", itemIds);
+    if (!invItems || invItems.length === 0) return;
+
+    const toInsert = [];
+    for (const ex of extras) {
+      const inv = invItems.find(i => i.id === ex.inventory_item_id);
+      if (!inv) continue;
+      toInsert.push({
+        order_id: order.id,
+        inventory_item_id: inv.id,
+        name: inv.name,
+        price: inv.selling_price,
+        cost_price: inv.cost_price ?? 0,
+        quantity: ex.quantity,
+      });
+      // Deduct stock quantity
+      const newStock = Math.max(0, inv.stock_count - ex.quantity);
+      await admin.from("inventory_items").update({ stock_count: newStock }).eq("id", inv.id);
+    }
+    if (toInsert.length > 0) {
+      await admin.from("order_extras").insert(toInsert);
+    }
+  })() : Promise.resolve();
+
+  await Promise.all([bookingsPromise, profilePromise, extrasPromise]);
 
   return NextResponse.json(ok({
     order_id: order.id,

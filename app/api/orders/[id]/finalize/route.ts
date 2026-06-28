@@ -304,6 +304,7 @@ export async function POST(
     effectivePhone
       ? admin.from("customer_profiles").select("points_balance, visit_count, total_spent").eq("phone", effectivePhone).single()
       : Promise.resolve(null),
+    admin.from("bookings").update({ status: "finished" }).eq("order_id", orderId),
     ...membershipUpdatePromises,
   ] as const);
 
