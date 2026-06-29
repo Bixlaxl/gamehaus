@@ -33,30 +33,43 @@ export async function POST(request: Request) {
   const expiresAt = new Date(startsAt);
   expiresAt.setDate(expiresAt.getDate() + plan.duration_days);
 
-  // Generate unique short_id
+  // Check if there is an existing customer_memberships row with this customer_phone to reuse their short_id
   let shortId = "";
-  let isUnique = false;
-  let attempts = 0;
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  while (!isUnique && attempts < 10) {
-    attempts++;
-    let candidate = "";
-    for (let i = 0; i < 6; i++) {
-      candidate += chars.charAt(Math.floor(Math.random() * chars.length));
+  const { data: existingMember } = await admin
+    .from("customer_memberships")
+    .select("short_id")
+    .eq("customer_phone", customer_phone)
+    .not("short_id", "is", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMember && existingMember.short_id) {
+    shortId = existingMember.short_id;
+  } else {
+    // Generate unique short_id
+    let isUnique = false;
+    let attempts = 0;
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    while (!isUnique && attempts < 10) {
+      attempts++;
+      let candidate = "";
+      for (let i = 0; i < 6; i++) {
+        candidate += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const { data: existing } = await admin
+        .from("customer_memberships")
+        .select("id")
+        .eq("short_id", candidate)
+        .maybeSingle();
+      if (!existing) {
+        shortId = candidate;
+        isUnique = true;
+      }
     }
-    const { data: existing } = await admin
-      .from("customer_memberships")
-      .select("id")
-      .eq("short_id", candidate)
-      .maybeSingle();
-    if (!existing) {
-      shortId = candidate;
-      isUnique = true;
-    }
-  }
-  if (!shortId) {
-    for (let i = 0; i < 6; i++) {
-      shortId += chars.charAt(Math.floor(Math.random() * chars.length));
+    if (!shortId) {
+      for (let i = 0; i < 6; i++) {
+        shortId += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
     }
   }
 

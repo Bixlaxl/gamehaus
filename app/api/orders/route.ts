@@ -156,18 +156,32 @@ export async function POST(request: Request) {
 
   if (customer_phone || membership_id) {
     const nowISO = new Date().toISOString();
+    let targetPhone = customer_phone;
+    
+    if (membership_id) {
+      const { data: matchedRow } = await admin
+        .from("customer_memberships")
+        .select("customer_phone")
+        .eq("id", membership_id)
+        .limit(1)
+        .maybeSingle();
+      if (matchedRow) {
+        targetPhone = matchedRow.customer_phone;
+      }
+    }
+
     let query = admin
       .from("customer_memberships")
       .select("*, plan:membership_plans(*)")
       .eq("is_active", true)
       .gte("expires_at", nowISO);
     
-    if (membership_id) {
-      query = query.eq("id", membership_id);
-    } else if (customer_phone) {
-      query = query.eq("customer_phone", customer_phone);
+    if (targetPhone) {
+      query = query.eq("customer_phone", targetPhone);
+    } else {
+      // Force empty if neither targetPhone nor membership_id is valid
+      query = query.eq("id", "00000000-0000-0000-0000-000000000000");
     }
-
     const { data: memberShipList } = await query;
     if (memberShipList && memberShipList.length > 0) {
       const bookedTableIds = scheduledItems.map((i) => i.table_id);

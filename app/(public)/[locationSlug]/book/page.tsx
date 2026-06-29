@@ -338,7 +338,8 @@ export default function CheckoutPage() {
 
   const unvalidatedClaimableMembership = useMemo(() => {
     if (dismissedMembership) return null;
-    return claimableMemberships.find(m => !validatedMemberships.some(vm => vm.id === m.id));
+    if (validatedMemberships.length > 0) return null;
+    return claimableMemberships[0] || null;
   }, [claimableMemberships, validatedMemberships, dismissedMembership]);
 
   useEffect(() => {
@@ -362,25 +363,16 @@ export default function CheckoutPage() {
     if (!customer?.active_memberships) return;
     const input = membershipIdInput.trim().toUpperCase();
     
-    const matched = claimableMemberships.find(m => {
+    const matched = customer.active_memberships.some(m => {
       const target = (m.short_id || "").trim().toUpperCase();
       return input && target && input === target;
     });
 
     if (matched) {
-      if (!validatedMemberships.some(vm => vm.id === matched.id)) {
-        setValidatedMemberships(prev => [...prev, matched]);
-      }
+      setValidatedMemberships(customer.active_memberships);
       setValidationError(null);
       setMembershipIdInput("");
-      
-      const boundItem = cart.items.find(item => isTableCoveredByMembership(matched, item));
-      if (boundItem) {
-        const tableType = boundItem.tableType || "";
-        const availableFreeHrs = getMembershipFreeHrs(matched, tableType);
-        const durationHrs = boundItem.durationMins / 60;
-        setRedeemHoursInput(Math.min(durationHrs, availableFreeHrs));
-      }
+      setShowValidationPopup(false);
     } else {
       setValidationError("Incorrect Membership ID. Please try again or close this window.");
       setMembershipIdInput("");
@@ -1061,40 +1053,39 @@ export default function CheckoutPage() {
                     </p>
                   </div>
                 )}
-                {/* Membership validation list */}
+                {/* Membership validation card */}
                 {!lookingUp && customer && validatedMemberships.length > 0 && (
                   <div className="mt-4 space-y-3">
-                    {validatedMemberships.map((vm) => (
-                      <div key={vm.id} className="p-4 rounded-xl border space-y-2" style={{ background: inputBg, borderColor: "#10B981" }}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-                            <span className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
-                              Membership Applied ({vm.short_id || "Active"})
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setValidatedMemberships(prev => prev.filter(m => m.id !== vm.id));
-                            }}
-                            className="text-xs font-semibold text-red-500 hover:underline"
-                          >
-                            Remove
-                          </button>
+                    <div className="p-4 rounded-xl border space-y-3" style={{ background: inputBg, borderColor: "#10B981" }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
+                            Membership Applied ({validatedMemberships[0].short_id || "Active"})
+                          </span>
                         </div>
-
-                        <div className="space-y-1">
-                          <p className="text-xs text-gray-600 dark:text-gray-400">
-                            Plan: <span className="font-semibold text-gray-900 dark:text-white">{vm.plan?.name}</span>
-                          </p>
-                          {vm.plan?.discount_pct > 0 && (
-                            <p className="text-xs text-gray-600 dark:text-gray-400">
-                              Perks: <span className="font-semibold text-purple-600 dark:text-purple-400">{vm.plan.discount_pct}% Off</span> on session charges.
-                            </p>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => {
+                            setValidatedMemberships([]);
+                            setItemRedeemHours({});
+                          }}
+                          className="text-xs font-semibold text-red-500 hover:underline"
+                        >
+                          Remove
+                        </button>
                       </div>
-                    ))}
+
+                      <div className="space-y-2 pt-2 border-t" style={{ borderColor: border }}>
+                        {validatedMemberships.map((vm) => (
+                          <div key={vm.id} className="text-xs">
+                            <span className="font-semibold text-gray-900 dark:text-white">Plan: {vm.plan?.name}</span>
+                            {vm.plan?.discount_pct > 0 && (
+                              <span className="ml-2 text-purple-600 dark:text-purple-400 font-medium">({vm.plan.discount_pct}% Off)</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
                     {cart.items.some(item => validatedMemberships.some(vm => isTableCoveredByMembership(vm, item))) && (
                       <div className="space-y-3 border-t pt-3" style={{ borderColor: border }}>
