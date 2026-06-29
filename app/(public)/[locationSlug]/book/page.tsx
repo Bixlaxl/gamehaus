@@ -410,7 +410,13 @@ export default function CheckoutPage() {
     });
 
     for (const item of cart.items) {
-      const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
+      const coveringVm = validatedMemberships.find(vm => {
+        if (!isTableCoveredByMembership(vm, item)) return false;
+        const ledger = currentLedgers.get(vm.id);
+        if (!ledger) return false;
+        const tableType = item.tableType || "";
+        return (Number(ledger[tableType]) || 0) > 0;
+      });
       if (!coveringVm) continue;
       
       const ledger = currentLedgers.get(coveringVm.id);
@@ -451,7 +457,11 @@ export default function CheckoutPage() {
     if (!validatedMemberships.length) return 0;
     let maxHrsInCart = 0;
     for (const item of cart.items) {
-      const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
+      const coveringVm = validatedMemberships.find(vm => {
+        if (!isTableCoveredByMembership(vm, item)) return false;
+        const tableType = item.tableType || "";
+        return getMembershipFreeHrs(vm, tableType) > 0;
+      });
       if (!coveringVm) continue;
       const tableType = item.tableType || "";
       const availableFreeHrs = getMembershipFreeHrs(coveringVm, tableType);
@@ -582,7 +592,11 @@ export default function CheckoutPage() {
         points_redeemed: clampedRedeem,
         payment_mode:    paymentMode,
         items: cart.items.map(i => {
-          const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, i));
+          const coveringVm = validatedMemberships.find(vm => {
+            if (!isTableCoveredByMembership(vm, i)) return false;
+            const tableType = i.tableType || "";
+            return getMembershipFreeHrs(vm, tableType) > 0;
+          });
           return {
             table_id:               i.tableId,
             scheduled_start:        i.scheduledStart,
