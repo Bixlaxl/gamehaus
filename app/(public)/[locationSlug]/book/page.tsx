@@ -401,36 +401,40 @@ export default function CheckoutPage() {
   );
 
   let freeHoursDiscount = 0;
-  let clientUpdatedLedger: Record<string, number> = {};
-  if (isMembershipValid) {
-    validatedMemberships.forEach(vm => {
-      cart.items.forEach(i => {
-        const tt = i.tableType || "";
-        if (clientUpdatedLedger[tt] === undefined) {
-          clientUpdatedLedger[tt] = getMembershipFreeHrs(vm, tt);
-        } else {
-          clientUpdatedLedger[tt] += getMembershipFreeHrs(vm, tt);
-        }
-      });
-    });
-  }
   const appliedLedgerDeductions: Record<string, number> = {};
+  const remainingLedgerSummary: Record<string, number> = {};
 
   if (isMembershipValid) {
+    const currentLedgers = new Map<string, Record<string, number>>();
+    validatedMemberships.forEach(vm => {
+      const ledgerObj: Record<string, number> = { ...(vm.free_hours_ledger || {}) };
+      const defaultHrs = Number(vm.plan?.free_hrs || 0);
+      ["snooker", "pool", "ps5", "foosball", "simulator", "standard"].forEach(t => {
+        if (ledgerObj[t] === undefined) ledgerObj[t] = defaultHrs;
+      });
+      currentLedgers.set(vm.id, ledgerObj);
+    });
+
     for (const item of cart.items) {
       const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
       if (!coveringVm) continue;
       
+      const ledger = currentLedgers.get(coveringVm.id);
+      if (!ledger) continue;
+
       const durationHrs = item.durationMins / 60;
       const tableType = item.tableType || "";
-      const remainingFreeHrs = Number(clientUpdatedLedger[tableType]) || 0;
+      const remainingFreeHrs = Number(ledger[tableType]) || 0;
       
       if (remainingFreeHrs > 0) {
-        const hoursToRedeem = Math.min(redeemHoursInput > 0 ? redeemHoursInput : durationHrs, durationHrs, remainingFreeHrs);
+        const sessionMax = Math.min(durationHrs, remainingFreeHrs);
+        const hoursToRedeem = redeemHoursInput > 0 ? Math.min(redeemHoursInput, sessionMax) : sessionMax;
         const discountForThisItem = hoursToRedeem * item.ratePerHour;
         freeHoursDiscount += discountForThisItem;
         
-        clientUpdatedLedger[tableType] = Math.max(0, remainingFreeHrs - hoursToRedeem);
+        const nextRem = Math.max(0, remainingFreeHrs - hoursToRedeem);
+        ledger[tableType] = nextRem;
+        remainingLedgerSummary[tableType] = nextRem;
         appliedLedgerDeductions[tableType] = (appliedLedgerDeductions[tableType] || 0) + hoursToRedeem;
       }
     }
@@ -438,16 +442,19 @@ export default function CheckoutPage() {
 
   const maxRedeemableHrs = useMemo(() => {
     if (!validatedMemberships.length) return 0;
-    let totalMax = 0;
-    for (const vm of validatedMemberships) {
-      const boundItem = cart.items.find(item => isTableCoveredByMembership(vm, item));
-      if (!boundItem) continue;
-      const tableType = boundItem.tableType || "";
-      const availableFreeHrs = getMembershipFreeHrs(vm, tableType);
-      const durationHrs = boundItem.durationMins / 60;
-      totalMax += Math.min(durationHrs, availableFreeHrs);
+    let maxHrsInCart = 0;
+    for (const item of cart.items) {
+      const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
+      if (!coveringVm) continue;
+      const tableType = item.tableType || "";
+      const availableFreeHrs = getMembershipFreeHrs(coveringVm, tableType);
+      const durationHrs = item.durationMins / 60;
+      const sessionAvailable = Math.min(durationHrs, availableFreeHrs);
+      if (sessionAvailable > maxHrsInCart) {
+        maxHrsInCart = sessionAvailable;
+      }
     }
-    return totalMax;
+    return maxHrsInCart;
   }, [validatedMemberships, cart.items]);
 
   const hoursOptions = useMemo(() => {
@@ -1077,7 +1084,7 @@ export default function CheckoutPage() {
                     {maxRedeemableHrs > 0 && (
                       <div className="space-y-2 border-t pt-3" style={{ borderColor: border }}>
                         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest" style={{ color: textMut }}>
-                          Select Free Hours to Redeem
+                          Select Free Hours to Redeem for Each Session
                         </label>
                         <div className="flex flex-col gap-2">
                           <select
@@ -1094,7 +1101,7 @@ export default function CheckoutPage() {
                             ))}
                           </select>
                           <span className="text-xs text-gray-500">
-                            Available free hours: {maxRedeemableHrs} hrs max
+                            Available free hours: {maxRedeemableHrs} hrs max per session
                           </span>
                         </div>
                       </div>
@@ -1102,7 +1109,10 @@ export default function CheckoutPage() {
 
                     {claimableMemberships.some(m => !validatedMemberships.some(vm => vm.id === m.id)) && (
                       <button
-                        onClick={() => setShowValidationPopup(true)}
+                        onClick={() => {
+                          setDismissedMembership(false);
+                          setShowValidationPopup(true);
+                        }}
                         className="w-full py-2.5 rounded-xl border border-dashed text-xs font-bold text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
                       >
                         + Claim Another Membership ID
@@ -1363,7 +1373,7 @@ export default function CheckoutPage() {
                   )}
                   <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#10B981" }}>
                     {Object.entries(appliedLedgerDeductions).map(([type, hrs]) => {
-                      const rem = clientUpdatedLedger[type] !== undefined ? clientUpdatedLedger[type] : 0;
+                      const rem = remainingLedgerSummary[type] !== undefined ? remainingLedgerSummary[type] : 0;
                       const matchingItem = cart.items.find(i => (i.tableType || "") === type);
                       const displayName = matchingItem ? matchingItem.tableName : (type === "snooker" || type === "standard" ? "Standard Table" : type.toUpperCase());
                       return (
