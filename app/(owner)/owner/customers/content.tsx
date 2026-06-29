@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Users, TrendingUp, Star, Award } from "lucide-react";
+import { Search, Users, TrendingUp, Star, Award, MapPin } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { CustomerProfile } from "@/lib/supabase/types";
 
@@ -14,6 +14,11 @@ type Customer = Pick<
   CustomerProfile,
   "id" | "phone" | "name" | "visit_count" | "total_spent" | "points_balance" | "last_visit_at"
 >;
+
+type OrderRecord = {
+  customer_phone: string;
+  location_id: string;
+};
 
 const SORT_OPTIONS = [
   { value: "last_visit",     label: "Last visit" },
@@ -31,18 +36,39 @@ function fmtDate(iso: string | null) {
 
 export function CustomersContent({
   initialCustomers,
-  locations: _locations,
+  locations,
+  orders = [],
 }: {
   initialCustomers: Customer[];
   locations: { id: string; name: string }[];
+  orders?: OrderRecord[];
 }) {
-  const [search,    setSearch]    = useState("");
-  const [sortBy,    setSortBy]    = useState("last_visit");
-  const [minVisits, setMinVisits] = useState("");
-  const [minPoints, setMinPoints] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [search,           setSearch]           = useState("");
+  const [sortBy,           setSortBy]           = useState("last_visit");
+  const [minVisits,        setMinVisits]        = useState("");
+  const [minPoints,        setMinPoints]        = useState("");
+
+  // Build phone set for the selected location
+  const locationPhoneSet = useMemo(() => {
+    if (selectedLocation === "all" || !orders.length) return null;
+    const set = new Set<string>();
+    for (const o of orders) {
+      if (o.location_id === selectedLocation && o.customer_phone) {
+        set.add(o.customer_phone);
+      }
+    }
+    return set;
+  }, [selectedLocation, orders]);
+
+  // Base list filtered by location
+  const locationFilteredCustomers = useMemo(() => {
+    if (!locationPhoneSet) return initialCustomers;
+    return initialCustomers.filter((c) => locationPhoneSet.has(c.phone));
+  }, [initialCustomers, locationPhoneSet]);
 
   const customers = useMemo(() => {
-    let list = [...initialCustomers];
+    let list = [...locationFilteredCustomers];
 
     if (search.trim()) {
       const q = search.toLowerCase().trim();
@@ -67,12 +93,12 @@ export function CustomersContent({
     });
 
     return list;
-  }, [initialCustomers, search, sortBy, minVisits, minPoints]);
+  }, [locationFilteredCustomers, search, sortBy, minVisits, minPoints]);
 
-  const totalCustomers  = initialCustomers.length;
-  const repeatCustomers = initialCustomers.filter((c) => c.visit_count > 1).length;
-  const totalPoints     = initialCustomers.reduce((s, c) => s + c.points_balance, 0);
-  const totalRevenue    = initialCustomers.reduce((s, c) => s + c.total_spent, 0);
+  const totalCustomers  = locationFilteredCustomers.length;
+  const repeatCustomers = locationFilteredCustomers.filter((c) => c.visit_count > 1).length;
+  const totalPoints     = locationFilteredCustomers.reduce((s, c) => s + c.points_balance, 0);
+  const totalRevenue    = locationFilteredCustomers.reduce((s, c) => s + c.total_spent, 0);
 
   const stats = [
     { label: "Total Customers",       value: totalCustomers,                            icon: Users,     color: "text-blue-600",   bg: "bg-blue-50"   },
@@ -83,11 +109,30 @@ export function CustomersContent({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Customers</h1>
-        <span className="text-sm text-gray-400">
-          {customers.length} of {totalCustomers}
-        </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Customers</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Showing {customers.length} of {totalCustomers} customers
+          </p>
+        </div>
+
+        {/* Location Selector */}
+        <div className="w-52">
+          <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Locations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Locations</SelectItem>
+              {locations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.id}>
+                  {loc.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Stats */}
@@ -189,7 +234,7 @@ export function CustomersContent({
             {customers.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
-                  No customers found
+                  No customers found for this location
                 </td>
               </tr>
             )}
