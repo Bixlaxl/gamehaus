@@ -83,13 +83,13 @@ function slotEndTime(slotStart: string): string {
   return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
 }
 
-/* Slots from opening to (closing - stepMins), filtered to current time on today */
-function visibleSlots(opening: string, closing: string, dateStr: string, timezone: string, stepMins: number = 15): string[] {
+/* 15-min slots from opening to (closing - 15), filtered to current time on today */
+function visibleSlots(opening: string, closing: string, dateStr: string, timezone: string): string[] {
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
   const openMins  = oh * 60 + om;
   const closeMins = ch * 60 + cm;
-  let end = closeMins - stepMins;
+  let end = closeMins - 15;
   const crossesMidnight = end < openMins;
   if (crossesMidnight) end += 24 * 60;
 
@@ -97,15 +97,15 @@ function visibleSlots(opening: string, closing: string, dateStr: string, timezon
   const filterByTime = dateStr === today;
   const now    = new Date();
   const curRaw = now.getHours() * 60 + now.getMinutes();
-  // Round up to next step boundary so we never show a slot that's already started
-  const curRounded = Math.ceil(curRaw / stepMins) * stepMins;
+  // Round up to next 15-min boundary so we never show a slot that's already started
+  const curRounded = Math.ceil(curRaw / 15) * 15;
 
   const curMins = crossesMidnight
     ? (curRaw < closeMins ? curRounded + 24 * 60 : curRaw >= openMins ? curRounded : openMins)
     : curRounded;
 
   const list: string[] = [];
-  for (let m = openMins; m <= end; m += stepMins) {
+  for (let m = openMins; m <= end; m += 15) {
     if (filterByTime && m < curMins) continue;
     const norm = m % (24 * 60);
     list.push(`${String(Math.floor(norm / 60)).padStart(2, "0")}:${String(norm % 60).padStart(2, "0")}`);
@@ -247,11 +247,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const days      = useMemo(() => buildDays(location.timezone), [location.timezone]);
   const cartCount = cart.items.length;
 
-  const isCurrentSim = booking ? isSimulatorActive(booking, selectedMode) : false;
-
   /* All slots for the current sheet date */
   const allSlots = booking
-    ? visibleSlots(location.opening_time, location.closing_time, date, location.timezone, isCurrentSim ? 15 : 30)
+    ? visibleSlots(location.opening_time, location.closing_time, date, location.timezone)
     : [];
 
   /* People/controller pricing options for the current booking */
