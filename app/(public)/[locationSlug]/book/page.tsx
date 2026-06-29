@@ -113,7 +113,7 @@ export default function CheckoutPage() {
   const [error, setError]             = useState<string | null>(null);
   const [customer, setCustomer]       = useState<CustomerLookup | null>(null);
   const [membershipIdInput, setMembershipIdInput] = useState("");
-  const [validatedMembership, setValidatedMembership] = useState<any | null>(null);
+  const [validatedMemberships, setValidatedMemberships] = useState<any[]>([]);
   const [dismissedMembership, setDismissedMembership] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [redeemHoursInput, setRedeemHoursInput] = useState<number>(0);
@@ -219,11 +219,11 @@ export default function CheckoutPage() {
   useEffect(() => {
     const advanceAmt = advancePerTable * cart.items.length;
     const currentSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
-    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMembership) {
+    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMemberships.length > 0) {
       setPaymentMode("full");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [advancePerTable, cart.items, validatedMembership]);
+  }, [advancePerTable, cart.items, validatedMemberships]);
 
   // Any cart item whose start time has already passed by the time the user reaches checkout
   const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
@@ -304,7 +304,7 @@ export default function CheckoutPage() {
   const advanceAmount = advancePerTable * cart.items.length;
   // When total cost is at or below the advance fee, there's nothing to reserve.
   // Force full pay and hide the advance option entirely.
-  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || !!validatedMembership;
+  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || validatedMemberships.length > 0;
   const baseAmount    = paymentMode === "advance" ? advanceAmount : subtotal;
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
@@ -323,28 +323,33 @@ export default function CheckoutPage() {
     return Number(m.plan?.free_hrs || 0);
   };
 
-  const boundMembershipForCart = useMemo(() => {
-    if (!customer?.active_memberships) return null;
-    return customer.active_memberships.find(m => {
-      const hasFreeHours = Number(m.plan?.free_hrs || 0) > 0;
+  const claimableMemberships = useMemo(() => {
+    if (!customer?.active_memberships) return [];
+    return customer.active_memberships.filter(m => {
       const boundItemInCart = cart.items.find(item => isTableCoveredByMembership(m, item));
       if (!boundItemInCart) return false;
       const tableType = boundItemInCart.tableType || "";
       const remainingFreeHrs = getMembershipFreeHrs(m, tableType);
-      return hasFreeHours && remainingFreeHrs > 0;
+      const planPct = Number(m.plan?.discount_pct || 0);
+      return remainingFreeHrs > 0 || planPct > 0;
     });
   }, [customer, cart.items]);
 
+  const unvalidatedClaimableMembership = useMemo(() => {
+    if (dismissedMembership) return null;
+    return claimableMemberships.find(m => !validatedMemberships.some(vm => vm.id === m.id));
+  }, [claimableMemberships, validatedMemberships, dismissedMembership]);
+
   useEffect(() => {
-    if (boundMembershipForCart && !validatedMembership && !dismissedMembership) {
+    if (unvalidatedClaimableMembership) {
       setShowValidationPopup(true);
     } else {
       setShowValidationPopup(false);
     }
-  }, [boundMembershipForCart, validatedMembership, dismissedMembership]);
+  }, [unvalidatedClaimableMembership]);
 
   useEffect(() => {
-    setValidatedMembership(null);
+    setValidatedMemberships([]);
     setDismissedMembership(false);
     setValidationError(null);
     setMembershipIdInput("");
@@ -356,21 +361,17 @@ export default function CheckoutPage() {
     if (!customer?.active_memberships) return;
     const input = membershipIdInput.trim().toUpperCase();
     
-    const matched = customer.active_memberships.find(m => {
-      const hasFreeHours = Number(m.plan?.free_hrs || 0) > 0;
-      const boundItemInCart = cart.items.find(item => isTableCoveredByMembership(m, item));
-      if (!boundItemInCart) return false;
-      const tableType = boundItemInCart.tableType || "";
-      const remainingFreeHrs = getMembershipFreeHrs(m, tableType);
-      
+    const matched = claimableMemberships.find(m => {
       const target = (m.short_id || "").trim().toUpperCase();
-      return hasFreeHours && remainingFreeHrs > 0 && input && target && input === target;
+      return input && target && input === target;
     });
 
     if (matched) {
-      setValidatedMembership(matched);
+      if (!validatedMemberships.some(vm => vm.id === matched.id)) {
+        setValidatedMemberships(prev => [...prev, matched]);
+      }
       setValidationError(null);
-      setShowValidationPopup(false);
+      setMembershipIdInput("");
       
       const boundItem = cart.items.find(item => isTableCoveredByMembership(matched, item));
       if (boundItem) {
@@ -388,34 +389,37 @@ export default function CheckoutPage() {
   const hasBoundAssetInCart = !!(
     customer &&
     cart.items.some(item => {
-      if (validatedMembership) {
-        return isTableCoveredByMembership(validatedMembership, item);
+      if (validatedMemberships.length > 0) {
+        return validatedMemberships.some(vm => isTableCoveredByMembership(vm, item));
       }
       return (customer.active_memberships || []).some(m => isTableCoveredByMembership(m, item));
     })
   );
 
-  const hasGlobalDiscount = !!(customer && customer.membership_discount_pct > 0);
-
   const isMembershipValid = !!(
-    customer &&
-    (validatedMembership || hasGlobalDiscount)
+    customer && validatedMemberships.length > 0
   );
 
   let freeHoursDiscount = 0;
   let clientUpdatedLedger: Record<string, number> = {};
-  if (customer && validatedMembership) {
-    cart.items.forEach(i => {
-      const tt = i.tableType || "";
-      clientUpdatedLedger[tt] = getMembershipFreeHrs(validatedMembership, tt);
+  if (isMembershipValid) {
+    validatedMemberships.forEach(vm => {
+      cart.items.forEach(i => {
+        const tt = i.tableType || "";
+        if (clientUpdatedLedger[tt] === undefined) {
+          clientUpdatedLedger[tt] = getMembershipFreeHrs(vm, tt);
+        } else {
+          clientUpdatedLedger[tt] += getMembershipFreeHrs(vm, tt);
+        }
+      });
     });
   }
   const appliedLedgerDeductions: Record<string, number> = {};
 
-  if (isMembershipValid && customer && validatedMembership) {
+  if (isMembershipValid) {
     for (const item of cart.items) {
-      const isBound = isTableCoveredByMembership(validatedMembership, item);
-      if (!isBound) continue;
+      const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
+      if (!coveringVm) continue;
       
       const durationHrs = item.durationMins / 60;
       const tableType = item.tableType || "";
@@ -433,15 +437,18 @@ export default function CheckoutPage() {
   }
 
   const maxRedeemableHrs = useMemo(() => {
-    if (!validatedMembership) return 0;
-    const boundItem = cart.items.find(item => isTableCoveredByMembership(validatedMembership, item));
-    if (!boundItem) return 0;
-    const tableType = boundItem.tableType || "";
-    const availableFreeHrs = getMembershipFreeHrs(validatedMembership, tableType);
-    const durationHrs = boundItem.durationMins / 60;
-    return Math.min(durationHrs, availableFreeHrs);
-  }, [validatedMembership, cart.items]);
-
+    if (!validatedMemberships.length) return 0;
+    let totalMax = 0;
+    for (const vm of validatedMemberships) {
+      const boundItem = cart.items.find(item => isTableCoveredByMembership(vm, item));
+      if (!boundItem) continue;
+      const tableType = boundItem.tableType || "";
+      const availableFreeHrs = getMembershipFreeHrs(vm, tableType);
+      const durationHrs = boundItem.durationMins / 60;
+      totalMax += Math.min(durationHrs, availableFreeHrs);
+    }
+    return totalMax;
+  }, [validatedMemberships, cart.items]);
 
   const hoursOptions = useMemo(() => {
     const opts = [];
@@ -451,12 +458,16 @@ export default function CheckoutPage() {
     return opts;
   }, [maxRedeemableHrs]);
 
-  // Member % discount base = subtotal - coupon only (mirrors orders/route.ts server logic).
-  // Free hours are a SEPARATE deduction stacked on top. The public discount (coupon)
-  // cannot reduce the member's base — only coupon reduces it for the % calculation.
-  // At finalize, member % is re-applied live to cover extensions + extras too.
-  const membershipPctDiscount = isMembershipValid && customer?.membership_discount_pct
-    ? Math.round(Math.max(0, baseAfterCoupon - freeHoursDiscount) * customer.membership_discount_pct / 100 * 100) / 100
+  const maxValidatedPct = useMemo(() => {
+    if (!validatedMemberships.length) return 0;
+    return validatedMemberships.reduce((max, m) => {
+      const pct = Number(m.plan?.discount_pct || 0);
+      return pct > max ? pct : max;
+    }, 0);
+  }, [validatedMemberships]);
+
+  const membershipPctDiscount = isMembershipValid && maxValidatedPct > 0
+    ? Math.round(Math.max(0, baseAfterCoupon - freeHoursDiscount) * maxValidatedPct / 100 * 100) / 100
     : 0;
   const totalMembershipDiscount = freeHoursDiscount + membershipPctDiscount;
   const baseAfterMembership = Math.max(0, baseAfterCoupon - totalMembershipDiscount);
@@ -553,11 +564,11 @@ export default function CheckoutPage() {
         type:            "online",
         customer_name:   name.trim(),
         customer_phone:  phone.trim(),
-        membership_id:   isMembershipValid ? (validatedMembership?.id ?? customer.membership_id) : undefined,
+        membership_id:   isMembershipValid && validatedMemberships.length > 0 ? validatedMemberships[0].id : undefined,
         points_redeemed: clampedRedeem,
         payment_mode:    paymentMode,
         items: cart.items.map(i => {
-          const isBound = validatedMembership?.bound_table_ids?.includes(i.tableId);
+          const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, i));
           return {
             table_id:               i.tableId,
             scheduled_start:        i.scheduledStart,
@@ -565,7 +576,8 @@ export default function CheckoutPage() {
             scheduled_duration_mins: i.durationMins,
             rate_per_hour:          i.ratePerHour,
             num_people:             i.numPeople,
-            free_hours_to_redeem:   isBound ? redeemHoursInput : undefined,
+            free_hours_to_redeem:   coveringVm ? redeemHoursInput : undefined,
+            membership_id:          coveringVm?.id ?? undefined,
             selected_mode_name:     i.selectedModeName ?? undefined,
           };
         }),
@@ -706,7 +718,7 @@ export default function CheckoutPage() {
           }}
         />
       )}
-      {showValidationPopup && boundMembershipForCart && (
+      {showValidationPopup && unvalidatedClaimableMembership && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div
             className="w-full max-w-md rounded-2xl p-6 border shadow-2xl space-y-4"
@@ -721,13 +733,13 @@ export default function CheckoutPage() {
                 <Star className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white" style={{ color: textPri }}>Redeem Free Hours</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white" style={{ color: textPri }}>Claim Membership Benefits</h3>
                 <p className="text-xs text-gray-500" style={{ color: textSec }}>Membership plan detected for your number</p>
               </div>
             </div>
 
             <p className="text-sm leading-relaxed" style={{ color: textSec }}>
-              You have an active <span className="font-semibold text-purple-600 dark:text-purple-400" style={{ color: "#A855F7" }}>{boundMembershipForCart.plan?.name}</span> plan with remaining free hours on this table asset. Enter your Membership ID to unlock and redeem your free credits.
+              You have an active <span className="font-semibold text-purple-600 dark:text-purple-400" style={{ color: "#A855F7" }}>{unvalidatedClaimableMembership.plan?.name}</span> plan with membership benefits on this asset. Enter your Membership ID to unlock and apply your offer.
             </p>
 
             <div className="space-y-2">
@@ -1027,37 +1039,40 @@ export default function CheckoutPage() {
                     </p>
                   </div>
                 )}
-                {/* Membership validation */}
-                {!lookingUp && customer && validatedMembership && (
-                  <div className="mt-4 space-y-4 p-5 rounded-xl border" style={{ background: inputBg, borderColor: "#10B981" }}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-sm font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
-                          Membership Applied ({validatedMembership.short_id})
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setValidatedMembership(null);
-                          setRedeemHoursInput(0);
-                        }}
-                        className="text-xs font-semibold text-red-500 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                {/* Membership validation list */}
+                {!lookingUp && customer && validatedMemberships.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    {validatedMemberships.map((vm) => (
+                      <div key={vm.id} className="p-4 rounded-xl border space-y-2" style={{ background: inputBg, borderColor: "#10B981" }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                            <span className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
+                              Membership Applied ({vm.short_id || "Active"})
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setValidatedMemberships(prev => prev.filter(m => m.id !== vm.id));
+                            }}
+                            className="text-xs font-semibold text-red-500 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
 
-                    <div className="space-y-1.5">
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        Plan: <span className="font-semibold text-gray-900 dark:text-white">{validatedMembership.plan?.name}</span>
-                      </p>
-                      {validatedMembership.plan?.discount_pct > 0 && (
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          Perks: <span className="font-semibold text-purple-600 dark:text-purple-400">{validatedMembership.plan.discount_pct}% Off</span> on remaining charges.
-                        </p>
-                      )}
-                    </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            Plan: <span className="font-semibold text-gray-900 dark:text-white">{vm.plan?.name}</span>
+                          </p>
+                          {vm.plan?.discount_pct > 0 && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              Perks: <span className="font-semibold text-purple-600 dark:text-purple-400">{vm.plan.discount_pct}% Off</span> on session charges.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
 
                     {maxRedeemableHrs > 0 && (
                       <div className="space-y-2 border-t pt-3" style={{ borderColor: border }}>
@@ -1084,20 +1099,15 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {!lookingUp && customer && hasGlobalDiscount && !validatedMembership && (
-                  <div className="mt-4 p-4 rounded-xl border" style={{ background: inputBg, borderColor: "#10B981" }}>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-sm font-bold uppercase tracking-wider text-green-600 dark:text-green-400">
-                        Automated Discount Applied
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      {customer.membership_discount_pct}% Off global percentage discount applied automatically matching your phone number.
-                    </p>
+                    {claimableMemberships.some(m => !validatedMemberships.some(vm => vm.id === m.id)) && (
+                      <button
+                        onClick={() => setShowValidationPopup(true)}
+                        className="w-full py-2.5 rounded-xl border border-dashed text-xs font-bold text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
+                      >
+                        + Claim Another Membership ID
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1121,7 +1131,7 @@ export default function CheckoutPage() {
                     <p className="text-xs mt-0.5" style={{ color: textSec }}>{formatCurrency(subtotal)}</p>
                   </div>
                   <p className="text-xs mt-2 px-1" style={{ color: textMut }}>
-                    {validatedMembership
+                    {validatedMemberships.length > 0
                       ? "Reserve option disabled when membership is applied — paying in full applies your membership credits directly."
                       : `Reserve option unavailable — booking total (${formatCurrency(subtotal)}) is at or below the advance threshold (${formatCurrency(advanceAmount)}).`}
                   </p>
