@@ -1108,7 +1108,11 @@ export default function CheckoutPage() {
                         </label>
                         <div className="space-y-2.5">
                           {cart.items.map(item => {
-                            const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
+                            const coveringVm = validatedMemberships.find(vm => {
+                              if (!isTableCoveredByMembership(vm, item)) return false;
+                              const tableType = item.tableType || "";
+                              return getMembershipFreeHrs(vm, tableType) > 0;
+                            });
                             if (!coveringVm) return null;
                             const tableType = item.tableType || "";
                             const availableFreeHrs = getMembershipFreeHrs(coveringVm, tableType);
