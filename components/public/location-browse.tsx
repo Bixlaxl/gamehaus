@@ -11,7 +11,7 @@ import { formatCurrency, isSimulatorActive } from "@/lib/utils";
 
 import { createClient } from "@/lib/supabase/client";
 import type { Location, Table, TableMode } from "@/lib/supabase/types";
-import { ShoppingCart, ArrowLeft, X, ChevronRight, Check } from "lucide-react";
+import { ShoppingCart, ArrowLeft, X, ChevronRight, Check, Calendar } from "lucide-react";
 import { useTheme } from "next-themes";
 
 /* ── Type config ─────────────────────────── */
@@ -55,7 +55,7 @@ function fmt(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ap = h >= 12 ? "PM" : "AM";
   const hr = h % 12 || 12;
-  return `${hr}${m ? `:${String(m).padStart(2, "0")}` : ""} ${ap}`;
+  return `${hr}:${String(m).padStart(2, "0")} ${ap}`;
 }
 function fmtRange(startStr: string, endStr: string): string {
   const [sh, sm] = startStr.split(":").map(Number);
@@ -65,8 +65,8 @@ function fmtRange(startStr: string, endStr: string): string {
   const sHr = sh % 12 || 12;
   const eHr = eh % 12 || 12;
 
-  const sMin = sm ? `:${String(sm).padStart(2, "0")}` : "";
-  const eMin = em ? `:${String(em).padStart(2, "0")}` : "";
+  const sMin = `:${String(sm).padStart(2, "0")}`;
+  const eMin = `:${String(em).padStart(2, "0")}`;
 
   if (sAp === eAp) {
     return `${sHr}${sMin} – ${eHr}${eMin} ${eAp}`;
@@ -710,7 +710,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                         {(!onWhen && !onMode) && (
                           <button
                             onClick={() => setStep("when")}
-                            className="p-1.5 mt-0.5 rounded-full shrink-0"
+                            className="p-2 rounded-full shrink-0 transition-colors hover:bg-gray-100 dark:hover:bg-zinc-800"
                             style={{ background: inputBg, color: textSec }}
                             aria-label="Back"
                           >
@@ -720,26 +720,28 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                         {!onMode && hasModes && step === "when" && (
                           <button
                             onClick={() => { setStep("mode"); setSelected([]); setSelectedMode(null); }}
-                            className="p-1.5 mt-0.5 rounded-full shrink-0"
+                            className="p-2 rounded-full shrink-0 transition-colors hover:bg-gray-100 dark:hover:bg-zinc-800"
                             style={{ background: inputBg, color: textSec }}
                             aria-label="Back to mode"
                           >
                             <ArrowLeft className="h-4 w-4" />
                           </button>
                         )}
-                        <div className="min-w-0">
-                          <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full text-white mb-2" style={{ background: sheetType.accent }}>
-                            {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
-                          </span>
-                          <h3 className="text-xl font-bold capitalize" style={{ color: textPri }}>{booking.name}</h3>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full text-purple-700 bg-purple-50 dark:bg-purple-950/40 dark:text-purple-300">
+                              {sheetType.emoji} {sheetType.label}{booking.size ? ` · ${booking.size}` : ""}
+                            </span>
+                          </div>
+                          <h3 className="text-2xl font-extrabold capitalize text-gray-900 dark:text-white tracking-tight">{booking.name}</h3>
                           {hasModes && selectedMode && (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-700 text-white inline-block mt-1">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-600 text-white shadow-xs">
                               {selectedMode.icon || "🎯"} {selectedMode.name} Mode
                             </span>
                           )}
                         </div>
                       </div>
-                      <button className="p-2 rounded-full shrink-0" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
+                      <button className="p-2 rounded-full shrink-0 transition-colors hover:bg-gray-100 dark:hover:bg-zinc-800" style={{ background: inputBg, color: textSec }} onClick={closeSheet}>
                         <X className="h-4 w-4" />
                       </button>
                     </div>
@@ -747,13 +749,25 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                     {/* ── Stepper ── */}
                     {hasPricing && !onMode && (
                       <div className="flex items-center gap-3 pt-1">
-                        <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textPri : textMut }}>
-                          1 · Timing
-                        </span>
-                        <div className="flex-1 h-px" style={{ background: onWhen ? sheetType.accent : inputBdr }} />
-                        <span className="text-xs font-bold whitespace-nowrap" style={{ color: onWhen ? textMut : textPri }}>
-                          2 · {selectedMode?.pricing_basis === "controller" || (!hasModes && booking.type === "ps5") ? "Controllers" : "Players"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${onWhen ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
+                            1
+                          </span>
+                          <span className={`text-xs font-bold ${onWhen ? "text-purple-600 dark:text-purple-400" : "text-gray-400"}`}>
+                            Timing
+                          </span>
+                        </div>
+                        <div className="flex-1 h-[2px] bg-gray-200 dark:bg-zinc-800 overflow-hidden rounded-full flex">
+                          <div className={`h-full transition-all duration-300 ${onWhen ? "w-1/2 bg-purple-600" : "w-full bg-purple-600"}`} />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${!onWhen ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
+                            2
+                          </span>
+                          <span className={`text-xs font-semibold ${!onWhen ? "text-purple-600 dark:text-purple-400" : "text-gray-400"}`}>
+                            {selectedMode?.pricing_basis === "controller" || (!hasModes && booking.type === "ps5") ? "Controllers" : "Players"}
+                          </span>
+                        </div>
                       </div>
                     )}
 
@@ -790,50 +804,48 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                     {/* ╔═════════════════════════════ STEP 1 — WHEN ═════════════════════════════╗ */}
                     {onWhen && (
                       <>
-                        {/* Either an instructional hint OR a chosen-time recap.
-                            We require start AND stop — a single 15-min slot isn't a valid booking. */}
+                        {/* Instructional hint */}
                         {selectedSlots.length === 0 ? (
-                          <p className="text-sm" style={{ color: textSec }}>
+                          <p className="text-xs font-medium text-gray-500 dark:text-zinc-400">
                             Tap a start time, then a finish time.
                           </p>
                         ) : selectedSlots.length === 1 ? (
-                          <p className="text-sm" style={{ color: textSec }}>
-                            Start{" "}
-                            <span className="font-bold" style={{ color: textPri }}>
-                              {fmt(selectedSlots[0])}
-                            </span>
-                            . Now pick a <span className="font-bold" style={{ color: textPri }}>finish time</span>.
+                          <p className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+                            Start <span className="font-bold text-gray-900 dark:text-white">{fmt(selectedSlots[0])}</span>. Now pick a <span className="font-bold text-gray-900 dark:text-white">finish time</span>.
                           </p>
                         ) : (
-                          <p className="text-sm" style={{ color: textSec }}>
-                            Booked{" "}
-                            <span className="font-bold" style={{ color: textPri }}>
-                              {fmt(selectedSlots[0])} → {stopLabel}
-                            </span>
-                            . Tap again to change.
+                          <p className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+                            Booked <span className="font-bold text-gray-900 dark:text-white">{fmt(selectedSlots[0])} → {stopLabel}</span>. Tap again to change.
                           </p>
                         )}
 
-                        {/* Date + legend */}
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-bold tracking-widest" style={{ color: textMut }}>
-                            {dateLabel}{isToday ? " · TODAY" : ""}
-                          </p>
-                          <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: textMut }}>
+                        {/* Date + Legend card */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-xs">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+                              <Calendar className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-900 dark:text-white leading-tight">{dateLabel}</p>
+                              <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium leading-tight">{isToday ? "Today" : ""}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-3 text-[10px] font-bold text-gray-600 dark:text-zinc-400 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-zinc-800">
                             <span className="inline-flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: startBg }} />
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ background: startBg }} />
                               Start
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: stopBg }} />
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ background: stopBg }} />
                               Stop
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#4F46E5" }} />
-                              In Cart
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#4F46E5" }} />
+                              In cart
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 rounded-sm" style={{
+                              <span className="w-2.5 h-2.5 rounded-xs" style={{
                                 background: `repeating-linear-gradient(45deg, ${inputBdr}, ${inputBdr} 2px, transparent 2px, transparent 4px)`,
                               }} />
                               Booked
@@ -899,28 +911,28 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                 );
                               }
 
-                              const bg = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? middleBg : inputBg;
-                              const borderColor = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? (dark ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)") : inputBdr;
-                              const fg = (isStartSlot || isStopSlot) ? "#fff" : textPri;
+                              const bg = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? middleBg : (dark ? "#18181b" : "#ffffff");
+                              const borderColor = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? (dark ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)") : (dark ? "#27272a" : "#f1f5f9");
+                              const fg = (isStartSlot || isStopSlot) ? "#ffffff" : (dark ? "#f4f4f5" : "#09090b");
                               const labelText = isStartSlot ? "START" : isStopSlot ? "STOP" : "";
 
                               return (
                                 <button
                                   key={s}
                                   onClick={() => handleSlotClick(s)}
-                                  className="relative flex flex-col items-center justify-center py-3 rounded-xl transition-all active:scale-95"
+                                  className="relative flex flex-col items-center justify-center py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-2xs"
                                   style={{
                                     background: bg,
                                     border: `1.5px solid ${borderColor}`,
-                                    boxShadow: (isStartSlot || isStopSlot) ? `0 4px 12px ${bg}55` : "none",
+                                    boxShadow: (isStartSlot || isStopSlot) ? `0 6px 16px ${bg}44` : undefined,
                                   }}
                                 >
                                   {labelText && (
-                                    <span className="text-[8px] font-bold tracking-wider leading-none mb-0.5" style={{ color: "rgba(255,255,255,0.92)" }}>
+                                    <span className="text-[9px] font-extrabold tracking-widest leading-none mb-0.5" style={{ color: "rgba(255,255,255,0.95)" }}>
                                       {labelText}
                                     </span>
                                   )}
-                                  <span className="text-[12px] font-bold tabular-nums leading-tight" style={{ color: fg }}>
+                                  <span className="text-[13px] font-bold tabular-nums leading-tight tracking-tight" style={{ color: fg }}>
                                     {display}
                                   </span>
                                 </button>
@@ -1075,17 +1087,17 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                   <div className="flex-1 min-w-0">
                     {selectedSlots.length >= minSlots ? (
                       <>
-                        <p className="text-sm font-bold tabular-nums" style={{ color: textPri }}>
+                        <p className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums">
                           {fmt(selectedSlots[0])} – {fmt(slotEndTime(selectedSlots[selectedSlots.length - 1]))}
                         </p>
-                        <p className="text-[11px]" style={{ color: textMut }}>
+                        <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 mt-0.5">
                           {selLabel} booked
                         </p>
                       </>
                     ) : selectedSlots.length === 1 && !isSim ? (
-                      <p className="text-xs" style={{ color: textMut }}>Pick finish time (min 30m required)</p>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-zinc-400">Pick finish time (min 30m required)</p>
                     ) : (
-                      <p className="text-xs" style={{ color: textMut }}>Pick a start time</p>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-zinc-400">Pick a start time</p>
                     )}
                   </div>
                   <button
@@ -1094,11 +1106,11 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                       else addToCart(booking);
                     }}
                     disabled={selectedSlots.length < minSlots}
-                    className="px-5 py-3 rounded-xl font-bold text-white text-sm transition-opacity disabled:opacity-40 flex items-center gap-1.5"
-                    style={{ background: "#111111" }}
+                    className="px-6 py-3.5 rounded-2xl font-bold text-white text-sm sm:text-base transition-all active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5 shadow-md"
+                    style={{ background: "#6366f1" }}
                   >
                     {pricingOptions.length > 0 ? "Confirm time" : `Add to cart — ${selTotal}`}
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4 stroke-[3]" />
                   </button>
                 </>
               ) : (
