@@ -83,13 +83,13 @@ function slotEndTime(slotStart: string): string {
   return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
 }
 
-/* 15-min slots from opening to (closing - 15), filtered to current time on today */
-function visibleSlots(opening: string, closing: string, dateStr: string, timezone: string): string[] {
+/* Slots from opening to (closing - stepMins), filtered to current time on today */
+function visibleSlots(opening: string, closing: string, dateStr: string, timezone: string, stepMins: number = 15): string[] {
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
   const openMins  = oh * 60 + om;
   const closeMins = ch * 60 + cm;
-  let end = closeMins - 15;
+  let end = closeMins - stepMins;
   const crossesMidnight = end < openMins;
   if (crossesMidnight) end += 24 * 60;
 
@@ -97,19 +97,15 @@ function visibleSlots(opening: string, closing: string, dateStr: string, timezon
   const filterByTime = dateStr === today;
   const now    = new Date();
   const curRaw = now.getHours() * 60 + now.getMinutes();
-  // Round up to next 15-min boundary so we never show a slot that's already started
-  const curRounded = Math.ceil(curRaw / 15) * 15;
+  // Round up to next step boundary so we never show a slot that's already started
+  const curRounded = Math.ceil(curRaw / stepMins) * stepMins;
 
-  // midnight-crossing: three cases:
-  //   1. curRaw < closeMins  → early-morning post-midnight session → shift into 24h+ zone
-  //   2. curRaw >= openMins  → daytime during session → filter from current rounded time
-  //   3. else                → before opening → show all slots from opening
   const curMins = crossesMidnight
     ? (curRaw < closeMins ? curRounded + 24 * 60 : curRaw >= openMins ? curRounded : openMins)
     : curRounded;
 
   const list: string[] = [];
-  for (let m = openMins; m <= end; m += 15) {
+  for (let m = openMins; m <= end; m += stepMins) {
     if (filterByTime && m < curMins) continue;
     const norm = m % (24 * 60);
     list.push(`${String(Math.floor(norm / 60)).padStart(2, "0")}:${String(norm % 60).padStart(2, "0")}`);
@@ -251,9 +247,11 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const days      = useMemo(() => buildDays(location.timezone), [location.timezone]);
   const cartCount = cart.items.length;
 
+  const isCurrentSim = booking ? isSimulatorActive(booking, selectedMode) : false;
+
   /* All slots for the current sheet date */
   const allSlots = booking
-    ? visibleSlots(location.opening_time, location.closing_time, date, location.timezone)
+    ? visibleSlots(location.opening_time, location.closing_time, date, location.timezone, isCurrentSim ? 15 : 30)
     : [];
 
   /* People/controller pricing options for the current booking */
@@ -1108,15 +1106,17 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
               ) : (
                 <button
                   onClick={() => addToCart(booking)}
-                  className="w-full py-3.5 rounded-xl font-bold text-white text-base transition-opacity active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="w-full px-5 py-3.5 rounded-xl font-bold text-white text-sm sm:text-base transition-all active:scale-[0.98] flex items-center justify-between gap-3"
                   style={{
                     background: sheetType.accent,
                     boxShadow:  `0 8px 24px ${sheetType.accent}55`,
                   }}
                 >
-                  <ShoppingCart className="h-4 w-4" />
-                  Add to Cart
-                  <span className="ml-auto tabular-nums">{selTotal || formatCurrency(0)}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ShoppingCart className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Add to Cart</span>
+                  </div>
+                  <span className="tabular-nums shrink-0 font-extrabold text-sm sm:text-base">{selTotal || formatCurrency(0)}</span>
                 </button>
               )}
             </div>
