@@ -353,7 +353,7 @@ export async function sendWhatsAppCancellation(
         parameters: [
           { type: "text", text: customerName },
           { type: "text", text: refCode },
-          { type: "text", text: `${refundPct}%` },
+          { type: "text", text: refundPct.toString() },
           { type: "text", text: refundAmount.toString() },
         ],
       }
