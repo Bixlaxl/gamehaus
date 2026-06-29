@@ -117,6 +117,7 @@ export default function CheckoutPage() {
   const [dismissedMembership, setDismissedMembership] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [redeemHoursInput, setRedeemHoursInput] = useState<number>(0);
+  const [itemRedeemHours, setItemRedeemHours] = useState<Record<string, number>>({});
   const [showValidationPopup, setShowValidationPopup] = useState(false);
   // When the typed name doesn't match the name stored against this phone,
   // we show the same Use existing / Update name choice the staff sees.
@@ -400,9 +401,10 @@ export default function CheckoutPage() {
     customer && validatedMemberships.length > 0
   );
 
+  const getItemKey = (item: any) => `${item.tableId}_${item.scheduledStart}`;
+
   let freeHoursDiscount = 0;
-  const appliedLedgerDeductions: Record<string, number> = {};
-  const remainingLedgerSummary: Record<string, number> = {};
+  const itemFreeHoursDeductions: Array<{ itemKey: string; tableName: string; tableId: string; scheduledStart: string; hrs: number; remainingHrs: number; ratePerHour: number }> = [];
 
   if (isMembershipValid) {
     const currentLedgers = new Map<string, Record<string, number>>();
@@ -428,14 +430,27 @@ export default function CheckoutPage() {
       
       if (remainingFreeHrs > 0) {
         const sessionMax = Math.min(durationHrs, remainingFreeHrs);
-        const hoursToRedeem = redeemHoursInput > 0 ? Math.min(redeemHoursInput, sessionMax) : sessionMax;
+        const key = getItemKey(item);
+        const selectedVal = itemRedeemHours[key];
+        const hoursToRedeem = selectedVal !== undefined ? Math.min(selectedVal, sessionMax) : sessionMax;
+        
         const discountForThisItem = hoursToRedeem * item.ratePerHour;
         freeHoursDiscount += discountForThisItem;
         
         const nextRem = Math.max(0, remainingFreeHrs - hoursToRedeem);
         ledger[tableType] = nextRem;
-        remainingLedgerSummary[tableType] = nextRem;
-        appliedLedgerDeductions[tableType] = (appliedLedgerDeductions[tableType] || 0) + hoursToRedeem;
+        
+        if (hoursToRedeem > 0) {
+          itemFreeHoursDeductions.push({
+            itemKey: key,
+            tableName: item.tableName,
+            tableId: item.tableId,
+            scheduledStart: item.scheduledStart,
+            hrs: hoursToRedeem,
+            remainingHrs: nextRem,
+            ratePerHour: item.ratePerHour,
+          });
+        }
       }
     }
   }
@@ -583,7 +598,7 @@ export default function CheckoutPage() {
             scheduled_duration_mins: i.durationMins,
             rate_per_hour:          i.ratePerHour,
             num_people:             i.numPeople,
-            free_hours_to_redeem:   coveringVm ? redeemHoursInput : undefined,
+            free_hours_to_redeem:   coveringVm ? (itemFreeHoursDeductions.find(d => d.itemKey === getItemKey(i))?.hrs ?? 0) : undefined,
             membership_id:          coveringVm?.id ?? undefined,
             selected_mode_name:     i.selectedModeName ?? undefined,
           };
@@ -1081,28 +1096,56 @@ export default function CheckoutPage() {
                       </div>
                     ))}
 
-                    {maxRedeemableHrs > 0 && (
-                      <div className="space-y-2 border-t pt-3" style={{ borderColor: border }}>
+                    {cart.items.some(item => validatedMemberships.some(vm => isTableCoveredByMembership(vm, item))) && (
+                      <div className="space-y-3 border-t pt-3" style={{ borderColor: border }}>
                         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest" style={{ color: textMut }}>
                           Select Free Hours to Redeem for Each Session
                         </label>
-                        <div className="flex flex-col gap-2">
-                          <select
-                            value={redeemHoursInput}
-                            onChange={(e) => setRedeemHoursInput(parseFloat(e.target.value))}
-                            className="w-full px-3 py-2 rounded-xl text-sm font-semibold outline-none"
-                            style={{ background: surface, border: `1.5px solid ${inputBdr}`, color: textPri }}
-                          >
-                            <option value={0}>0 hours (Do not redeem)</option>
-                            {hoursOptions.map((h: number) => (
-                              <option key={h} value={h}>
-                                {h} {h === 1 ? "hour" : "hours"}
-                              </option>
-                            ))}
-                          </select>
-                          <span className="text-xs text-gray-500">
-                            Available free hours: {maxRedeemableHrs} hrs max per session
-                          </span>
+                        <div className="space-y-2.5">
+                          {cart.items.map(item => {
+                            const coveringVm = validatedMemberships.find(vm => isTableCoveredByMembership(vm, item));
+                            if (!coveringVm) return null;
+                            const tableType = item.tableType || "";
+                            const availableFreeHrs = getMembershipFreeHrs(coveringVm, tableType);
+                            const durationHrs = item.durationMins / 60;
+                            const sessionMax = Math.min(durationHrs, availableFreeHrs);
+                            if (sessionMax <= 0) return null;
+                            const key = getItemKey(item);
+                            const currentVal = itemRedeemHours[key] !== undefined ? itemRedeemHours[key] : sessionMax;
+
+                            const opts = [];
+                            for (let h = 0.5; h <= sessionMax; h += 0.5) {
+                              opts.push(h);
+                            }
+
+                            return (
+                              <div key={key} className="p-3.5 rounded-xl border space-y-2 bg-gray-50/60 dark:bg-zinc-900/60" style={{ borderColor: inputBdr }}>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                    {item.tableName}
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400">
+                                    Max {sessionMax} {sessionMax === 1 ? "hr" : "hrs"} available
+                                  </span>
+                                </div>
+                                <select
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setItemRedeemHours(prev => ({ ...prev, [key]: val }));
+                                  }}
+                                  className="w-full px-3 py-2 rounded-lg text-xs font-semibold outline-none bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-white"
+                                >
+                                  <option value={0}>0 hours (Do not redeem)</option>
+                                  {opts.map((h: number) => (
+                                    <option key={h} value={h}>
+                                      {h} {h === 1 ? "hour" : "hours"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1372,16 +1415,11 @@ export default function CheckoutPage() {
                     </div>
                   )}
                   <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#10B981" }}>
-                    {Object.entries(appliedLedgerDeductions).map(([type, hrs]) => {
-                      const rem = remainingLedgerSummary[type] !== undefined ? remainingLedgerSummary[type] : 0;
-                      const matchingItem = cart.items.find(i => (i.tableType || "") === type);
-                      const displayName = matchingItem ? matchingItem.tableName : (type === "snooker" || type === "standard" ? "Standard Table" : type.toUpperCase());
-                      return (
-                        <p key={type} className="text-xs font-semibold" style={{ color: "#10B981" }}>
-                          Redeemed {hrs} {hrs === 1 ? 'hr' : 'hrs'} for {displayName} ({rem} hrs remaining)
-                        </p>
-                      );
-                    })}
+                    {itemFreeHoursDeductions.map((d) => (
+                      <p key={d.itemKey} className="text-xs font-semibold" style={{ color: "#10B981" }}>
+                        Redeemed {d.hrs} {d.hrs === 1 ? 'hr' : 'hrs'} for {d.tableName} ({d.remainingHrs} hrs remaining)
+                      </p>
+                    ))}
                   </div>
                 </div>
               )}
