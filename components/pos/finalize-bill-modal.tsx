@@ -87,7 +87,11 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
   const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
 
-  const allMemberships = validatedMemberships;
+  const allMemberships = validatedMemberships.length > 0
+    ? validatedMemberships
+    : (selectedOrder?.membership_id && customerInfo?.active_memberships
+        ? customerInfo.active_memberships.filter(m => m.id === selectedOrder.membership_id)
+        : []);
   const membershipPct = allMemberships.reduce((max, m) => {
     const pct = m.plan?.discount_pct ?? 0;
     return pct > max ? pct : max;
@@ -556,25 +560,27 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">Membership Details</span>
               </div>
 
-              {validatedMemberships.length > 0 ? (
+              {allMemberships.length > 0 ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-green-600 dark:text-green-400">
-                      Membership Applied ({validatedMemberships[0].short_id}) ✓
+                      Membership Applied ({allMemberships[0].short_id}) ✓
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setValidatedMemberships([]);
-                        setMembershipIdInput("");
-                      }}
-                      className="text-xs font-semibold text-red-500 hover:underline"
-                    >
-                      Remove
-                    </button>
+                    {!selectedOrder?.membership_id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setValidatedMemberships([]);
+                          setMembershipIdInput("");
+                        }}
+                        className="text-xs font-semibold text-red-500 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-1">
-                    {validatedMemberships.map((vm) => (
+                    {allMemberships.map((vm) => (
                       <p key={vm.id} className="text-xs text-gray-500 dark:text-[#888]">
                         Plan: {vm.plan?.name} {vm.plan?.discount_pct > 0 ? `(${vm.plan.discount_pct}% Off)` : ""}
                       </p>
