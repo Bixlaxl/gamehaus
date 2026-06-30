@@ -913,8 +913,16 @@ function PanelSession({
   );
   const posTablesStore = usePOSStore((s) => s.tables);
   const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
-  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, customerInfo?.active_memberships ?? [], now, posTablesStore);
-  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, customerInfo?.membership_discount_pct ?? 0, freeHrsDiscount);
+  const isMembershipApplied = !!order.membership_id;
+  const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
+    ? customerInfo.active_memberships.filter((m: any) => m.id === order.membership_id)
+    : [];
+  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, applicableMemberships, now, posTablesStore);
+  const applicableMembershipPct = applicableMemberships.reduce((max: number, m: any) => {
+    const pct = m.plan?.discount_pct ?? 0;
+    return pct > max ? pct : max;
+  }, 0);
+  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
@@ -1160,9 +1168,21 @@ function PanelSession({
               {order.customer_name}
             </p>
             {order.customer_phone && (
-              <p className="text-xs text-gray-500 dark:text-[#666] mt-0.5 truncate">
-                {order.customer_phone}
-              </p>
+              <div className="flex flex-col gap-0.5 mt-0.5">
+                <p className="text-xs text-gray-500 dark:text-[#666] truncate font-medium">
+                  {order.customer_phone}
+                </p>
+                {customerInfo && customerInfo.active_memberships && customerInfo.active_memberships.length > 0 && (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 w-fit">
+                      Member ID: {customerInfo.active_memberships[0].short_id || "Active"}
+                    </span>
+                    <span className="text-[9px] text-purple-600 dark:text-purple-400 font-semibold">
+                      Plans: {customerInfo.active_memberships.map((m: any) => m.plan?.name).join(", ")}
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <span

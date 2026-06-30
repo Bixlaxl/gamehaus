@@ -233,9 +233,17 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   const activeItems = (order?.items ?? [item]).filter((i) => !i.is_deleted && i.status !== "cancelled");
   const activeExtras = (order?.extras ?? []).filter((e) => !e.is_deleted);
   const publicDiscount = (order as any)?.public_discount_amount ?? order?.discount_amount ?? 0;
-  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, customerInfo?.active_memberships ?? [], now, posTablesRef);
+  const isMembershipApplied = !!order?.membership_id;
+  const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
+    ? customerInfo.active_memberships.filter((m: any) => m.id === order.membership_id)
+    : [];
+  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, applicableMemberships, now, posTablesRef);
+  const applicableMembershipPct = applicableMemberships.reduce((max: number, m: any) => {
+    const pct = m.plan?.discount_pct ?? 0;
+    return pct > max ? pct : max;
+  }, 0);
   const liveBill = order
-    ? calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, customerInfo?.membership_discount_pct ?? 0, freeHrsDiscount).totalDue
+    ? calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount).totalDue
     : calculateBill([item], [], now).subtotal;
   const startedAt = item.actual_start
     ? new Date(item.actual_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
@@ -702,7 +710,15 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
   const activeItems = order.items.filter((i) => !i.is_deleted && i.status !== "cancelled");
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
   const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
-  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, customerInfo?.active_memberships ?? [], new Date(), posTablesRef);
+  const isMembershipApplied = !!order?.membership_id;
+  const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
+    ? customerInfo.active_memberships.filter((m: any) => m.id === order.membership_id)
+    : [];
+  const freeHrsDiscount = computeFreeHoursDiscount(activeItems, applicableMemberships, new Date(), posTablesRef);
+  const applicableMembershipPct = applicableMemberships.reduce((max: number, m: any) => {
+    const pct = m.plan?.discount_pct ?? 0;
+    return pct > max ? pct : max;
+  }, 0);
   const billDue = calculateBill(
     activeItems,
     activeExtras,
@@ -710,7 +726,7 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
     null,
     order.advance_paid ?? 0,
     publicDiscount,
-    customerInfo?.membership_discount_pct ?? 0,
+    applicableMembershipPct,
     freeHrsDiscount
   ).totalDue;
 

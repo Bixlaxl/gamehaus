@@ -15,6 +15,7 @@ interface CustomerLookup {
   points_balance: number;
   visit_count: number;
   membership_discount_pct?: number;
+  active_memberships?: any[];
 }
 
 interface WalkInSliderProps {
@@ -269,13 +270,19 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                       {customer.points_balance} pts · {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
                     </span>
                   </div>
-                  {(customer.membership_discount_pct ?? 0) > 0 && (
+                  {customer.active_memberships && customer.active_memberships.length > 0 && (
                     <div
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                      className="flex flex-col gap-1 px-3 py-2 rounded-lg"
                       style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}
                     >
                       <span className="text-xs font-bold" style={{ color: "#a78bfa" }}>
-                        Member — {customer.membership_discount_pct}% off session + extras
+                        Member ID: {customer.active_memberships[0].short_id || "Active"}
+                      </span>
+                      <span className="text-[10px] text-purple-400 font-semibold">
+                        Plans: {customer.active_memberships.map((m: any) => m.plan?.name).join(", ")}
+                      </span>
+                      <span className="text-[9px] text-gray-400 dark:text-[#555] italic">
+                        * Validate ID at final payment to apply benefits
                       </span>
                     </div>
                   )}
@@ -320,13 +327,9 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                           const rate = chosenMode ? chosenMode.hourly_rate : table.hourly_rate;
                           const dur = durations[table.id] ?? 60;
                           const gross = Math.round(rate * dur / 60 * 100) / 100;
-                          const memberPct = customer?.membership_discount_pct ?? 0;
-                          const net = memberPct > 0 ? Math.round(gross * (1 - memberPct / 100) * 100) / 100 : gross;
                           return (
-                            <p className="text-xs font-semibold tabular-nums" style={{ color: memberPct > 0 ? "#a78bfa" : "#D4541A" }}>
-                              {memberPct > 0 ? (
-                                <><span className="line-through text-gray-400 mr-1">{formatCurrency(gross)}</span>{formatCurrency(net)}</>
-                              ) : formatCurrency(gross)}
+                            <p className="text-xs font-semibold tabular-nums" style={{ color: "#D4541A" }}>
+                              {formatCurrency(gross)}
                             </p>
                           );
                         })()}
