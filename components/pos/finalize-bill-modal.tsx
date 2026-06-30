@@ -92,10 +92,16 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     : (selectedOrder?.membership_id && customerInfo?.active_memberships
         ? customerInfo.active_memberships.filter(m => m.id === selectedOrder.membership_id)
         : []);
+
+  const storedDiscount = (selectedOrder?.discount_amount ?? 0) - ((selectedOrder as any)?.public_discount_amount ?? 0);
+  const fallbackPct = (selectedOrder?.membership_id && selectedOrder?.subtotal && Number(selectedOrder.subtotal) > 0)
+    ? Math.round((Number(storedDiscount) / Number(selectedOrder.subtotal)) * 100)
+    : 0;
+
   const membershipPct = allMemberships.reduce((max, m) => {
     const pct = m.plan?.discount_pct ?? 0;
     return pct > max ? pct : max;
-  }, 0);
+  }, fallbackPct);
 
   const ledgerUpdates: Map<string, Record<string, number>> = new Map();
   allMemberships.forEach(m => {
@@ -105,54 +111,72 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   let totalFreeHoursDiscount = 0;
   const itemDeductions: { tableName: string; hoursRedeemed: number; remainingHours: number }[] = [];
 
-  for (const item of activeItems) {
-    const tableMeta = item.table as { id?: string; type?: string } | null;
-    const tableId = item.table_id || tableMeta?.id;
-    const storeTable = storeTablesRef.find(t => t.id === tableId);
-    const tableType = tableMeta?.type || storeTable?.type || "";
+  const hasPreSavedFreeHours = activeItems.some(i => Number((i as any).free_hours_to_redeem) > 0);
 
-    const itemMembershipId = (item as any).membership_id;
-    const isBound = (m: any) => !m.bound_table_ids || m.bound_table_ids.length === 0 || m.bound_table_ids.includes(tableId ?? "");
-    let coveringMembership = itemMembershipId
-      ? allMemberships.find(m => m.id === itemMembershipId && isBound(m))
-      : allMemberships.find(m => isBound(m));
-
-    if (!coveringMembership) continue;
-
-    const ledger = ledgerUpdates.get(coveringMembership.id);
-    if (!ledger) continue;
-    const remainingFreeHrs = Number(ledger[tableType]) || 0;
-    if (remainingFreeHrs <= 0) continue;
-
-    let start: Date;
-    let end: Date;
-    if (item.actual_start) {
-      start = new Date(item.actual_start);
-      end = item.expected_end
-        ? new Date(item.expected_end)
-        : item.actual_end
-        ? new Date(item.actual_end)
-        : now;
-    } else if (item.scheduled_start && item.scheduled_end) {
-      start = new Date(item.scheduled_start);
-      end = new Date(item.scheduled_end);
-    } else {
-      continue;
+  if (allMemberships.length === 0 && hasPreSavedFreeHours) {
+    for (const item of activeItems) {
+      const savedHrs = Number((item as any).free_hours_to_redeem) || 0;
+      if (savedHrs > 0) {
+        const freeHoursDiscount = savedHrs * (item.rate_per_hour || 0);
+        totalFreeHoursDiscount += freeHoursDiscount;
+        const storeTable = storeTablesRef.find(t => t.id === item.table_id);
+        itemDeductions.push({
+          tableName: storeTable?.name || item.table?.name || "Table",
+          hoursRedeemed: savedHrs,
+          remainingHours: 0,
+        });
+      }
     }
+  } else {
+    for (const item of activeItems) {
+      const tableMeta = item.table as { id?: string; type?: string } | null;
+      const tableId = item.table_id || tableMeta?.id;
+      const storeTable = storeTablesRef.find(t => t.id === tableId);
+      const tableType = tableMeta?.type || storeTable?.type || "";
 
-    const durationHrs = (end.getTime() - start.getTime()) / (3600 * 1000);
-    // Free hours cover full duration (session + extensions) up to available ledger balance
-    const maxRedeem = Math.min(durationHrs, remainingFreeHrs);
+      const itemMembershipId = (item as any).membership_id;
+      const isBound = (m: any) => !m.bound_table_ids || m.bound_table_ids.length === 0 || m.bound_table_ids.includes(tableId ?? "");
+      let coveringMembership = itemMembershipId
+        ? allMemberships.find(m => m.id === itemMembershipId && isBound(m))
+        : allMemberships.find(m => isBound(m));
 
-    const freeHoursDiscount = maxRedeem * (item.rate_per_hour || 0);
-    totalFreeHoursDiscount += freeHoursDiscount;
-    ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
+      if (!coveringMembership) continue;
 
-    itemDeductions.push({
-      tableName: storeTable?.name || item.table?.name || "Table",
-      hoursRedeemed: maxRedeem,
-      remainingHours: ledger[tableType],
-    });
+      const ledger = ledgerUpdates.get(coveringMembership.id);
+      if (!ledger) continue;
+      const remainingFreeHrs = Number(ledger[tableType]) || 0;
+      if (remainingFreeHrs <= 0) continue;
+
+      let start: Date;
+      let end: Date;
+      if (item.actual_start) {
+        start = new Date(item.actual_start);
+        end = item.expected_end
+          ? new Date(item.expected_end)
+          : item.actual_end
+          ? new Date(item.actual_end)
+          : now;
+      } else if (item.scheduled_start && item.scheduled_end) {
+        start = new Date(item.scheduled_start);
+        end = new Date(item.scheduled_end);
+      } else {
+        continue;
+      }
+
+      const durationHrs = (end.getTime() - start.getTime()) / (3600 * 1000);
+      // Free hours cover full duration (session + extensions) up to available ledger balance
+      const maxRedeem = Math.min(durationHrs, remainingFreeHrs);
+
+      const freeHoursDiscount = maxRedeem * (item.rate_per_hour || 0);
+      totalFreeHoursDiscount += freeHoursDiscount;
+      ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
+
+      itemDeductions.push({
+        tableName: storeTable?.name || item.table?.name || "Table",
+        hoursRedeemed: maxRedeem,
+        remainingHours: ledger[tableType],
+      });
+    }
   }
 
   // Use public_discount_amount (coupon-only portion stored at booking time).
