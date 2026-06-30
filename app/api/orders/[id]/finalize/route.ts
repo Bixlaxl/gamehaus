@@ -106,15 +106,17 @@ export async function POST(
 
   const now = new Date();
 
+  const targetMembershipId = membership_id || order.membership_id;
+
   // Fetch ALL active memberships for this customer (if validated) + points balance in parallel
   const [allMembershipsResult, pointsProfileResult] = await Promise.all([
-    (effectivePhone && membership_id)
+    (effectivePhone && targetMembershipId)
       ? admin
           .from("customer_memberships")
           .select("*, plan:membership_plans(*)")
           .eq("customer_phone", effectivePhone)
           .eq("is_active", true)
-          .or(`id.eq.${membership_id},short_id.eq.${membership_id.toUpperCase()}`)
+          .or(`id.eq.${targetMembershipId},short_id.eq.${targetMembershipId.toUpperCase()}`)
           .gte("expires_at", now.toISOString())
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
