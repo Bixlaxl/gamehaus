@@ -403,7 +403,20 @@ export async function sendWhatsAppInvoice(orderId: string): Promise<{ success: b
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("*, locations(name, slug, timezone)")
+    .select(`
+      *,
+      locations(name, slug, timezone),
+      items:order_items(
+        id,
+        actual_start,
+        actual_end,
+        scheduled_start,
+        scheduled_end,
+        rate_per_hour,
+        free_hours_to_redeem,
+        tables(name, type)
+      )
+    `)
     .eq("id", orderId)
     .single();
 
@@ -420,18 +433,113 @@ export async function sendWhatsAppInvoice(orderId: string): Promise<{ success: b
   const customerName = order.customer_name || "Valued Customer";
   const totalPaid = Math.round((Number(order.advance_paid) || 0) + (Number(order.amount_due) || 0));
   const locationName = (order.locations as any)?.name || "Gamehaus";
+  const slug = (order.locations as any)?.slug || "gamehaus";
+  const timezone = (order.locations as any)?.timezone || "Asia/Kolkata";
 
   const messageText = `Hello ${customerName},\n\nThank you for visiting ${locationName}! 🎮\n\nTotal Amount: ₹${totalPaid}\n\nView & Download your Digital Bill PDF here:\n${billUrl}\n\nSee you again soon! 🎱`;
   const waMeUrl = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
 
+  // Determine membership details
+  const isMemberSession = !!order.membership_id;
+  const items = (order.items as any[]) || [];
+  const freeHrsUsed = items.reduce((sum: number, item: any) => sum + (Number(item.free_hours_to_redeem) || 0), 0);
+  const isFreeHrsSession = isMemberSession && freeHrsUsed > 0;
+
+  let membership: any = null;
+  if (isMemberSession) {
+    const { data } = await admin
+      .from("customer_memberships")
+      .select("*, plan:membership_plans(*)")
+      .eq("id", order.membership_id as string)
+      .maybeSingle();
+    membership = data;
+  }
+
+  // Format table names
+  const tableNames = items
+    .map((item: any) => item.tables?.name || "Table")
+    .filter((val, index, self) => self.indexOf(val) === index)
+    .join(", ") || "Gaming Session";
+
+  // Format timeslot
+  const formatTime = (d: Date, tz: string) => {
+    let str = d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+      timeZone: tz,
+    });
+    return str.toLowerCase();
+  };
+
+  const timeslots = items
+    .map((item: any) => {
+      const start = item.actual_start || item.scheduled_start;
+      const end = item.actual_end || item.expected_end || item.scheduled_end;
+      if (!start || !end) return "";
+      return `${formatTime(new Date(start), timezone)} – ${formatTime(new Date(end), timezone)}`;
+    })
+    .filter(Boolean)
+    .filter((val, index, self) => self.indexOf(val) === index)
+    .join(", ") || "Session";
+
+  const expiryDate = membership?.expires_at
+    ? new Date(membership.expires_at).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: timezone,
+      })
+    : "N/A";
+
   // Attempt Meta Cloud API send if configured
   let apiSuccess = false;
-  const accessToken = process.env.WHATSAPP_TOKEN;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (accessToken && phoneNumberId) {
     try {
-      const templateName = (order.locations as any)?.slug === "nerf-turf" ? "nerfturf_invoice" : "gamehaus_invoice";
+      let templateName = "";
+      let hasHeaderVar = false;
+      let bodyParams: { type: string; text: string }[] = [];
+
+      if (isFreeHrsSession) {
+        templateName = slug === "nerf-turf" ? "nerfturf_member_session_hours" : "gamehaus_member_session_hours";
+        hasHeaderVar = true;
+        
+        const remainingHrs = Object.values(membership?.free_hours_ledger || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+
+        bodyParams = [
+          { type: "text", text: tableNames },
+          { type: "text", text: timeslots },
+          { type: "text", text: freeHrsUsed.toString() },
+          { type: "text", text: remainingHrs.toString() },
+          { type: "text", text: expiryDate },
+        ];
+      } else if (isMemberSession) {
+        templateName = slug === "nerf-turf" ? "nerfturf_member_session_discount" : "gamehaus_member_session_discount";
+        hasHeaderVar = true;
+
+        const savedAmount = Math.max(0, Math.round((Number(order.discount_amount) - (Number(order.public_discount_amount) || 0)) * 100) / 100);
+
+        bodyParams = [
+          { type: "text", text: tableNames },
+          { type: "text", text: timeslots },
+          { type: "text", text: savedAmount.toString() },
+          { type: "text", text: expiryDate },
+        ];
+      } else {
+        templateName = slug === "nerf-turf" ? "nerfturf_invoice" : "gamehaus_invoice";
+        hasHeaderVar = false;
+
+        bodyParams = [
+          { type: "text", text: customerName },
+          { type: "text", text: order.id.slice(0, 8).toUpperCase() },
+          { type: "text", text: totalPaid.toString() },
+          { type: "text", text: billUrl },
+        ];
+      }
+
       const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -441,14 +549,17 @@ export async function sendWhatsAppInvoice(orderId: string): Promise<{ success: b
           name: templateName,
           language: { code: "en" },
           components: [
+            ...(hasHeaderVar ? [
+              {
+                type: "header",
+                parameters: [
+                  { type: "text", text: customerName }
+                ]
+              }
+            ] : []),
             {
               type: "body",
-              parameters: [
-                { type: "text", text: customerName },
-                { type: "text", text: order.id.slice(0, 8).toUpperCase() },
-                { type: "text", text: totalPaid.toString() },
-                { type: "text", text: billUrl },
-              ],
+              parameters: bodyParams,
             },
           ],
         },
@@ -463,6 +574,9 @@ export async function sendWhatsAppInvoice(orderId: string): Promise<{ success: b
         body: JSON.stringify(payload),
       });
       apiSuccess = response.ok;
+      if (!response.ok) {
+        console.error("[WhatsApp send error]", await response.text());
+      }
     } catch (e) {
       console.error("[WhatsApp Invoice API error]", e);
     }

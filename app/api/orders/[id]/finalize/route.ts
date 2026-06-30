@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { calculateBill } from "@/lib/billing/engine";
 import { getAppSettings } from "@/lib/settings";
+import { sendWhatsAppInvoice } from "@/lib/whatsapp";
 import { z } from "zod";
 import type { OrderItem, OrderExtra, Coupon } from "@/lib/supabase/types";
 
@@ -349,6 +350,12 @@ export async function POST(
         last_visit_at:  now.toISOString(),
       });
     }
+  }
+
+  if (effectivePhone) {
+    sendWhatsAppInvoice(orderId).catch((e) => {
+      console.error("[WhatsApp] Failed to auto-send invoice/membership WhatsApp notification:", e);
+    });
   }
 
   return NextResponse.json(ok({
