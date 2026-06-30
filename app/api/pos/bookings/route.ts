@@ -8,6 +8,31 @@ export const runtime = 'edge';
 
 export const dynamic = "force-dynamic";
 
+async function autoMarkNoShows(admin: ReturnType<typeof createAdminClient>, locationId: string) {
+  try {
+    const now = new Date().toISOString();
+    const { data: expiredBookings } = await admin
+      .from("bookings")
+      .select("id, order:orders!inner(location_id)")
+      .eq("status", "confirmed")
+      .eq("orders.location_id", locationId)
+      .lte("scheduled_end", now);
+
+    if (expiredBookings && expiredBookings.length > 0) {
+      const expiredIds = expiredBookings.map((b: any) => b.id);
+      await admin
+        .from("bookings")
+        .update({
+          status: "no_show",
+          no_show_marked_at: now,
+        })
+        .in("id", expiredIds);
+    }
+  } catch (err) {
+    console.error("Failed to auto-mark no-shows:", err);
+  }
+}
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -16,6 +41,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get("locationId");
   if (!locationId) return NextResponse.json(err("locationId required", "VALIDATION_ERROR"), { status: 400 });
+
+  const admin = createAdminClient();
+  await autoMarkNoShows(admin, locationId);
 
   // IST-anchored "today" window. Edge runs UTC, so setHours(0,0,0,0) cuts off
   // IST traffic at the boundary — late-IST bookings would fall into UTC's
@@ -28,7 +56,6 @@ export async function GET(request: Request) {
   const todayMs    = Date.UTC(y, mo, d, 0, 0, 0) - IST_OFFSET_MS;     // IST today 00:00
   const tomorrowMs = todayMs + 24 * 60 * 60 * 1000;
 
-  const admin = createAdminClient();
   const { data, error } = await admin
     .from("bookings")
     .select(`
