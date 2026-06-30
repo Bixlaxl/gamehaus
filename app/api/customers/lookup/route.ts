@@ -6,10 +6,56 @@ export const runtime = 'edge';
 
 export const dynamic = "force-dynamic";
 
+function fuzzyMatch(name1: string, name2: string): boolean {
+  const norm1 = name1.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  const norm2 = name2.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+
+  if (norm1 === norm2) return true;
+  if (!norm1 || !norm2) return false;
+
+  // Split into tokens
+  const tokens1 = norm1.split(" ");
+  const tokens2 = norm2.split(" ");
+
+  // Check if all tokens of one name are included in the other name (subset check)
+  const all1In2 = tokens1.every(t => tokens2.includes(t));
+  const all2In1 = tokens2.every(t => tokens1.includes(t));
+  if (all1In2 || all2In1) return true;
+
+  // Levenshtein Distance helper
+  const getLevenshteinDistance = (a: string, b: string): number => {
+    const tmp: number[][] = [];
+    for (let i = 0; i <= a.length; i++) {
+      tmp[i] = [i];
+    }
+    for (let j = 0; j <= b.length; j++) {
+      tmp[0][j] = j;
+    }
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        tmp[i][j] = Math.min(
+          tmp[i - 1][j] + 1,
+          tmp[i][j - 1] + 1,
+          tmp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+        );
+      }
+    }
+    return tmp[a.length][b.length];
+  };
+
+  // If edit distance is very small relative to the length
+  const dist = getLevenshteinDistance(norm1, norm2);
+  const maxLen = Math.max(norm1.length, norm2.length);
+  // Allow 1 typo for short names, 2 for medium names, 3 for long names
+  const allowedDist = maxLen <= 5 ? 1 : maxLen <= 10 ? 2 : 3;
+  
+  return dist <= allowedDist;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const phone    = searchParams.get("phone")?.trim();
-  const nameParam = searchParams.get("name")?.trim().toLowerCase();
+  const nameParam = searchParams.get("name")?.trim();
 
   if (!phone || phone.length < 6) {
     return NextResponse.json({ found: false, customer: null });
@@ -40,21 +86,17 @@ export async function GET(request: Request) {
 
   const data = profileResult.data;
   if (!data) {
-    return NextResponse.json({ found: false, customer: null });
+    return NextResponse.json({ found: false, customer: null, is_new: true });
   }
 
-  // If name is provided (public website), require it to match — prevents
-  // guessing phone numbers from seeing points / membership. On mismatch we
-  // still surface a name_mismatch hint with the stored name so the checkout
-  // page can show the same "Use existing / Update name" popup the staff sees.
+  // Use fuzzy matching logic to verify if the typed name closely matches the registered name
   if (nameParam) {
-    const storedName = (data.name ?? "").toLowerCase().trim();
-    if (storedName !== nameParam) {
+    const storedName = data.name ?? "";
+    if (!fuzzyMatch(nameParam, storedName)) {
       return NextResponse.json({
-        found:         false,
-        customer:      null,
-        name_mismatch: true,
-        stored_name:   data.name,
+        found: false,
+        error: "mismatch",
+        customer: null,
       });
     }
   }

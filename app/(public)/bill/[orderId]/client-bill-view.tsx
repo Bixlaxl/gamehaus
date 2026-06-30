@@ -191,9 +191,20 @@ export function ClientBillView({ order }: ClientBillViewProps) {
                     </div>
                   )}
                   {memDisc > 0 && (
-                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium">
-                      <span>Membership Discount / Free Hours</span>
-                      <span className="font-mono font-semibold">−{formatCurrency(memDisc)}</span>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium">
+                        <span>Membership Discount / Free Hours</span>
+                        <span className="font-mono font-semibold">−{formatCurrency(memDisc)}</span>
+                      </div>
+                      {order.items?.filter((item: any) => Number(item.free_hours_to_redeem) > 0).map((item: any) => {
+                        const tableName = item.tables?.name || "Table";
+                        const hrs = Number(item.free_hours_to_redeem);
+                        return (
+                          <div key={item.id} className="pl-3 border-l-2 border-purple-200 dark:border-purple-900 text-xs text-purple-600 dark:text-purple-400 font-medium">
+                            Redeemed {hrs} {hrs === 1 ? 'hr' : 'hrs'} for {tableName}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   {pubDisc === 0 && memDisc === 0 && discountAmount > 0 && (

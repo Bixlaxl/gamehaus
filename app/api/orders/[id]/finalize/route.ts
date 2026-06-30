@@ -23,6 +23,7 @@ const schema = z.object({
   coupon_code:     z.string().optional(),
   points_redeemed: z.number().int().min(0).optional().default(0),
   customer_phone:  z.string().optional(),
+  membership_id:   z.string().optional(),
 });
 
 export async function POST(
@@ -38,7 +39,7 @@ export async function POST(
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { payments, coupon_code, points_redeemed, customer_phone: phoneOverride } = parsed.data;
+  const { payments, coupon_code, points_redeemed, customer_phone: phoneOverride, membership_id } = parsed.data;
 
   // Fetch order, items, and extras in parallel — 3 round trips → 1
   const [
@@ -104,14 +105,15 @@ export async function POST(
 
   const now = new Date();
 
-  // Fetch ALL active memberships for this customer + points balance in parallel
+  // Fetch ALL active memberships for this customer (if validated) + points balance in parallel
   const [allMembershipsResult, pointsProfileResult] = await Promise.all([
-    effectivePhone
+    (effectivePhone && membership_id)
       ? admin
           .from("customer_memberships")
           .select("*, plan:membership_plans(*)")
           .eq("customer_phone", effectivePhone)
           .eq("is_active", true)
+          .or(`id.eq.${membership_id},short_id.eq.${membership_id.toUpperCase()}`)
           .gte("expires_at", now.toISOString())
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
@@ -190,6 +192,8 @@ export async function POST(
     totalFreeHoursDiscount += freeHoursDiscount;
     ledgerEntry.hoursRedeemed += maxRedeem;
     ledgerEntry.ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
+    (item as any).free_hours_to_redeem = maxRedeem;
+    (item as any).membership_id = coveringMembership.id;
   }
 
   const bill = calculateBill(
@@ -277,6 +281,13 @@ export async function POST(
       }).eq("id", e.id)
     );
 
+  const itemUpdatePromises = activeItems.map(item =>
+    admin.from("order_items").update({
+      free_hours_to_redeem: (item as any).free_hours_to_redeem ?? null,
+      membership_id: (item as any).membership_id ?? null,
+    }).eq("id", item.id)
+  );
+
   const [
     { error: finalizeError },
     { error: paymentError },
@@ -306,6 +317,7 @@ export async function POST(
       : Promise.resolve(null),
     admin.from("bookings").update({ status: "finished" }).eq("order_id", orderId),
     ...membershipUpdatePromises,
+    ...itemUpdatePromises,
   ] as const);
 
   if (finalizeError) {

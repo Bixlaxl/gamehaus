@@ -7,10 +7,10 @@ import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import Script from "next/script";
-import { NameMismatchModal } from "@/components/pos/name-mismatch-modal";
 import {
   ArrowLeft, Trash2, ShoppingCart, User, Phone,
   CreditCard, Tag, ChevronRight, Clock, Calendar, Star, CalendarX,
+  ShieldCheck, Shield, Check, Ban,
 } from "lucide-react";
 
 interface CustomerLookup {
@@ -119,9 +119,7 @@ export default function CheckoutPage() {
   const [redeemHoursInput, setRedeemHoursInput] = useState<number>(0);
   const [itemRedeemHours, setItemRedeemHours] = useState<Record<string, number>>({});
   const [showValidationPopup, setShowValidationPopup] = useState(false);
-  // When the typed name doesn't match the name stored against this phone,
-  // we show the same Use existing / Update name choice the staff sees.
-  const [nameMismatchOnline, setNameMismatchOnline] = useState<{ stored: string; entered: string } | null>(null);
+  const [isNameMismatched, setIsNameMismatched] = useState(false);
   const [lookingUp, setLookingUp]     = useState(false);
   const [redeemInput, setRedeemInput] = useState("0");
   const [now, setNow]                 = useState(() => new Date());
@@ -411,12 +409,15 @@ export default function CheckoutPage() {
 
     for (const item of cart.items) {
       const coveringVm = validatedMemberships.find(vm => {
-        if (!isTableCoveredByMembership(vm, item)) return false;
+        const covered = isTableCoveredByMembership(vm, item);
         const ledger = currentLedgers.get(vm.id);
-        if (!ledger) return false;
         const tableType = item.tableType || "";
-        return (Number(ledger[tableType]) || 0) > 0;
+        const remHrs = ledger ? (Number(ledger[tableType]) || 0) : 0;
+        console.log(`[Discount Check] Item: ${item.tableName} (${item.tableType}), VM: ${vm.plan?.name} (ID: ${vm.id}), Covered: ${covered}, LedgerHrs: ${remHrs}`);
+        if (!covered) return false;
+        return remHrs > 0;
       });
+      console.log(`[Discount Selected] Item: ${item.tableName}, Matched VM: ${coveringVm?.plan?.name || 'none'}`);
       if (!coveringVm) continue;
       
       const ledger = currentLedgers.get(coveringVm.id);
@@ -507,7 +508,8 @@ export default function CheckoutPage() {
     setCustomer(null);
     setMembershipIdInput("");
     setRedeemInput("0");
-    setNameMismatchOnline(null);
+    setIsNameMismatched(false);
+    setError(null);
     // Both a valid Indian mobile number and name are required for lookup on the public site
     const isValidIndianPhone = /^[6-9]\d{9}$/.test(currentPhone.trim());
     if (isValidIndianPhone && currentName.trim().length >= 2) {
@@ -518,15 +520,20 @@ export default function CheckoutPage() {
         const data = await res.json() as {
           found: boolean;
           customer: CustomerLookup | null;
-          name_mismatch?: boolean;
-          stored_name?: string | null;
+          error?: string;
         };
-        setCustomer(data.customer);
-        // Same number, different name → surface the popup so the customer
-        // can pick whether to use the previously-registered name or update
-        // their profile to the newly entered one.
-        if (data.name_mismatch && data.stored_name) {
-          setNameMismatchOnline({ stored: data.stored_name, entered: currentName.trim() });
+        
+        if (data.error === "mismatch") {
+          setIsNameMismatched(true);
+          setCustomer(null);
+          setValidatedMemberships([]);
+          setDismissedMembership(true);
+          setShowValidationPopup(false);
+          setError("The name and phone number combination entered does not match our records. Please verify your details or contact support.");
+        } else {
+          setIsNameMismatched(false);
+          setCustomer(data.customer);
+          setError(null);
         }
         setLookingUp(false);
       }, 600);
@@ -566,6 +573,10 @@ export default function CheckoutPage() {
     }
     if (phone.length !== 10) {
       setError("Phone must be exactly 10 digits");
+      return;
+    }
+    if (isNameMismatched) {
+      setError("The name and phone number combination entered does not match our records. Please verify your details or contact support.");
       return;
     }
     if (cart.items.length === 0) {
@@ -724,28 +735,6 @@ export default function CheckoutPage() {
   return (
     <>
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-      {nameMismatchOnline && (
-        <NameMismatchModal
-          existingName={nameMismatchOnline.stored}
-          enteredName={nameMismatchOnline.entered}
-          phone={phone}
-          onCancel={() => setNameMismatchOnline(null)}
-          onUseExisting={() => {
-            // Drop their typed name in favour of the previously-registered one
-            // and re-run the lookup so the points / membership badges appear
-            // (the lookup currently returned found:false because of the mismatch).
-            setName(nameMismatchOnline.stored);
-            setNameMismatchOnline(null);
-            triggerLookup(phone, nameMismatchOnline.stored);
-          }}
-          onUpdateName={() => {
-            // Keep the typed name. /api/orders' upsert into customer_profiles
-            // will overwrite the stored name on submit, so the owner panel
-            // reflects the new name on next refresh.
-            setNameMismatchOnline(null);
-          }}
-        />
-      )}
       {showValidationPopup && unvalidatedClaimableMembership && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div
@@ -819,20 +808,18 @@ export default function CheckoutPage() {
 
         {/* Header */}
         <header
-          className="sticky top-0 z-40 backdrop-blur-md border-b"
-          style={{ background: hdrBg, borderColor: border }}
+          className="sticky top-0 z-40 bg-[#D4541A] shadow-sm"
         >
-          <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
+          <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3 text-white">
             <Link
               href={`/${slug}`}
-              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: chipBg, color: textSec }}
+              className="flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-5 w-5 text-white" />
             </Link>
-            <h1 className="font-bold text-base" style={{ color: textPri }}>Checkout</h1>
-            <div className="ml-auto flex items-center gap-1.5 text-sm font-semibold" style={{ color: textSec }}>
-              <ShoppingCart className="h-4 w-4" />
+            <h1 className="font-bold text-base text-white">Checkout</h1>
+            <div className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-white/90">
+              <ShoppingCart className="h-4 w-4 text-white" />
               <span>{cart.items.length} {cart.items.length === 1 ? "item" : "items"}</span>
             </div>
           </div>
@@ -1109,15 +1096,20 @@ export default function CheckoutPage() {
                         <div className="space-y-2.5">
                           {cart.items.map(item => {
                             const coveringVm = validatedMemberships.find(vm => {
-                              if (!isTableCoveredByMembership(vm, item)) return false;
+                              const covered = isTableCoveredByMembership(vm, item);
                               const tableType = item.tableType || "";
-                              return getMembershipFreeHrs(vm, tableType) > 0;
+                              const freeHrs = getMembershipFreeHrs(vm, tableType);
+                              console.log(`[Render Check] Item: ${item.tableName} (${item.tableType}), VM: ${vm.plan?.name} (ID: ${vm.id}), Covered: ${covered}, FreeHrs: ${freeHrs}`);
+                              if (!covered) return false;
+                              return freeHrs > 0;
                             });
+                            console.log(`[Render Selected] Item: ${item.tableName}, Matched VM: ${coveringVm?.plan?.name || 'none'}`);
                             if (!coveringVm) return null;
                             const tableType = item.tableType || "";
                             const availableFreeHrs = getMembershipFreeHrs(coveringVm, tableType);
                             const durationHrs = item.durationMins / 60;
                             const sessionMax = Math.min(durationHrs, availableFreeHrs);
+                            console.log(`[Render Final] Item: ${item.tableName}, Duration: ${durationHrs}, Available: ${availableFreeHrs}, sessionMax: ${sessionMax}`);
                             if (sessionMax <= 0) return null;
                             const key = getItemKey(item);
                             const currentVal = itemRedeemHours[key] !== undefined ? itemRedeemHours[key] : sessionMax;
@@ -1177,130 +1169,339 @@ export default function CheckoutPage() {
           </Section>
 
 
-          {/* Payment mode */}
+          {/* Choose payment option */}
           <Section surface={surface} border={border} dark={dark}>
-            <SectionHeader title="Payment" border={border} textMut={textMut} />
             <div className="p-5 space-y-4">
-              {/* Payment mode toggle — advance hidden when total ≤ advance threshold */}
-              {forceFullPay ? (
-                <div>
-                  <div
-                    className="p-4 rounded-xl border"
-                    style={{ background: "rgba(212,84,26,0.08)", borderColor: "#D4541A", boxShadow: "0 0 0 1px #D4541A" }}
-                  >
-                    <CreditCard className="h-4 w-4 mb-2" style={{ color: "#D4541A" }} />
-                    <p className="font-semibold text-sm" style={{ color: textPri }}>Pay in full</p>
-                    <p className="text-xs mt-0.5" style={{ color: textSec }}>{formatCurrency(subtotal)}</p>
+              <div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white" style={{ color: textPri }}>
+                  Choose payment option
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5" style={{ color: textSec }}>
+                  Pick the option that works best for you.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Card 1: Reserve with Advance */}
+                {(() => {
+                  const isSelected = paymentMode === "advance" && !forceFullPay;
+                  const isDisabled = forceFullPay;
+                  return (
+                    <button
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => {
+                        if (!isDisabled) {
+                          setPaymentMode("advance");
+                        }
+                      }}
+                      className={`rounded-2xl p-4 border-2 flex flex-col justify-between text-left transition-all select-none w-full ${
+                        isDisabled ? "opacity-45 cursor-not-allowed" : "cursor-pointer"
+                      }`}
+                      style={{
+                        background: isSelected ? "rgba(212,84,26,0.03)" : surface,
+                        borderColor: isSelected ? "#D4541A" : border,
+                        boxShadow: isSelected ? "0 4px 20px rgba(212,84,26,0.08)" : "none",
+                      }}
+                    >
+                      <div className="w-full">
+                        {/* Top Row */}
+                        <div className="flex justify-between items-center w-full">
+                          <div className="w-9 h-9 rounded-full bg-[#FFF5F2] flex items-center justify-center">
+                            <CreditCard className="h-4 w-4" style={{ color: "#D4541A" }} />
+                          </div>
+                          {/* Radio indicator */}
+                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                            isSelected ? "border-[#D4541A] bg-[#D4541A] text-white" : "border-gray-300 bg-white"
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                        </div>
+
+                        {/* Titles */}
+                        <h3 className="font-bold text-sm text-gray-900 dark:text-white mt-4" style={{ color: textPri }}>
+                          Reserve with Advance
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1 font-medium" style={{ color: textSec }}>
+                          Pay {formatCurrency(advanceAmount)} now, rest at venue
+                        </p>
+
+                        {/* Detail list */}
+                        <div className="space-y-2 mt-4">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 text-[#D4541A]" />
+                            <span className="text-[11px] font-bold text-[#D4541A]">
+                              Table held for 10 minutes
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-3.5 w-3.5 text-gray-400" />
+                            <span className="text-[11px] font-semibold text-gray-500" style={{ color: textSec }}>
+                              Advance is non-refundable
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Ban className="h-3.5 w-3.5 text-[#D4541A]" />
+                            <span className="text-[11px] font-bold text-[#D4541A]">
+                              Coupons not applicable
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom pay container */}
+                      <div className="w-full bg-gray-50 dark:bg-gray-900/60 rounded-xl p-3 flex justify-between items-center mt-5 border border-gray-100 dark:border-gray-800">
+                        <span className="text-xs text-gray-500 font-semibold" style={{ color: textSec }}>Pay now</span>
+                        <span className="text-sm font-extrabold text-[#D4541A]">{formatCurrency(advanceAmount)}</span>
+                      </div>
+                    </button>
+                  );
+                })()}
+
+                {/* Card 2: Pay in Full */}
+                {(() => {
+                  const isSelected = paymentMode === "full" || forceFullPay;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMode("full");
+                      }}
+                      className="rounded-2xl p-4 border-2 flex flex-col justify-between text-left cursor-pointer transition-all select-none w-full relative"
+                      style={{
+                        background: isSelected ? "rgba(212,84,26,0.03)" : surface,
+                        borderColor: isSelected ? "#D4541A" : border,
+                        boxShadow: isSelected ? "0 4px 20px rgba(212,84,26,0.08)" : "none",
+                      }}
+                    >
+                      <div className="w-full">
+                        {/* Top Row */}
+                        <div className="flex justify-between items-center w-full">
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-full bg-[#FFF5F2] flex items-center justify-center">
+                              <CreditCard className="h-4 w-4" style={{ color: "#D4541A" }} />
+                            </div>
+                            {/* Recommended Badge */}
+                            <div className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider bg-[#D4541A] text-white flex items-center gap-0.5">
+                              <Star className="h-2.5 w-2.5 fill-current" /> RECOMMENDED
+                            </div>
+                          </div>
+                          {/* Radio indicator */}
+                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                            isSelected ? "border-[#D4541A] bg-[#D4541A] text-white" : "border-gray-300 bg-white"
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                        </div>
+
+                        {/* Titles */}
+                        <h3 className="font-bold text-sm text-gray-900 dark:text-white mt-4" style={{ color: textPri }}>
+                          Pay in Full
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1 font-medium" style={{ color: textSec }}>
+                          Pay {formatCurrency(subtotal)} now
+                        </p>
+
+                        {/* Detail list */}
+                        <div className="space-y-2 mt-4">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 text-green-600" />
+                            <span className="text-[11px] font-bold text-green-600">
+                              Table held for 20 minutes
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Tag className="h-3.5 w-3.5 text-green-600" />
+                            <span className="text-[11px] font-bold text-green-600">
+                              Coupons accepted
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                            <span className="text-[11px] font-bold text-green-600">
+                              Better cancellation policy
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom pay container */}
+                      <div className="w-full bg-gray-50 dark:bg-gray-900/60 rounded-xl p-3 flex justify-between items-center mt-5 border border-gray-100 dark:border-gray-800">
+                        <span className="text-xs text-gray-500 font-semibold" style={{ color: textSec }}>Pay now</span>
+                        <span className="text-sm font-extrabold text-[#D4541A]">{formatCurrency(subtotal)}</span>
+                      </div>
+                    </button>
+                  );
+                })()}
+              </div>
+
+              {forceFullPay && (
+                <p className="text-xs text-gray-500 mt-1 px-1" style={{ color: textMut }}>
+                  {validatedMemberships.length > 0
+                    ? "Reserve option disabled when membership is applied — paying in full applies your membership credits directly."
+                    : `Reserve option unavailable — booking total (${formatCurrency(subtotal)}) is at or below the advance threshold (${formatCurrency(advanceAmount)}).`}
+                </p>
+              )}
+            </div>
+          </Section>
+
+          {/* Arriving late? warning box */}
+          <div
+            className="rounded-2xl p-4 flex items-start gap-3 border"
+            style={{
+              background: "rgba(212,84,26,0.02)",
+              borderColor: "rgba(212,84,26,0.15)",
+            }}
+          >
+            <div className="w-9 h-9 rounded-full bg-[#FFF5F2] flex items-center justify-center shrink-0">
+              <Clock className="h-5 w-5 text-[#D4541A]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-bold text-gray-900 dark:text-white" style={{ color: textPri }}>
+                Arriving late?
+              </h4>
+              <p className="text-xs mt-1 text-gray-600 dark:text-gray-400 leading-relaxed" style={{ color: textSec }}>
+                Fully prepaid bookings are held for <span className="font-semibold text-[#D4541A]">20 minutes</span>. Advance bookings are held for <span className="font-semibold text-[#D4541A]">10 minutes</span> from the scheduled start time.
+              </p>
+            </div>
+          </div>
+
+          {/* Cancellation policy description */}
+          {paymentMode === "full" && (() => {
+            const tiers = cancellationTiers.full
+              .slice()
+              .sort((a, b) => b.hours_before - a.hours_before);
+            if (tiers.length === 0) return null;
+            return (
+              <div
+                className="rounded-2xl px-4 py-3 border border-dashed"
+                style={{ background: surface, borderColor: border }}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMut }}>
+                  Cancellation policy
+                </p>
+                <ul className="space-y-1">
+                  {tiers.map((t, idx) => (
+                    <li key={idx} className="flex justify-between text-xs">
+                      <span style={{ color: textSec }}>
+                        {t.hours_before === 0
+                          ? "Less than 1 hour before"
+                          : `${t.hours_before}+ hours before`}
+                      </span>
+                      <span className="font-bold" style={{ color: t.refund_pct > 0 ? "#10B981" : textMut }}>
+                        {t.refund_pct}% refund
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
+          {/* Unified Summary Section */}
+          <Section surface={surface} border={border} dark={dark}>
+            <SectionHeader title="Summary" border={border} textMut={textMut} />
+            <div className="p-5 space-y-4">
+              {/* Itemized list */}
+              <div className="space-y-3">
+                {cart.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-sm text-gray-600 dark:text-gray-400" style={{ color: textSec }}>
+                    <span>
+                      {item.tableName} ({fmtTime(item.scheduledStart)} – {fmtTime(item.scheduledEnd)})
+                    </span>
+                    <span className="font-semibold">{formatCurrency(item.amount)}</span>
                   </div>
-                  <p className="text-xs mt-2 px-1" style={{ color: textMut }}>
-                    {validatedMemberships.length > 0
-                      ? "Reserve option disabled when membership is applied — paying in full applies your membership credits directly."
-                      : `Reserve option unavailable — booking total (${formatCurrency(subtotal)}) is at or below the advance threshold (${formatCurrency(advanceAmount)}).`}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {(["advance", "full"] as const).map(mode => {
-                    const active = paymentMode === mode;
-                    return (
-                      <button
-                        key={mode}
-                        onClick={() => setPaymentMode(mode)}
-                        className="p-4 rounded-xl border text-left transition-all"
-                        style={{
-                          background: active ? "rgba(212,84,26,0.08)" : inputBg,
-                          borderColor: active ? "#D4541A" : inputBdr,
-                          boxShadow: active ? "0 0 0 1px #D4541A" : "none",
-                        }}
-                      >
-                        <CreditCard className="h-4 w-4 mb-2" style={{ color: active ? "#D4541A" : textMut }} />
-                        <p className="font-semibold text-sm" style={{ color: textPri }}>
-                          {mode === "advance"
-                            ? `Reserve — ₹${advanceAmount}`
-                            : "Pay in full"}
-                        </p>
-                        <p className="text-xs mt-0.5" style={{ color: textSec }}>
-                          {mode === "advance"
-                            ? cart.items.length > 1
-                              ? `₹${advancePerTable}/table · rest at venue`
-                              : "Rest at venue"
-                            : formatCurrency(subtotal)}
-                        </p>
-                      </button>
-                    );
-                  })}
+                ))}
+
+                {/* Extras/Add-ons */}
+                {checkoutAddons.map((item) => {
+                  const qty = selectedExtras[item.id] || 0;
+                  if (qty === 0) return null;
+                  return (
+                    <div key={item.id} className="flex justify-between text-sm text-gray-600 dark:text-gray-400" style={{ color: textSec }}>
+                      <span>
+                        {item.name} (x{qty})
+                      </span>
+                      <span className="font-semibold">{formatCurrency(item.selling_price * qty)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Discounts & Adjustments */}
+              {(effectiveDiscount > 0 || totalMembershipDiscount > 0 || clampedRedeem > 0) && (
+                <div className="space-y-2 pt-3 border-t border-dashed" style={{ borderColor: border }}>
+                  {effectiveDiscount > 0 && couponState.status === "valid" && (
+                    <div className="flex justify-between text-sm text-green-600 font-semibold">
+                      <span>Coupon ({couponState.code})</span>
+                      <span>-{formatCurrency(effectiveDiscount)}</span>
+                    </div>
+                  )}
+
+                  {isMembershipValid && totalMembershipDiscount > 0 && (
+                    <>
+                      {freeHoursDiscount > 0 && (
+                        <div className="flex justify-between text-sm text-green-600 font-semibold">
+                          <span>Free Hours Discount</span>
+                          <span>-{formatCurrency(freeHoursDiscount)}</span>
+                        </div>
+                      )}
+                      {membershipPctDiscount > 0 && (
+                        <div className="flex justify-between text-sm text-green-600 font-semibold">
+                          <span>Membership ({customer.membership_discount_pct}% Off)</span>
+                          <span>-{formatCurrency(membershipPctDiscount)}</span>
+                        </div>
+                      )}
+                      {/* Detailed deductions per item */}
+                      <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#10B981" }}>
+                        {itemFreeHoursDeductions.map((d) => (
+                          <p key={d.itemKey} className="text-xs text-green-600 font-semibold">
+                            Redeemed {d.hrs} {d.hrs === 1 ? 'hr' : 'hrs'} for {d.tableName} ({d.remainingHrs} hrs remaining)
+                          </p>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {clampedRedeem > 0 && (
+                    <div className="flex justify-between text-sm text-[#F59E0B] font-semibold">
+                      <span>Points redeemed ({clampedRedeem} pts)</span>
+                      <span>-{formatCurrency(clampedRedeem)}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Non-refundable notice — only for advance/reserve mode */}
-              {paymentMode === "advance" && (
-                <div
-                  className="rounded-xl px-4 py-3"
-                  style={{ background: "rgba(239,68,68,0.07)", border: `1px solid rgba(239,68,68,0.25)` }}
-                >
-                  <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: "#EF4444" }}>
-                    Non-refundable
-                  </p>
-                  <p className="text-xs leading-relaxed" style={{ color: dark ? "#aaa" : "#777" }}>
-                    Reservations are strictly non-refundable. The advance amount will not be returned under any circumstances.
-                  </p>
-                </div>
-              )}
+              {/* Total Row */}
+              <div className="flex justify-between items-center font-bold text-base pt-3 border-t" style={{ borderColor: border, color: textPri }}>
+                <span>Total</span>
+                <span className="text-lg" style={{ color: "#D4541A" }}>{formatCurrency(amountToPay)}</span>
+              </div>
 
-              {/* Cancellation policy — only for full payment mode */}
-              {paymentMode === "full" && (() => {
-                const tiers = cancellationTiers.full
-                  .slice()
-                  .sort((a, b) => b.hours_before - a.hours_before);
-                if (tiers.length === 0) return null;
-                return (
-                  <div
-                    className="rounded-xl px-4 py-3"
-                    style={{ background: inputBg, border: `1px dashed ${inputBdr}` }}
-                  >
-                    <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMut }}>
-                      Cancellation policy
-                    </p>
-                    <ul className="space-y-1">
-                      {tiers.map((t, i) => (
-                        <li key={i} className="flex justify-between text-xs">
-                          <span style={{ color: textSec }}>
-                            {t.hours_before === 0
-                              ? "Less than 1 hour before"
-                              : `${t.hours_before}+ hours before`}
-                          </span>
-                          <span className="font-bold" style={{ color: t.refund_pct > 0 ? "#10B981" : textMut }}>
-                            {t.refund_pct}% refund
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })()}
-
+              {/* Coupons Input (only for Full pre-payment) */}
               {paymentMode === "full" && (
-                <div className="space-y-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-1" style={{ color: textMut }}>
-                    <Tag className="h-3 w-3" /> Coupon
+                <div className="pt-4 border-t border-dashed space-y-2.5" style={{ borderColor: border }}>
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ color: textSec }}>
+                    <Tag className="h-3.5 w-3.5 text-gray-400" />
+                    Coupon code <span className="text-[10px] text-gray-400 font-normal lowercase tracking-normal">(Pay in Full bookings only)</span>
                   </label>
                   
                   {activePublicCoupon && !publicCouponRemoved && !showPrivateInput ? (
-                    <div className="rounded-xl p-4 border flex items-center justify-between transition-all"
+                    <div className="rounded-xl p-3 border flex items-center justify-between transition-all"
                       style={{
-                        background: "rgba(16,185,129,0.06)",
-                        borderColor: "rgba(16,185,129,0.3)",
+                        background: "rgba(16,185,129,0.03)",
+                        borderColor: "rgba(16,185,129,0.2)",
                       }}
                     >
                       <div className="flex items-center gap-2">
-                        <Tag className="h-4 w-4" style={{ color: "#10B981" }} />
+                        <Tag className="h-4 w-4 text-green-600" />
                         <div>
-                          <p className="font-semibold text-sm" style={{ color: textPri }}>
+                          <p className="font-semibold text-xs text-gray-900 dark:text-white" style={{ color: textPri }}>
                             Deal applied: {activePublicCoupon.discount_type === "percent"
                               ? `${activePublicCoupon.discount_value}% off`
-                              : `₹${activePublicCoupon.discount_value} off`} ✓
+                              : `₹${activePublicCoupon.discount_value} off`}
                           </p>
-                          <p className="text-xs" style={{ color: textSec }}>
+                          <p className="text-[10px] text-gray-500" style={{ color: textSec }}>
                             Online full prepay booking discount
                           </p>
                         </div>
@@ -1310,7 +1511,7 @@ export default function CheckoutPage() {
                           setPublicCouponRemoved(true);
                           setCoupon("");
                         }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:bg-red-500/10 text-red-500 border border-red-500/20"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-500 border border-red-500/10 hover:bg-red-50"
                       >
                         Remove
                       </button>
@@ -1320,132 +1521,66 @@ export default function CheckoutPage() {
                       {activePublicCoupon && !showPrivateInput ? (
                         <button
                           onClick={() => setShowPrivateInput(true)}
-                          className="text-xs font-semibold hover:opacity-85 transition-opacity"
-                          style={{ color: "#D4541A" }}
+                          className="text-xs font-semibold text-[#D4541A] hover:opacity-85 transition-opacity"
                         >
                           Have a private code?
                         </button>
                       ) : (
-                        <>
+                        <div className="flex items-center gap-2">
                           <input
                             value={coupon}
                             onChange={e => setCoupon(e.target.value.toUpperCase())}
-                            placeholder="PROMO10"
-                            className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none tracking-widest"
+                            placeholder="Enter code"
+                            className="flex-1 px-4 py-2 rounded-xl text-sm font-semibold outline-none transition-colors border"
                             style={{
                               background: inputBg,
-                              border: `1.5px solid ${
+                              borderColor:
                                 couponState.status === "valid"   ? "#10B981" :
                                 couponState.status === "invalid" ? "#EF4444" :
-                                inputBdr
-                              }`,
+                                inputBdr,
                               color: textPri,
                             }}
-                            onFocus={e => {
-                              if (couponState.status === "idle" || couponState.status === "checking") {
-                                e.currentTarget.style.borderColor = "#D4541A";
-                              }
-                            }}
-                            onBlur={e => {
-                              if (couponState.status === "idle" || couponState.status === "checking") {
-                                e.currentTarget.style.borderColor = inputBdr;
-                              }
-                            }}
                           />
-                          {activePublicCoupon && (
-                            <button
-                              onClick={() => {
-                                setShowPrivateInput(false);
-                                setPublicCouponRemoved(false);
-                              }}
-                              className="text-xs font-semibold hover:opacity-85 transition-opacity block mt-1"
-                              style={{ color: textSec }}
-                            >
-                              ← Back to public deal
-                            </button>
-                          )}
-                          {couponState.status === "checking" && (
-                            <p className="text-xs mt-1.5" style={{ color: textMut }}>Checking…</p>
-                          )}
-                          {couponState.status === "valid" && (
-                            <p className="text-xs font-semibold mt-1.5" style={{ color: "#10B981" }}>
-                              ✓ Applied — {couponState.discount_type === "percent"
-                                ? `${couponState.discount_value}% off`
-                                : `${formatCurrency(couponState.discount_value)} off`}
-                              {" "}({formatCurrency(couponState.discount_amount)} saved)
-                            </p>
-                          )}
-                          {couponState.status === "invalid" && (
-                            <p className="text-xs font-semibold mt-1.5" style={{ color: "#EF4444" }}>
-                              ✗ {couponState.reason}
-                            </p>
-                          )}
-                        </>
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded-xl border font-bold text-xs transition-all bg-[#FFF5F2] border-[#FDDCD0] text-[#D4541A] hover:bg-[#FFEBE5]"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      )}
+                      
+                      {activePublicCoupon && (
+                        <button
+                          onClick={() => {
+                            setShowPrivateInput(false);
+                            setPublicCouponRemoved(false);
+                          }}
+                          className="text-xs font-semibold text-gray-500 hover:text-gray-700 block mt-1"
+                        >
+                          ← Back to public deal
+                        </button>
+                      )}
+
+                      {couponState.status === "checking" && (
+                        <p className="text-xs text-gray-400">Checking…</p>
+                      )}
+                      {couponState.status === "valid" && (
+                        <p className="text-xs font-semibold text-green-600">
+                          ✓ Applied — {couponState.discount_type === "percent"
+                            ? `${couponState.discount_value}% off`
+                            : `${formatCurrency(couponState.discount_value)} off`}
+                          {" "}({formatCurrency(couponState.discount_amount)} saved)
+                        </p>
+                      )}
+                      {couponState.status === "invalid" && (
+                        <p className="text-xs font-semibold text-red-500">
+                          ✗ {couponState.reason}
+                        </p>
                       )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </Section>
-
-          {/* Summary */}
-          <Section surface={surface} border={border} dark={dark}>
-            <SectionHeader title="Summary" border={border} textMut={textMut} />
-            <div className="p-5 space-y-3">
-              <div className="flex justify-between text-sm" style={{ color: textSec }}>
-                <span>Subtotal ({cart.items.length} {cart.items.length === 1 ? "table" : "tables"})</span>
-                <span>{formatCurrency(subtotal)}</span>
-              </div>
-              {paymentMode === "advance" && (
-                <div className="flex justify-between text-sm" style={{ color: textSec }}>
-                  <span>Pay at venue</span>
-                  <span>{formatCurrency(subtotal - baseAmount)}</span>
-                </div>
-              )}
-              {effectiveDiscount > 0 && couponState.status === "valid" && (
-                <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
-                  <span>Coupon ({couponState.code})</span>
-                  <span>-{formatCurrency(effectiveDiscount)}</span>
-                </div>
-              )}
-              {isMembershipValid && totalMembershipDiscount > 0 && (
-                <div className="space-y-1.5">
-                  {freeHoursDiscount > 0 && (
-                    <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
-                      <span>Free Hours Discount</span>
-                      <span>-{formatCurrency(freeHoursDiscount)}</span>
-                    </div>
-                  )}
-                  {membershipPctDiscount > 0 && (
-                    <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
-                      <span>Membership ({customer.membership_discount_pct}% Off)</span>
-                      <span>-{formatCurrency(membershipPctDiscount)}</span>
-                    </div>
-                  )}
-                  <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#10B981" }}>
-                    {itemFreeHoursDeductions.map((d) => (
-                      <p key={d.itemKey} className="text-xs font-semibold" style={{ color: "#10B981" }}>
-                        Redeemed {d.hrs} {d.hrs === 1 ? 'hr' : 'hrs'} for {d.tableName} ({d.remainingHrs} hrs remaining)
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {clampedRedeem > 0 && (
-                <div className="flex justify-between text-sm" style={{ color: "#F59E0B" }}>
-                  <span>Points redeemed ({clampedRedeem} pts)</span>
-                  <span>-{formatCurrency(clampedRedeem)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-base pt-2 border-t" style={{ borderColor: border, color: textPri }}>
-                <span>Pay now</span>
-                <span style={{ color: "#D4541A" }}>{formatCurrency(amountToPay)}</span>
-              </div>
-              {paymentMode === "advance" && (
-                <p className="text-xs pt-1" style={{ color: textMut }}>
-                  Advance is non-refundable. Pay the remaining amount at the venue.
-                </p>
               )}
             </div>
           </Section>
@@ -1498,7 +1633,7 @@ export default function CheckoutPage() {
 
           <button
             onClick={checkout}
-            disabled={loading || cart.items.length === 0 || hasExpired}
+            disabled={loading || cart.items.length === 0 || hasExpired || isNameMismatched}
             className="w-full py-4 rounded-2xl font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40"
             style={{
               background: amountToPay === 0 ? "linear-gradient(135deg, #10B981 0%, #059669 100%)" : "#D4541A",

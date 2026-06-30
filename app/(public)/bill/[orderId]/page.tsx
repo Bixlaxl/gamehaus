@@ -34,6 +34,8 @@ export default async function BillPage({ params }: PageProps) {
         final_amount,
         num_people,
         selected_mode_name,
+        free_hours_to_redeem,
+        membership_id,
         tables (
           name,
           type

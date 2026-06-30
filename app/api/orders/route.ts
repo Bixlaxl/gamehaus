@@ -6,6 +6,47 @@ import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
 export const runtime = 'edge';
 
 
+function fuzzyMatch(name1: string, name2: string): boolean {
+  const norm1 = name1.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  const norm2 = name2.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+
+  if (norm1 === norm2) return true;
+  if (!norm1 || !norm2) return false;
+
+  const tokens1 = norm1.split(" ");
+  const tokens2 = norm2.split(" ");
+
+  const all1In2 = tokens1.every(t => tokens2.includes(t));
+  const all2In1 = tokens2.every(t => tokens1.includes(t));
+  if (all1In2 || all2In1) return true;
+
+  const getLevenshteinDistance = (a: string, b: string): number => {
+    const tmp: number[][] = [];
+    for (let i = 0; i <= a.length; i++) {
+      tmp[i] = [i];
+    }
+    for (let j = 0; j <= b.length; j++) {
+      tmp[0][j] = j;
+    }
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        tmp[i][j] = Math.min(
+          tmp[i - 1][j] + 1,
+          tmp[i][j - 1] + 1,
+          tmp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+        );
+      }
+    }
+    return tmp[a.length][b.length];
+  };
+
+  const dist = getLevenshteinDistance(norm1, norm2);
+  const maxLen = Math.max(norm1.length, norm2.length);
+  const allowedDist = maxLen <= 5 ? 1 : maxLen <= 10 ? 2 : 3;
+  
+  return dist <= allowedDist;
+}
+
 export async function POST(request: Request) {
   const body: unknown = await request.json();
   const parsed = createOrderSchema.safeParse(body);
@@ -26,6 +67,27 @@ export async function POST(request: Request) {
     const { data: { session } } = await serverClient.auth.getSession();
     if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
     createdBy = session.user.id;
+  }
+
+  // Backend gatekeeper check for online checkout name and phone combination
+  if (type === "online" && customer_phone) {
+    const { data: profile } = await admin
+      .from("customer_profiles")
+      .select("name")
+      .eq("phone", customer_phone)
+      .maybeSingle();
+    
+    if (profile && profile.name) {
+      if (!fuzzyMatch(customer_name, profile.name)) {
+        return NextResponse.json(
+          err(
+            "The name and phone number combination entered does not match our records. Please verify your details or contact support.",
+            "NAME_MISMATCH"
+          ),
+          { status: 400 }
+        );
+      }
+    }
   }
 
   // ── Conflict check ────────────────────────────────────────────────────────

@@ -78,17 +78,20 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const [handoverLoading,  setHandoverLoading]  = useState<string | null>(null);
   const [manualPhone,      setManualPhone]      = useState("");
   const [confirmCancel,    setConfirmCancel]    = useState(false);
+  const [membershipIdInput, setMembershipIdInput] = useState("");
+  const [validatedMemberships, setValidatedMemberships] = useState<any[]>([]);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
   const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && !i.is_deleted) ?? [];
   const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
 
-  const allMemberships = customerInfo?.active_memberships ?? [];
+  const allMemberships = validatedMemberships;
   const membershipPct = allMemberships.reduce((max, m) => {
     const pct = m.plan?.discount_pct ?? 0;
     return pct > max ? pct : max;
-  }, customerInfo?.membership_discount_pct ?? 0);
+  }, 0);
 
   const ledgerUpdates: Map<string, Record<string, number>> = new Map();
   allMemberships.forEach(m => {
@@ -96,6 +99,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   });
 
   let totalFreeHoursDiscount = 0;
+  const itemDeductions: { tableName: string; hoursRedeemed: number; remainingHours: number }[] = [];
 
   for (const item of activeItems) {
     const tableMeta = item.table as { id?: string; type?: string } | null;
@@ -139,6 +143,12 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     const freeHoursDiscount = maxRedeem * (item.rate_per_hour || 0);
     totalFreeHoursDiscount += freeHoursDiscount;
     ledger[tableType] = Math.max(0, Math.round((remainingFreeHrs - maxRedeem) * 100) / 100);
+
+    itemDeductions.push({
+      tableName: storeTable?.name || item.table?.name || "Table",
+      hoursRedeemed: maxRedeem,
+      remainingHours: ledger[tableType],
+    });
   }
 
   // Use public_discount_amount (coupon-only portion stored at booking time).
@@ -166,6 +176,9 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   useEffect(() => {
     setCustomerInfo(null);
+    setValidatedMemberships([]);
+    setMembershipIdInput("");
+    setValidationError(null);
     if (!isOpen || !phoneForLookup) {
       setLookupPending(false);
       return;
@@ -199,6 +212,9 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     setHandoverBookings([]);
     setHandoverLoading(null);
     setManualPhone("");
+    setValidatedMemberships([]);
+    setMembershipIdInput("");
+    setValidationError(null);
   }
 
   // Auto-balance helpers — typing in one field fills the other so the sum
@@ -293,6 +309,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       body: JSON.stringify({
         payments:        paymentsPayload,
         points_redeemed: clampedRedeem,
+        membership_id:   validatedMemberships.length > 0 ? validatedMemberships[0].id : undefined,
         ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
       }),
     });
@@ -498,9 +515,18 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               </div>
             )}
             {totalFreeHoursDiscount > 0 && (
-              <div className="flex justify-between">
-                <span style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
-                <span style={{ color: "#8b5cf6" }}>−{formatCurrency(totalFreeHoursDiscount)}</span>
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+                  <span style={{ color: "#8b5cf6" }}>−{formatCurrency(totalFreeHoursDiscount)}</span>
+                </div>
+                <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#8b5cf6" }}>
+                  {itemDeductions.map((d, idx) => (
+                    <p key={idx} className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                      Redeemed {d.hoursRedeemed} {d.hoursRedeemed === 1 ? 'hr' : 'hrs'} for {d.tableName} ({d.remainingHours} hrs remaining)
+                    </p>
+                  ))}
+                </div>
               </div>
             )}
             {pctDiscount > 0 && (
@@ -522,6 +548,87 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               <span style={{ color: "#D4541A" }}>{formatCurrency(finalDue)}</span>
             </div>
           </div>
+          {/* Membership validation section */}
+          {customerInfo && customerInfo.active_memberships && customerInfo.active_memberships.length > 0 && (
+            <div className="rounded-xl p-4 space-y-2.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
+              <div className="flex items-center gap-2">
+                <Star className="h-3.5 w-3.5" style={{ color: "#8b5cf6" }} />
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">Membership Details</span>
+              </div>
+
+              {validatedMemberships.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-green-600 dark:text-green-400">
+                      Membership Applied ({validatedMemberships[0].short_id}) ✓
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValidatedMemberships([]);
+                        setMembershipIdInput("");
+                      }}
+                      className="text-xs font-semibold text-red-500 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {validatedMemberships.map((vm) => (
+                      <p key={vm.id} className="text-xs text-gray-500 dark:text-[#888]">
+                        Plan: {vm.plan?.name} {vm.plan?.discount_pct > 0 ? `(${vm.plan.discount_pct}% Off)` : ""}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">
+                    Active plans detected on this number. Enter Membership ID to unlock benefits.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter Membership ID"
+                      value={membershipIdInput}
+                      onChange={(e) => {
+                        setMembershipIdInput(e.target.value);
+                        setValidationError(null);
+                      }}
+                      className="flex-1 text-sm rounded-lg px-2.5 py-1 outline-none transition-all uppercase tracking-wider
+                        bg-gray-100 dark:bg-[#1A1A1A]
+                        border border-gray-200 dark:border-[#2A2A2A]
+                        text-gray-900 dark:text-white
+                        focus:border-[#8b5cf6]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = membershipIdInput.trim().toUpperCase();
+                        const active_memberships = customerInfo.active_memberships || [];
+                        const matched = active_memberships.some((m: any) => {
+                          const target = (m.short_id || "").trim().toUpperCase();
+                          return input && target && input === target;
+                        });
+                        if (matched) {
+                          setValidatedMemberships(active_memberships);
+                          setValidationError(null);
+                        } else {
+                          setValidationError("Incorrect Membership ID");
+                        }
+                      }}
+                      className="px-3 py-1 rounded-lg font-bold text-xs bg-purple-600 hover:bg-purple-700 text-white shadow transition-all"
+                    >
+                      Validate
+                    </button>
+                  </div>
+                  {validationError && (
+                    <p className="text-[10px] font-semibold text-red-500">{validationError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Loyalty points */}
           <div className="rounded-xl p-4 space-y-2.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
