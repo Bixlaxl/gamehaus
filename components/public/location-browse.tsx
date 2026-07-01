@@ -408,8 +408,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
+    console.log("[addToCart] date:", date, "firstSlot:", firstSlot, "lastSlot:", lastSlot);
+    console.log("[addToCart] location.opening_time:", location.opening_time, "location.closing_time:", location.closing_time);
     const slotStartDate = getActualSlotDate(date, firstSlot, location.opening_time, location.closing_time);
+    console.log("[addToCart] slotStartDate:", slotStartDate);
     const startIso  = new Date(`${slotStartDate}T${firstSlot}:00`).toISOString();
+    console.log("[addToCart] startIso:", startIso);
     const endStr    = slotEndTime(lastSlot);
     const endDate   = endStr < firstSlot ? addOneDay(slotStartDate) : slotStartDate;
     const endIso    = new Date(`${endDate}T${endStr}:00`).toISOString();
