@@ -57,7 +57,7 @@ type ReportOrder = {
   type: string;
   finalized_at: string | null;
   location: { id: string; name: string } | null;
-  items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null }>;
+  items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null; final_amount?: number | null }>;
   payments: Array<{ method: string; amount: number; status: string }>;
   extras: Array<{ price: number; cost_price: number; quantity: number; is_deleted: boolean }>;
 };
@@ -118,7 +118,7 @@ export function ReportsContent({
         .select(`
           id, customer_name, customer_phone, amount_due, advance_paid, type, finalized_at,
           location:locations(id, name),
-          items:order_items(status, rate_per_hour, actual_start, expected_end),
+          items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount),
           payments(method, amount, status),
           extras:order_extras(price, cost_price, quantity, is_deleted)
         `)
@@ -243,18 +243,54 @@ export function ReportsContent({
       }
 
       // Profit: tables = 100% margin, extras = price - cost
+      let rawTableVal = 0;
       for (const i of o.items) {
-        if (i.status !== "finished" || !i.actual_start || !i.expected_end) continue;
-        const mins = (new Date(i.expected_end).getTime() - new Date(i.actual_start).getTime()) / 60000;
-        tableRevenue += (i.rate_per_hour / 60) * mins;
-      }
-      for (const e of o.extras ?? []) {
-        if (e.is_deleted) continue;
-        inventoryProfit += (e.price - e.cost_price) * e.quantity;
+        if (i.status !== "finished") continue;
+        if (i.final_amount !== null && i.final_amount !== undefined) {
+          rawTableVal += i.final_amount;
+        } else if (i.actual_start && i.expected_end) {
+          const mins = (new Date(i.expected_end).getTime() - new Date(i.actual_start).getTime()) / 60000;
+          rawTableVal += (i.rate_per_hour / 60) * mins;
+        }
       }
 
+      let rawExtraVal = 0;
+      let costOfExtras = 0;
+      for (const e of o.extras ?? []) {
+        if (e.is_deleted) continue;
+        rawExtraVal  += e.price * e.quantity;
+        costOfExtras += e.cost_price * e.quantity;
+      }
+
+      const netOrderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
+      const rawSubtotal = rawTableVal + rawExtraVal;
+      let netTableRev = 0;
+      let netExtraRev = 0;
+
+      if (rawSubtotal > 0) {
+        netTableRev = rawTableVal * (netOrderRev / rawSubtotal);
+        netExtraRev = rawExtraVal * (netOrderRev / rawSubtotal);
+      } else {
+        netTableRev = netOrderRev;
+      }
+
+      tableRevenue += netTableRev;
+      inventoryProfit += Math.max(0, netExtraRev - costOfExtras);
+
       // Payment methods
-      for (const p of o.payments) {
+      const orderPayments = [...o.payments];
+      const hasRazorpayAdvance = orderPayments.some(
+        (p) => p.method === "razorpay" && p.status === "completed" && Math.abs(p.amount - (o.advance_paid ?? 0)) < 1
+      );
+      if ((o.advance_paid ?? 0) > 0 && !hasRazorpayAdvance) {
+        orderPayments.push({
+          method: "razorpay",
+          amount: o.advance_paid!,
+          status: "completed",
+        });
+      }
+
+      for (const p of orderPayments) {
         if (p.status !== "completed") continue;
         methodMap.set(p.method, (methodMap.get(p.method) ?? 0) + (p.amount ?? 0));
       }
