@@ -97,82 +97,26 @@ export function ReportsContent({
     }
   }
 
-  const { data: reportData, isLoading } = useQuery<{ orders: ReportOrder[]; locations: ReportLocation[] }>({
+  const { data: reportData, isLoading } = useQuery<{ orders: ReportOrder[]; locations: ReportLocation[]; history: ReportOrder[] }>({
     queryKey: ["reports", from, to],
     queryFn: async () => {
-      // Fetch location hours first — day boundary is opening→closing, not midnight
-      const { data: locations } = await supabase
-        .from("locations").select("*").eq("is_active", true);
-
-      const loc     = locations?.[0];
-      const opening = loc?.opening_time ?? "10:00";
-      const closing = loc?.closing_time ?? "23:00";
-
-      const [openH]  = opening.split(":").map(Number);
-      const [closeH] = closing.split(":").map(Number);
-      const crossesMidnight = closeH < openH;
-
-      const fromISO = new Date(from + "T" + opening + "+05:30").toISOString();
-      const toEndDate = crossesMidnight
-        ? (() => { const d = new Date(to + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
-        : to;
-      const toISO = new Date(toEndDate + "T" + closing + "+05:30").toISOString();
-
-      const { data: orders } = await supabase
-        .from("orders")
-        .select(`
-          id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, total_amount, points_redeemed, type, finalized_at,
-          location:locations(id, name),
-          items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
-          payments(method, amount, status),
-          extras:order_extras(price, cost_price, quantity, is_deleted)
-        `)
-        .eq("status", "finalized")
-        .gte("finalized_at", fromISO)
-        .lte("finalized_at", toISO);
-
-      return { orders: (orders ?? []) as ReportOrder[], locations: (locations ?? []) as ReportLocation[] };
+      const res = await fetch(`/api/owner/reports?from=${from}&to=${to}`);
+      if (!res.ok) throw new Error("Failed to fetch reports");
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Failed to fetch reports");
+      return json.data;
     },
     // Only apply the SSR-rendered data when the visible window matches.
     // Changing the preset / from / to gives the new queryKey a fresh fetch
     // instead of TanStack treating the stale initialData as still-fresh.
-    initialData: from === initialFrom && to === initialTo ? initialReportData : undefined,
+    initialData: from === initialFrom && to === initialTo ? { ...initialReportData, history: [] } : undefined,
     initialDataUpdatedAt: from === initialFrom && to === initialTo ? Date.now() : undefined,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 
-  const { data: monthlyHistory, isLoading: isHistoryLoading } = useQuery<ReportOrder[]>({
-    queryKey: ["monthly-history"],
-    queryFn: async () => {
-      const today = new Date();
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(today.getMonth() - 5);
-      sixMonthsAgo.setDate(1);
-      sixMonthsAgo.setHours(0, 0, 0, 0);
-
-      const { data: locations } = await supabase
-        .from("locations").select("*").eq("is_active", true);
-
-      const loc     = locations?.[0];
-      const opening = loc?.opening_time ?? "10:00";
-      
-      const fromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + opening + "+05:30").toISOString();
-
-      const { data: orders } = await supabase
-        .from("orders")
-        .select(`
-          id, amount_due, advance_paid, finalized_at, location_id,
-          location:locations(id, name)
-        `)
-        .eq("status", "finalized")
-        .gte("finalized_at", fromISO)
-        .order("finalized_at", { ascending: true });
-
-      return (orders ?? []) as unknown as ReportOrder[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  const monthlyHistory = reportData?.history ?? [];
+  const isHistoryLoading = isLoading;
 
   const monthlyData = useMemo(() => {
     if (!monthlyHistory) return [];
