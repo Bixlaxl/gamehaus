@@ -236,6 +236,10 @@ export function ReportsContent({
       const orderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
       totalRevenue += orderRev;
 
+      // Seed location map from order data if the location wasn't in the initial locations list
+      if (o.location?.id && !revByLoc.has(o.location.id)) {
+        revByLoc.set(o.location.id, { name: o.location.name, revenue: 0, sessionCount: 0, orderCount: 0 });
+      }
       const locRow = o.location?.id ? revByLoc.get(o.location.id) : undefined;
       if (locRow) {
         locRow.revenue    += orderRev;
@@ -523,7 +527,9 @@ export function ReportsContent({
               <p className="px-5 py-6 text-xs text-gray-400 text-center">No payment data</p>
             ) : (
               paymentBreakdown.map(({ method, amount }) => {
-                const pct = totalRevenue > 0 ? Math.round((amount / totalRevenue) * 100) : 0;
+                // % relative to total payments only — membership sales have no payment method entry
+                const totalPayments = paymentBreakdown.reduce((s, p) => s + p.amount, 0);
+                const pct = totalPayments > 0 ? Math.round((amount / totalPayments) * 100) : 0;
                 return (
                   <div key={method} className="px-5 py-3 flex items-center gap-4">
                     <div className="flex-1 min-w-0">
@@ -563,6 +569,9 @@ export function ReportsContent({
               {[
                 { label: "Table Sessions", profit: tableRevenue, note: "100% margin (no cost)" },
                 { label: "Inventory Sales", profit: inventoryProfit, note: "selling − cost price" },
+                ...(totalMembershipSales > 0
+                  ? [{ label: "Membership Plan Sales", profit: totalMembershipSales, note: "100% margin (upfront)" }]
+                  : []),
               ].map(({ label, profit, note }) => {
                 const pct = totalProfit > 0 ? Math.round((profit / totalProfit) * 100) : 0;
                 return (
