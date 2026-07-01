@@ -22,7 +22,12 @@ const supabase = createClient();
 
 type TableRef = { name: string; type: string; location: { name: string; id: string } };
 type BookingRow = Booking & {
-  order: Pick<Order, "customer_name" | "customer_phone" | "advance_paid">;
+  order: {
+    customer_name: string;
+    customer_phone: string | null;
+    advance_paid: number;
+    order_items?: Array<{ id: string; status: string }> | null;
+  } | null;
   order_item: { table: TableRef } | null;
 };
 
@@ -369,7 +374,22 @@ export function BookingsContent({
                     </td>
                     <td className="px-4 py-3 text-gray-700 font-medium">{table?.location?.name ?? "—"}</td>
                     <td className="px-4 py-3 text-gray-900 font-semibold">
-                      {(b.order?.advance_paid ?? 0) > 0 ? `₹${b.order?.advance_paid}` : "—"}
+                      {(() => {
+                        const activeCount = b.order?.order_items?.filter((i: any) => i.status !== "cancelled").length || 1;
+                        const allocated = (b.order?.advance_paid ?? 0) / activeCount;
+                        if (allocated > 0) {
+                          const isShared = activeCount > 1;
+                          return (
+                            <span
+                              title={isShared ? `Total order advance: ₹${b.order?.advance_paid}` : undefined}
+                              className={isShared ? "cursor-help underline decoration-dotted" : ""}
+                            >
+                              ₹{Math.round(allocated)}
+                            </span>
+                          );
+                        }
+                        return "—";
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <Badge

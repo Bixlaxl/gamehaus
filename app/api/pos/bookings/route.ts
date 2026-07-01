@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(`
       *,
-      order:orders!inner(customer_name, customer_phone, location_id, advance_paid),
+      order:orders!inner(customer_name, customer_phone, location_id, advance_paid, order_items(id, status)),
       order_item:order_items!order_item_id(table_id, status, selected_mode_name)
     `)
     .eq("orders.location_id", locationId)

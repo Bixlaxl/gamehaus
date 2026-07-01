@@ -54,10 +54,15 @@ type ReportOrder = {
   customer_phone: string | null;
   amount_due: number | null;
   advance_paid: number | null;
+  subtotal?: number | null;
+  discount_amount?: number | null;
+  public_discount_amount?: number | null;
+  total_amount?: number | null;
+  points_redeemed?: number | null;
   type: string;
   finalized_at: string | null;
   location: { id: string; name: string } | null;
-  items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null; final_amount?: number | null }>;
+  items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null; final_amount?: number | null; free_hours_to_redeem?: number | null }>;
   payments: Array<{ method: string; amount: number; status: string }>;
   extras: Array<{ price: number; cost_price: number; quantity: number; is_deleted: boolean }>;
 };
@@ -116,9 +121,9 @@ export function ReportsContent({
       const { data: orders } = await supabase
         .from("orders")
         .select(`
-          id, customer_name, customer_phone, amount_due, advance_paid, type, finalized_at,
+          id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, total_amount, points_redeemed, type, finalized_at,
           location:locations(id, name),
-          items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount),
+          items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
           payments(method, amount, status),
           extras:order_extras(price, cost_price, quantity, is_deleted)
         `)
@@ -244,14 +249,18 @@ export function ReportsContent({
 
       // Profit: tables = 100% margin, extras = price - cost
       let rawTableVal = 0;
+      let freeHoursDiscount = 0;
       for (const i of o.items) {
         if (i.status !== "finished") continue;
+        let itemVal = 0;
         if (i.final_amount !== null && i.final_amount !== undefined) {
-          rawTableVal += i.final_amount;
+          itemVal = i.final_amount;
         } else if (i.actual_start && i.expected_end) {
           const mins = (new Date(i.expected_end).getTime() - new Date(i.actual_start).getTime()) / 60000;
-          rawTableVal += (i.rate_per_hour / 60) * mins;
+          itemVal = (i.rate_per_hour / 60) * mins;
         }
+        rawTableVal += itemVal;
+        freeHoursDiscount += (i.free_hours_to_redeem ?? 0) * i.rate_per_hour;
       }
 
       let rawExtraVal = 0;
@@ -262,20 +271,41 @@ export function ReportsContent({
         costOfExtras += e.cost_price * e.quantity;
       }
 
-      const netOrderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
-      const rawSubtotal = rawTableVal + rawExtraVal;
-      let netTableRev = 0;
-      let netExtraRev = 0;
+      // Tracing discounts
+      const couponDiscount = o.public_discount_amount ?? 0;
+      const totalMembershipDiscount = Math.max(0, (o.discount_amount ?? 0) - couponDiscount);
+      const memberDiscountAmount = Math.max(0, totalMembershipDiscount - freeHoursDiscount);
+      const remainingTables = Math.max(0, rawTableVal - freeHoursDiscount - couponDiscount);
+      const memberDiscountableBase = remainingTables + rawExtraVal;
 
-      if (rawSubtotal > 0) {
-        netTableRev = rawTableVal * (netOrderRev / rawSubtotal);
-        netExtraRev = rawExtraVal * (netOrderRev / rawSubtotal);
-      } else {
-        netTableRev = netOrderRev;
+      let memberDiscountOnExtras = 0;
+      let memberDiscountOnTables = 0;
+      if (memberDiscountableBase > 0 && memberDiscountAmount > 0) {
+        const pct = memberDiscountAmount / memberDiscountableBase;
+        memberDiscountOnExtras = rawExtraVal * pct;
+        memberDiscountOnTables = remainingTables * pct;
       }
 
-      tableRevenue += netTableRev;
-      inventoryProfit += Math.max(0, netExtraRev - costOfExtras);
+      const netTablesBeforePoints = Math.max(0, remainingTables - memberDiscountOnTables);
+      const netExtrasBeforePoints = Math.max(0, rawExtraVal - memberDiscountOnExtras);
+
+      const netOrderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
+      const orderTotalAmount = o.total_amount ?? Math.max(0, (o.subtotal ?? (rawTableVal + rawExtraVal)) - (o.discount_amount ?? 0));
+      const pointsDiscount = Math.max(0, orderTotalAmount - netOrderRev);
+
+      const sumBeforePoints = netTablesBeforePoints + netExtrasBeforePoints;
+      let netTables = 0;
+      let netExtras = 0;
+
+      if (sumBeforePoints > 0) {
+        netTables = Math.max(0, netTablesBeforePoints - pointsDiscount * (netTablesBeforePoints / sumBeforePoints));
+        netExtras = Math.max(0, netExtrasBeforePoints - pointsDiscount * (netExtrasBeforePoints / sumBeforePoints));
+      } else {
+        netTables = netOrderRev;
+      }
+
+      tableRevenue += netTables;
+      inventoryProfit += Math.max(0, netExtras - costOfExtras);
 
       // Payment methods
       const orderPayments = [...o.payments];
