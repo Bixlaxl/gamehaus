@@ -182,13 +182,17 @@ export function ReportsContent({
     const customerMap = new Map<string, { name: string; visits: number; spent: number }>();
     let tableRevenue    = 0;
     let inventoryProfit = 0;
+    let totalRevenue    = 0;
+    let totalSessions   = 0;
 
     for (const o of filteredOrders) {
+      const orderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
+      totalRevenue += orderRev;
+
       const locRow = o.location?.id ? revByLoc.get(o.location.id) : undefined;
       if (locRow) {
-        locRow.revenue    += (o.amount_due ?? 0) + (o.advance_paid ?? 0);
+        locRow.revenue    += orderRev;
         locRow.orderCount += 1;
-        for (const i of o.items) if (i.status === "finished") locRow.sessionCount += 1;
       }
 
       // Profit: tables = 100% margin, extras = price - cost
@@ -196,6 +200,11 @@ export function ReportsContent({
       let freeHoursDiscount = 0;
       for (const i of o.items) {
         if (i.status !== "finished") continue;
+        totalSessions += 1;
+        if (locRow) {
+          locRow.sessionCount += 1;
+        }
+
         let itemVal = 0;
         if (i.final_amount !== null && i.final_amount !== undefined) {
           itemVal = i.final_amount;
@@ -281,8 +290,6 @@ export function ReportsContent({
     }
 
     const revenueByLocation = [...revByLoc.values()];
-    const totalRevenue      = revenueByLocation.reduce((s, l) => s + l.revenue, 0);
-    const totalSessions     = revenueByLocation.reduce((s, l) => s + l.sessionCount, 0);
     const totalProfit       = tableRevenue + inventoryProfit;
     const marginPct         = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
     const paymentBreakdown  = [...methodMap.entries()]
