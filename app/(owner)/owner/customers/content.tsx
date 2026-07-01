@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Users, TrendingUp, Star, Award, MapPin } from "lucide-react";
+import { Search, Users, TrendingUp, Star, Award, MapPin, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { CustomerProfile } from "@/lib/supabase/types";
+import { Button } from "@/components/ui/button";
+import { jsPDF } from "jspdf";
 
 type Customer = Pick<
   CustomerProfile,
@@ -107,6 +109,119 @@ export function CustomersContent({
     { label: "Total Revenue",         value: formatCurrency(totalRevenue),               icon: Award,    color: "text-purple-600", bg: "bg-purple-50" },
   ];
 
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    const locName = selectedLocation === "all"
+      ? "All Locations"
+      : (locations.find((l) => l.id === selectedLocation)?.name ?? "Selected Location");
+
+    // Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(212, 84, 26); // #D4541A Gamehaus Orange
+    doc.text(`Gamehaus Customer Directory`, 14, 20);
+
+    // Metadata
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Location: ${locName}`, 14, 27);
+    doc.text(
+      `Generated: ${new Date().toLocaleDateString("en-IN")} at ${new Date().toLocaleTimeString("en-IN")}`,
+      14,
+      32
+    );
+
+    // Summary Box
+    doc.setFillColor(243, 244, 246); // bg-gray-100
+    doc.rect(14, 38, 182, 18, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text("TOTAL CUSTOMERS", 20, 44);
+    doc.text("TOTAL SPENT", 80, 44);
+    doc.text("TOTAL POINTS", 140, 44);
+
+    doc.setFontSize(11);
+    doc.setTextColor(20, 20, 20);
+    doc.text(`${customers.length}`, 20, 51);
+
+    const pdfTotalRevenue = customers.reduce((s, c) => s + c.total_spent, 0);
+    const pdfTotalPoints = customers.reduce((s, c) => s + c.points_balance, 0);
+
+    doc.text(`INR ${pdfTotalRevenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 80, 51);
+    doc.text(`${pdfTotalPoints.toLocaleString("en-IN")} pts`, 140, 51);
+
+    // Table Headers
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(50, 50, 50);
+
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 63, 196, 63);
+
+    doc.text("Customer Name", 16, 68);
+    doc.text("Phone Number", 75, 68);
+    doc.text("Visits", 115, 68);
+    doc.text("Loyalty Points", 135, 68);
+    doc.text("Total Spent", 165, 68);
+
+    doc.line(14, 72, 196, 72);
+
+    // Rows
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+
+    let y = 78;
+    const pageHeight = doc.internal.pageSize.height;
+
+    customers.forEach((c, idx) => {
+      if (y > pageHeight - 15) {
+        doc.addPage();
+
+        // Headers on new page
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(50, 50, 50);
+        doc.setDrawColor(200, 200, 200);
+        doc.line(14, 15, 196, 15);
+        doc.text("Customer Name", 16, 20);
+        doc.text("Phone Number", 75, 20);
+        doc.text("Visits", 115, 20);
+        doc.text("Loyalty Points", 135, 20);
+        doc.text("Total Spent", 165, 20);
+        doc.line(14, 24, 196, 24);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        y = 30;
+      }
+
+      // Zebra striping
+      if (idx % 2 === 1) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(14, y - 5, 182, 7, "F");
+      }
+
+      doc.text(c.name ?? "—", 16, y);
+      doc.text(c.phone, 75, y);
+      doc.text(`${c.visit_count}`, 115, y);
+      doc.text(`${c.points_balance} pts`, 135, y);
+      doc.text(`INR ${c.total_spent.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 165, y);
+
+      doc.setDrawColor(240, 240, 240);
+      doc.line(14, y + 2, 196, y + 2);
+
+      y += 8;
+    });
+
+    const fileLocSuffix = locName.toLowerCase().replace(/\s+/g, "-");
+    doc.save(`gamehaus-customers-${fileLocSuffix}-${new Date().toISOString().split("T")[0]}.pdf`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -117,21 +232,33 @@ export function CustomersContent({
           </p>
         </div>
 
-        {/* Location Selector */}
-        <div className="w-52">
-          <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-            <SelectTrigger>
-              <SelectValue placeholder="All Locations" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {locations.map((loc) => (
-                <SelectItem key={loc.id} value={loc.id}>
-                  {loc.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleDownloadPDF}
+            variant="outline"
+            className="flex items-center gap-2 border-gray-200 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl"
+            disabled={customers.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            <span>Download PDF</span>
+          </Button>
+
+          {/* Location Selector */}
+          <div className="w-52">
+            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Locations</SelectItem>
+                {locations.map((loc) => (
+                  <SelectItem key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
