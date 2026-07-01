@@ -79,7 +79,7 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
           <Star className="h-4 w-4 text-amber-500" />
           <h2 className="font-semibold text-gray-900">Loyalty Points</h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Earn rate — customer spends ₹</Label>
             <div className="flex items-center gap-2">
@@ -104,6 +104,18 @@ export function SettingsContent({ initialSettings, locations, staff, tables, cou
                 step={0.5}
               />
               <span className="text-sm text-gray-500">₹ off</span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Min points to redeem</Label>
+            <div className="flex items-center gap-2">
+              <NumberField
+                value={draft.loyalty.min_points_to_redeem}
+                onChange={(n) => update("loyalty", { min_points_to_redeem: n })}
+                min={0}
+                integer
+              />
+              <span className="text-sm text-gray-500">pts</span>
             </div>
           </div>
         </div>

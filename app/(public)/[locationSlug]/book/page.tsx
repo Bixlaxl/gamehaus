@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useTheme } from "next-themes";
+import type { AppSettings } from "@/lib/settings";
 import Script from "next/script";
 import {
   ArrowLeft, Trash2, ShoppingCart, User, Phone,
@@ -133,6 +134,9 @@ export default function CheckoutPage() {
   // (₹100/table advance, 3hr/1hr cancellation tiers) so the page renders
   // sensibly even before /api/settings resolves.
   const [advancePerTable, setAdvancePerTable] = useState(100);
+  const [earnRate, setEarnRate] = useState(100);
+  const [redeemRate, setRedeemRate] = useState(1);
+  const [minPointsToRedeem, setMinPointsToRedeem] = useState(100);
   const [cancellationTiers, setCancellationTiers] = useState<{
     full:    { hours_before: number; refund_pct: number }[];
     advance: { hours_before: number; refund_pct: number }[];
@@ -143,16 +147,29 @@ export default function CheckoutPage() {
   useEffect(() => {
     let abort = false;
     fetch("/api/settings")
-      .then((r) => r.json() as Promise<{ success: boolean; data?: { booking?: { advance_amount_per_table?: number; cancellation_full?: typeof cancellationTiers.full; cancellation_advance?: typeof cancellationTiers.advance } } }>)
+      .then((r) => r.json() as Promise<{ success: boolean; data?: AppSettings }>)
       .then((body) => {
-        if (abort || !body.success || !body.data?.booking) return;
-        if (typeof body.data.booking.advance_amount_per_table === "number") {
-          setAdvancePerTable(body.data.booking.advance_amount_per_table);
+        if (abort || !body.success || !body.data) return;
+        if (body.data.booking) {
+          if (typeof body.data.booking.advance_amount_per_table === "number") {
+            setAdvancePerTable(body.data.booking.advance_amount_per_table);
+          }
+          setCancellationTiers({
+            full:    body.data.booking.cancellation_full    ?? cancellationTiers.full,
+            advance: body.data.booking.cancellation_advance ?? cancellationTiers.advance,
+          });
         }
-        setCancellationTiers({
-          full:    body.data.booking.cancellation_full    ?? cancellationTiers.full,
-          advance: body.data.booking.cancellation_advance ?? cancellationTiers.advance,
-        });
+        if (body.data.loyalty) {
+          if (typeof body.data.loyalty.earn_rupees_per_point === "number") {
+            setEarnRate(body.data.loyalty.earn_rupees_per_point);
+          }
+          if (typeof body.data.loyalty.redeem_rupees_per_point === "number") {
+            setRedeemRate(body.data.loyalty.redeem_rupees_per_point);
+          }
+          if (typeof body.data.loyalty.min_points_to_redeem === "number") {
+            setMinPointsToRedeem(body.data.loyalty.min_points_to_redeem);
+          }
+        }
       })
       .catch(() => {});
     return () => { abort = true; };
@@ -498,10 +515,11 @@ export default function CheckoutPage() {
   const baseAfterMembership = Math.max(0, baseAfterCoupon - totalMembershipDiscount);
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
-  const maxRedeem     = Math.min(customer?.points_balance ?? 0, Math.floor(baseAfterMembership));
-  // Minimum 100 points required to redeem; any input below 100 is treated as 0
-  const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
-  const amountToPay   = Math.max(0, baseAfterMembership - clampedRedeem);
+  const maxPointsByBill = Math.floor(baseAfterMembership / redeemRate);
+  const maxRedeem     = Math.min(customer?.points_balance ?? 0, maxPointsByBill);
+  // Minimum points to redeem is dynamically configured
+  const clampedRedeem = (redeemPoints >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  const amountToPay   = Math.max(0, baseAfterMembership - (clampedRedeem * redeemRate));
 
   function triggerLookup(currentPhone: string, currentName: string) {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
@@ -1017,17 +1035,17 @@ export default function CheckoutPage() {
                 {lookingUp && (
                   <p className="text-xs mt-1.5" style={{ color: textMut }}>Looking up...</p>
                 )}
-                 {!lookingUp && customer && (
+                {!lookingUp && customer && (
                   <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
                     <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#F59E0B" }} />
                     <span className="text-sm font-medium" style={{ color: "#F59E0B" }}>
-                      {customer.points_balance} points available (₹{customer.points_balance} off)
+                      {customer.points_balance} points available (₹{customer.points_balance * redeemRate} off)
                     </span>
                   </div>
                 )}
-                {/* Redeem input — only shown when customer has ≥ 100 points */}
-                {!lookingUp && customer && customer.points_balance >= 100 && (
+                {/* Redeem input — only shown when customer has ≥ minPointsToRedeem points */}
+                {!lookingUp && customer && customer.points_balance >= minPointsToRedeem && (
                   <div className="mt-2">
                     <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
                       <Star className="h-3 w-3" /> Redeem points
@@ -1047,9 +1065,9 @@ export default function CheckoutPage() {
                       <span className="text-sm" style={{ color: textSec }}>/ {maxRedeem} pts max</span>
                     </div>
                     <p className="text-xs mt-1.5" style={{ color: textMut }}>
-                      Min. 100 pts to redeem
-                      {redeemPoints > 0 && redeemPoints < 100 && (
-                        <span style={{ color: "#EF4444" }}> — enter 100 or more</span>
+                      Min. {minPointsToRedeem} pts to redeem
+                      {redeemPoints > 0 && redeemPoints < minPointsToRedeem && (
+                        <span style={{ color: "#EF4444" }}> — enter {minPointsToRedeem} or more</span>
                       )}
                     </p>
                   </div>

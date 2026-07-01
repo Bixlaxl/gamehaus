@@ -226,12 +226,13 @@ export async function POST(
   const settings = await getAppSettings(admin);
   const earnRate   = settings.loyalty.earn_rupees_per_point;
   const redeemRate = settings.loyalty.redeem_rupees_per_point;
+  const minToRedeem = settings.loyalty.min_points_to_redeem ?? 100;
 
   // Validate points against remaining balance — cap so redemption can't push
   // the bill below zero or exceed the customer's actual balance.
-  // Minimum redemption is 100 points — anything below is treated as zero.
+  // Minimum redemption is dynamically configured — anything below is treated as zero.
   let validatedPoints = points_redeemed;
-  if (validatedPoints > 0 && validatedPoints < 100) {
+  if (validatedPoints > 0 && validatedPoints < minToRedeem) {
     validatedPoints = 0;
   }
   if (validatedPoints > 0 && effectivePhone) {

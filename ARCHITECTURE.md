@@ -218,14 +218,16 @@ The billing engine calculations must follow a deterministic flow to avoid discre
    $$\text{SubtotalAfterMembership} = \max(0, \text{SubtotalAfterCoupon} \times (1 - \frac{\text{DiscountPct}}{100}))$$
 
 4. **Loyalty Points Deduction:**
-   $$\text{TotalDue} = \max(0, \text{SubtotalAfterMembership} - \text{PointsRedeemed})$$
-   *Points conversion rate: 1 point = ₹1.*
+   $$\text{TotalDue} = \max(0, \text{SubtotalAfterMembership} - (\text{PointsRedeemed} \times \text{RedeemRate}))$$
+   *Where $\text{RedeemRate}$ is settings.loyalty.redeem_rupees_per_point (defaults to ₹1 per point).*
+   *Gate Rule: PointsRedeemed must be $\ge$ settings.loyalty.min_points_to_redeem (defaults to 100 points) to be allowed.*
 
 5. **Final Checkout Balance:**
    $$\text{finalDue} = \max(0, \text{TotalDue} - \text{advance\_paid})$$
 
 6. **Loyalty Balance Update:**
-   $$\text{New Points Earned} = \lfloor \frac{\text{finalDue}}{100} \rfloor$$
+   $$\text{New Points Earned} = \lfloor \frac{\text{finalDue}}{\text{EarnRate}} \rfloor$$
+   *Where $\text{EarnRate}$ is settings.loyalty.earn_rupees_per_point (defaults to ₹100 per point).*
    $$\text{PointsBalance}_{\text{new}} = \max(0, \text{PointsBalance}_{\text{old}} - \text{PointsRedeemed} + \text{New Points Earned})$$
    $$\text{TotalSpent}_{\text{new}} = \text{TotalSpent}_{\text{old}} + \text{advance\_paid} + \text{finalDue}$$
 

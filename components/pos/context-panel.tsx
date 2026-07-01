@@ -9,6 +9,7 @@ import type { InventoryItem } from "@/lib/supabase/types";
 import { calculateBill, computeFreeHoursDiscount } from "@/lib/billing/engine";
 
 import { formatCurrency, formatSignedCountdown, getShopWindow, isSimulatorTable } from "@/lib/utils";
+import type { AppSettings } from "@/lib/settings";
 
 import { X, Plus, Trash2, Square, Timer, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -895,6 +896,17 @@ function PanelSession({
     staleTime: 60 * 1000,
   });
 
+  const { data: settings } = useQuery<AppSettings>({
+    queryKey: ["app-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      const body = await res.json() as { success: boolean; data?: AppSettings };
+      if (!body.success || !body.data) throw new Error("Failed to load settings");
+      return body.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const activeItems  = order.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
   const groupedExtras = Array.from(
@@ -925,11 +937,15 @@ function PanelSession({
   const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
+  const redeemRate        = settings?.loyalty?.redeem_rupees_per_point ?? 1;
+  const minPointsToRedeem = settings?.loyalty?.min_points_to_redeem ?? 100;
+
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
-  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(bill.totalDue));
-  // Minimum 100 points required to redeem; any input below 100 is treated as 0
-  const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
-  const displayTotal  = Math.max(0, Math.round((bill.totalDue - clampedRedeem) * 100) / 100);
+  const maxPointsByBill = Math.floor(bill.totalDue / redeemRate);
+  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
+  // Minimum configurable points required to redeem
+  const clampedRedeem = (redeemPoints >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  const displayTotal  = Math.max(0, Math.round((bill.totalDue - (clampedRedeem * redeemRate)) * 100) / 100);
 
   function handleRedeemChange(val: string) {
     setRedeemInput(val);
@@ -1634,14 +1650,14 @@ function PanelSession({
             <div className="flex justify-between items-baseline gap-2 py-0.5">
               <span className="text-xs font-semibold" style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
               <span className="text-xs font-semibold tabular-nums" style={{ color: "#f59e0b" }}>
-                −{formatCurrency(clampedRedeem)}
+                −{formatCurrency(clampedRedeem * redeemRate)}
               </span>
             </div>
           )}
         </div>
 
-        {/* Loyalty points row — only when bill is ready and customer has >= 100 pts */}
-        {!hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance >= 100 && (
+        {/* Loyalty points row — only when bill is ready and customer has >= minPointsToRedeem pts */}
+        {!hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
           <div className="px-5 py-2.5 border-t border-gray-100 dark:border-[#1a1a1a] flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
               <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />
@@ -1662,7 +1678,7 @@ function PanelSession({
               <span className="text-xs font-medium text-gray-500 dark:text-[#999] shrink-0">/ {maxRedeem} max</span>
             </div>
             <p className="text-[10px] text-gray-400 dark:text-[#555] pl-5">
-              Min. 100 pts to redeem{redeemPoints > 0 && redeemPoints < 100 ? " — enter 100 or more" : ""}
+              Min. {minPointsToRedeem} pts to redeem{redeemPoints > 0 && redeemPoints < minPointsToRedeem ? ` — enter ${minPointsToRedeem} or more` : ""}
             </p>
           </div>
         )}

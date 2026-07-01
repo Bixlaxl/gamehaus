@@ -16,6 +16,7 @@ const settingsSchema = z.object({
   loyalty: z.object({
     earn_rupees_per_point:   z.number().positive(),
     redeem_rupees_per_point: z.number().positive(),
+    min_points_to_redeem:    z.number().int().nonnegative(),
   }).partial().optional(),
   stock: z.object({
     default_low_threshold: z.number().int().nonnegative(),

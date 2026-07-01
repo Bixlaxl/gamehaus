@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
 import { formatCurrency } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
 import type { Order, Booking } from "@/lib/supabase/types";
+import type { AppSettings } from "@/lib/settings";
 
 interface FinalizeBillModalProps {
   locationId: string;
@@ -194,11 +195,27 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
 
 
-  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, Math.floor(billAfterMembership));
-  // Minimum 100 points required to redeem; any input below 100 is treated as 0
-  const clampedRedeem = (redeemPoints >= 100) ? Math.min(redeemPoints, maxRedeem) : 0;
-  const finalDue      = Math.max(0, Math.round((billAfterMembership - clampedRedeem) * 100) / 100);
-  const pointsToEarn  = Math.floor(finalDue / 100);
+  const { data: settings } = useQuery<AppSettings>({
+    queryKey: ["app-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      const body = await res.json() as { success: boolean; data?: AppSettings };
+      if (!body.success || !body.data) throw new Error("Failed to load settings");
+      return body.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const earnRate          = settings?.loyalty?.earn_rupees_per_point ?? 100;
+  const redeemRate        = settings?.loyalty?.redeem_rupees_per_point ?? 1;
+  const minPointsToRedeem = settings?.loyalty?.min_points_to_redeem ?? 100;
+
+  const maxPointsByBill   = Math.floor(billAfterMembership / redeemRate);
+  const maxRedeem         = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
+  // Minimum points to redeem is dynamically configured
+  const clampedRedeem     = (redeemPoints >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  const finalDue          = Math.max(0, Math.round((billAfterMembership - (clampedRedeem * redeemRate)) * 100) / 100);
+  const pointsToEarn      = Math.floor(finalDue / earnRate);
 
   const phoneForLookup = selectedOrder?.customer_phone ?? (manualPhone.length >= 10 ? manualPhone : null);
 
@@ -567,7 +584,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
             {clampedRedeem > 0 && (
               <div className="flex justify-between">
                 <span style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
-                <span style={{ color: "#f59e0b" }}>−{formatCurrency(clampedRedeem)}</span>
+                <span style={{ color: "#f59e0b" }}>−{formatCurrency(clampedRedeem * redeemRate)}</span>
               </div>
             )}
 
@@ -698,7 +715,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               </div>
             )}
 
-            {customerInfo && customerInfo.points_balance >= 100 && (
+            {customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
@@ -717,7 +734,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                   <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
                 </div>
                 <p className="text-[10px] text-gray-400 dark:text-[#555]">
-                  Min. 100 pts to redeem{redeemPoints > 0 && redeemPoints < 100 ? " — enter 100 or more" : ""}
+                  Min. {minPointsToRedeem} pts to redeem{redeemPoints > 0 && redeemPoints < minPointsToRedeem ? ` — enter ${minPointsToRedeem} or more` : ""}
                 </p>
               </div>
             )}

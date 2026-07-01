@@ -77,8 +77,9 @@ Indian mobile numbers must be verified as exactly 10 digits starting with `6`, `
   1. Calculate `subtotal` = table sessions cost + beverages/extras cost.
   2. Apply `coupon` discount.
   3. Apply `membership` discount (`discount_pct`) to the remaining balance.
-  4. Apply `points` discount (Redeemed points, where 1 point = ₹1, subtracted outside `calculateBill`).
+  4. Apply `points` discount based on dynamic settings (`settings.loyalty.redeem_rupees_per_point`, subtracted outside `calculateBill`).
   5. Subtract `advance_paid` to determine `finalDue`.
+* **Loyalty Settings Constraint:** Loyalty parameters are dynamically loaded from settings (`earn_rupees_per_point`, `redeem_rupees_per_point`, `min_points_to_redeem`). Customers can only redeem points if their points balance is $\ge$ `min_points_to_redeem`. Enforced on the POS context panel, finalization bill modal, online checkout page, and backend finalization API.
 
 ---
 

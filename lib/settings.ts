@@ -19,6 +19,8 @@ export interface AppSettings {
     earn_rupees_per_point:   number;
     /** Each redeemed point reduces the bill by this many rupees. */
     redeem_rupees_per_point: number;
+    /** Minimum points balance required before a customer can redeem points. */
+    min_points_to_redeem:    number;
   };
   stock: {
     /** Default low-stock threshold for newly created inventory items. */
@@ -39,6 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   loyalty: {
     earn_rupees_per_point:   100,
     redeem_rupees_per_point: 1,
+    min_points_to_redeem:    100,
   },
   stock: {
     default_low_threshold: 5,
