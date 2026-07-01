@@ -247,6 +247,29 @@ export function BookingsContent({
     return true;
   }), [bookings, locationFilter, typeFilter, statusFilter]);
 
+  const groupedBookings = useMemo(() => {
+    const groups: Record<string, BookingRow[]> = {};
+    for (const b of filtered) {
+      const key = b.order_id || b.id;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(b);
+    }
+    return Object.values(groups).map((groupList) => {
+      groupList.sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
+      const first = groupList[0];
+      return {
+        id: first.order_id || first.id,
+        customer_name: first.order?.customer_name ?? "—",
+        customer_phone: first.order?.customer_phone ?? null,
+        advance_paid: first.order?.advance_paid ?? 0,
+        location_name: first.order_item?.table?.location?.name ?? "—",
+        bookings: groupList,
+      };
+    });
+  }, [filtered]);
+
   return (
     <div className="space-y-6">
       {/* Header — only the List view is kept; Schedule was the same data minus
@@ -347,100 +370,99 @@ export function BookingsContent({
           <table className="w-full text-sm">
             <thead className="bg-gray-100 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Time</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Table</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Booked Slots (Table & Time)</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Location</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Advance</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Status</th>
-                <th className="px-4 py-3" />
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Status & Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filtered.map((b) => {
-                const table = b.order_item?.table as TableRef | null;
+              {groupedBookings.map((g) => {
                 return (
-                  <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-sm text-gray-900 font-medium tabular-nums">
-                      {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
+                  <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-semibold text-gray-900">
+                      <span>{g.customer_name}</span>
+                      {g.customer_phone && (
+                        <span className="text-xs text-gray-500 font-normal ml-1.5">({g.customer_phone})</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{b.order?.customer_name}</p>
-                      <p className="text-xs text-gray-600 font-medium">{b.order?.customer_phone}</p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-900 font-medium">
-                      <span className="mr-1">{TYPE_ICON[table?.type ?? ""] ?? "🎯"}</span>
-                      {table?.name ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 font-medium">{table?.location?.name ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-900 font-semibold">
-                      {(() => {
-                        const activeCount = b.order?.order_items?.filter((i: any) => i.status !== "cancelled").length || 1;
-                        const allocated = (b.order?.advance_paid ?? 0) / activeCount;
-                        if (allocated > 0) {
-                          const isShared = activeCount > 1;
+                      <div className="space-y-1.5 py-1">
+                        {g.bookings.map((b) => {
+                          const table = b.order_item?.table as TableRef | null;
                           return (
-                            <span
-                              title={isShared ? `Total order advance: ₹${b.order?.advance_paid}` : undefined}
-                              className={isShared ? "cursor-help underline decoration-dotted" : ""}
-                            >
-                              ₹{Math.round(allocated)}
-                            </span>
+                            <div key={b.id} className="flex items-center gap-2 h-7 text-sm">
+                              <span className="inline-flex items-center justify-center font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300">
+                                {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
+                              </span>
+                              <span className="text-gray-900 font-medium">
+                                <span className="mr-1">{TYPE_ICON[table?.type ?? ""] ?? "🎯"}</span>
+                                {table?.name ?? "—"}
+                              </span>
+                            </div>
                           );
-                        }
-                        return "—";
-                      })()}
+                        })}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 font-medium vertical-middle align-middle">{g.location_name}</td>
+                    <td className="px-4 py-3 text-gray-900 font-bold tabular-nums align-middle">
+                      {g.advance_paid > 0 ? `₹${Math.round(g.advance_paid)}` : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge
-                        variant={
-                          b.status === "confirmed"  ? "success"     :
-                          b.status === "checked_in" ? "outline"     :
-                          (b.status === "finished" || b.status === "completed") ? "secondary" :
-                          b.status === "no_show"    ? "destructive" : "secondary"
-                        }
-                      >
-                        {STATUS_LABELS[b.status] ?? b.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {(b.status === "no_show" || b.status === "cancelled") && (
-                        <Button variant="outline" size="sm" onClick={() => setRefund(b)}>
-                          Process Refund
-                        </Button>
-                      )}
-                      {mode === "staff" && b.status === "confirmed" && (
-                        <div className="flex justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500"
-                            onClick={() => doCheckIn(b)}
-                            disabled={!actionsAllowed || busyBookingId === b.id}
-                            title={!actionsAllowed ? actionsBlockedReason : "Check in this customer"}
-                          >
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            {busyBookingId === b.id ? "…" : "Check in"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={() => doNoShow(b)}
-                            disabled={!actionsAllowed || busyBookingId === b.id}
-                            title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
-                          >
-                            <XCircle className="h-3 w-3 mr-1" />
-                            {busyBookingId === b.id ? "…" : "No-show"}
-                          </Button>
-                        </div>
-                      )}
+                      <div className="space-y-1.5 py-1">
+                        {g.bookings.map((b) => (
+                          <div key={b.id} className="flex items-center justify-between gap-4 h-7 min-w-[220px]">
+                            <Badge
+                              variant={
+                                b.status === "confirmed"  ? "success"     :
+                                b.status === "checked_in" ? "outline"     :
+                                (b.status === "finished" || b.status === "completed") ? "secondary" :
+                                b.status === "no_show"    ? "destructive" : "secondary"
+                              }
+                            >
+                              {STATUS_LABELS[b.status] ?? b.status}
+                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              {(b.status === "no_show" || b.status === "cancelled") && (
+                                <Button variant="outline" size="sm" className="h-7 text-[11px] px-2" onClick={() => setRefund(b)}>
+                                  Refund
+                                </Button>
+                              )}
+                              {mode === "staff" && b.status === "confirmed" && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    onClick={() => doCheckIn(b)}
+                                    disabled={!actionsAllowed || busyBookingId === b.id}
+                                    title={!actionsAllowed ? actionsBlockedReason : "Check in this slot"}
+                                  >
+                                    {busyBookingId === b.id ? "…" : "Check in"}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[11px] px-2"
+                                    onClick={() => doNoShow(b)}
+                                    disabled={!actionsAllowed || busyBookingId === b.id}
+                                    title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
+                                  >
+                                    {busyBookingId === b.id ? "…" : "No-show"}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 );
               })}
-              {!isLoading && filtered.length === 0 && (
+              {!isLoading && groupedBookings.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500 font-medium">
                     No bookings for this date
                   </td>
                 </tr>
