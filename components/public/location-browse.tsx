@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
-import { formatCurrency, isSimulatorActive } from "@/lib/utils";
+import { formatCurrency, isSimulatorActive, getActualSlotDate } from "@/lib/utils";
 
 
 
@@ -317,7 +317,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
   /* Slot is in customer's own cart (show blue occupied card) */
   function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
-    const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
+    const actualDate = getActualSlotDate(slotDate, slotTime, location.opening_time, location.closing_time);
+    const slotMs = new Date(`${actualDate}T${slotTime}:00`).getTime();
     // Per-table check — a slot in the cart for this same table blocks it
     return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
   }
@@ -327,7 +328,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
   /* Slot is blocked by a walk-in or confirmed booking on the server — hide it entirely */
   function isServerBlocked(slotDate: string, slotTime: string): boolean {
-    const slotMs = new Date(`${slotDate}T${slotTime}:00`).getTime();
+    const actualDate = getActualSlotDate(slotDate, slotTime, location.opening_time, location.closing_time);
+    const slotMs = new Date(`${actualDate}T${slotTime}:00`).getTime();
     return blockedRangesMs.some(r => slotMs >= r.start && slotMs < r.end);
   }
 
@@ -406,9 +408,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
-    const startIso  = new Date(`${date}T${firstSlot}:00`).toISOString();
+    const slotStartDate = getActualSlotDate(date, firstSlot, location.opening_time, location.closing_time);
+    const startIso  = new Date(`${slotStartDate}T${firstSlot}:00`).toISOString();
     const endStr    = slotEndTime(lastSlot);
-    const endDate   = endStr < firstSlot ? addOneDay(date) : date;
+    const endDate   = endStr < firstSlot ? addOneDay(slotStartDate) : slotStartDate;
     const endIso    = new Date(`${endDate}T${endStr}:00`).toISOString();
     const durationMins = selectedSlots.length * 15;
 
@@ -1146,3 +1149,4 @@ function addOneDay(dateStr: string): string {
     String(next.getDate()).padStart(2, "0"),
   ].join("-");
 }
+
