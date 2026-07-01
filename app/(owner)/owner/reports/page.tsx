@@ -48,11 +48,15 @@ export default async function ReportsPage() {
     .order("finalized_at", { ascending: true });
 
   // Fetch customer memberships assigned in date range
+  // Use full-day IST boundaries so created_at (UTC) is captured regardless of business hours
+  const membFromISO = new Date(fromDate + "T00:00:00+05:30").toISOString();
+  const membToISO   = new Date(toDate   + "T23:59:59+05:30").toISOString();
+
   const { data: memberships } = await admin
     .from("customer_memberships")
     .select(`id, customer_phone, starts_at, created_at, plan:membership_plans(id, name, price)`)
-    .gte("created_at", fromISO)
-    .lte("created_at", toISO);
+    .gte("created_at", membFromISO)
+    .lte("created_at", membToISO);
 
   return (
     <ReportsContent

@@ -88,14 +88,19 @@ export async function GET(request: Request) {
   if (histError) return NextResponse.json(err(histError.message, "DB_ERROR"), { status: 500 });
 
   // Fetch customer memberships assigned in date range
+  // Use full-day IST boundaries (midnight start, end-of-day end) so that
+  // membership created_at (UTC wall clock) is captured regardless of business hours.
+  const membFromISO = new Date(from + "T00:00:00+05:30").toISOString();
+  const membToISO   = new Date(to   + "T23:59:59+05:30").toISOString();
+
   const { data: memberships, error: membError } = await admin
     .from("customer_memberships")
     .select(`
       id, customer_phone, starts_at, created_at,
       plan:membership_plans(id, name, price)
     `)
-    .gte("created_at", fromISO)
-    .lte("created_at", toISO);
+    .gte("created_at", membFromISO)
+    .lte("created_at", membToISO);
 
   if (membError) return NextResponse.json(err(membError.message, "DB_ERROR"), { status: 500 });
 
