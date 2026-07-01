@@ -55,7 +55,7 @@ export async function POST(
     // 2. Fetch active order items
     const { data: items, error: itemsError } = await admin
       .from("order_items")
-      .select("id, scheduled_start, scheduled_end, rate_per_hour, status")
+      .select("id, scheduled_start, scheduled_end, actual_start, expected_end, actual_end, rate_per_hour, status")
       .eq("order_id", orderId)
       .eq("is_deleted", false);
 
@@ -84,8 +84,12 @@ export async function POST(
 
     // Calculate total cost to determine if they paid in full
     const totalCost = items.reduce((sum, item) => {
-      const start = new Date(item.scheduled_start!);
-      const end = new Date(item.scheduled_end!);
+      const startStr = item.scheduled_start || item.actual_start;
+      const endStr = item.scheduled_end || item.expected_end || item.actual_end;
+      if (!startStr || !endStr) return sum;
+
+      const start = new Date(startStr);
+      const end = new Date(endStr);
       const hrs = (end.getTime() - start.getTime()) / (3600 * 1000);
       const itemRate = Number(item.rate_per_hour) || 0;
       return sum + (itemRate * hrs);

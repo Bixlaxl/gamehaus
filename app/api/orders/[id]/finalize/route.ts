@@ -107,6 +107,10 @@ export async function POST(
   const now = new Date();
 
   const targetMembershipId = membership_id || order.membership_id;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetMembershipId || "");
+  const orCondition = isUuid
+    ? `id.eq.${targetMembershipId}`
+    : `short_id.eq.${(targetMembershipId || "").toUpperCase()}`;
 
   // Fetch ALL active memberships for this customer (if validated) + points balance in parallel
   const [allMembershipsResult, pointsProfileResult] = await Promise.all([
@@ -116,7 +120,7 @@ export async function POST(
           .select("*, plan:membership_plans(*)")
           .eq("customer_phone", effectivePhone)
           .eq("is_active", true)
-          .or(`id.eq.${targetMembershipId},short_id.eq.${targetMembershipId.toUpperCase()}`)
+          .or(orCondition)
           .gte("expires_at", now.toISOString())
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
