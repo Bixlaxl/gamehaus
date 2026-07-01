@@ -80,7 +80,6 @@ export async function POST(request: Request) {
         if (profile) {
           await admin.from("customer_profiles").update({
             points_balance: Math.max(0, profile.points_balance + netPoints),
-            total_spent:    profile.total_spent + paymentRow.amount,
             last_visit_at:  now,
           }).eq("phone", order.customer_phone);
         } else {
@@ -88,8 +87,8 @@ export async function POST(request: Request) {
             phone:          order.customer_phone,
             name:           order.customer_name,
             points_balance: Math.max(0, netPoints),
-            visit_count:    1,
-            total_spent:    paymentRow.amount,
+            visit_count:    0,
+            total_spent:    0,
             last_visit_at:  now,
           });
         }

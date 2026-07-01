@@ -342,7 +342,7 @@ export async function POST(
         .update({
           points_balance: Math.max(0, profile.points_balance - validatedPoints + pointsEarned),
           visit_count:    profile.visit_count + 1,
-          total_spent:    profile.total_spent + finalDue,
+          total_spent:    profile.total_spent + (order.advance_paid ?? 0) + finalDue,
           last_visit_at:  now.toISOString(),
         })
         .eq("phone", effectivePhone);
@@ -352,7 +352,7 @@ export async function POST(
         name:           order.customer_name,
         points_balance: pointsEarned,
         visit_count:    1,
-        total_spent:    finalDue,
+        total_spent:    (order.advance_paid ?? 0) + finalDue,
         last_visit_at:  now.toISOString(),
       });
     }
