@@ -1747,27 +1747,21 @@ function ContextPanelInner({ locationId, closingTime }: { locationId: string; cl
 
   const item      = table.activeOrderItem;
   const isRunning = !!item && item.status === "running";
+  const isBillReady = !!item && item.status === "finished";
 
-  const billReadyOrder = !isRunning
-    ? openOrders.find((o) => {
-        const live = o.items.filter((i) => !i.is_deleted);
-        return (
-          live.some((i) => i.table_id === table.id && i.status === "finished") &&
-          !live.some((i) => i.status === "running")
-        );
-      })
-    : undefined;
+  const runningOrder = isRunning
+    ? openOrders.find((o) => o.items.some((i) => i.id === item!.id))
+    : null;
 
-  const isBillReady      = !!billReadyOrder;
+  const billReadyOrder = isBillReady
+    ? openOrders.find((o) => o.items.some((i) => i.id === item!.id))
+    : null;
+
   const minsUntilBooking = table.upcomingBooking
     ? (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
     : Infinity;
   const isBooked = !isRunning && !isBillReady && !!table.upcomingBooking && minsUntilBooking <= 30;
   const isIdle   = !isRunning && !isBillReady && !isBooked;
-
-  const runningOrder = isRunning
-    ? openOrders.find((o) => o.items.some((i) => i.id === item!.id))
-    : null;
 
   // Booked tables: actions live on the card — no panel needed
   if (isBooked) return null;

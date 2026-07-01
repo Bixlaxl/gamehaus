@@ -79,12 +79,14 @@ function computeTablesWithStatus(
 ): TableWithStatus[] {
   const activeItems = openOrders.flatMap((o) =>
     (o.items ?? []).filter(
-      (i) => (i.status === "running" || i.status === "scheduled") && !i.is_deleted
+      (i) => (i.status === "running" || i.status === "scheduled" || i.status === "finished") && !i.is_deleted
     )
   );
   return rawTables.map((table) => {
     const activeItem =
-      activeItems.find((i) => i.table_id === table.id && i.status === "running") ?? null;
+      activeItems.find((i) => i.table_id === table.id && i.status === "running") ??
+      activeItems.find((i) => i.table_id === table.id && i.status === "finished") ??
+      null;
     const upcomingBooking =
       bookings?.find((b) => {
         const oi = b.order_item as any;

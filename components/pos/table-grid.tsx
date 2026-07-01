@@ -913,22 +913,6 @@ function TableGridInner({ locationId }: TableGridProps) {
   const selectedTableId    = usePOSStore((s) => s.selectedTableId);
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
 
-  const billReadyMap = useMemo(() => {
-    const map: Record<string, POSOrder> = {};
-    for (const order of openOrders) {
-      const hasRunning  = order.items.some((i) => !i.is_deleted && i.status === "running");
-      const hasFinished = order.items.some((i) => !i.is_deleted && i.status === "finished");
-      if (!hasRunning && hasFinished) {
-        for (const item of order.items) {
-          if (!item.is_deleted && item.status === "finished") {
-            map[item.table_id] = order;
-          }
-        }
-      }
-    }
-    return map;
-  }, [openOrders]);
-
   if (tables.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-base font-medium text-gray-500 dark:text-[#aaa]">
@@ -944,8 +928,8 @@ function TableGridInner({ locationId }: TableGridProps) {
           {tables.map((table) => {
             const item              = table.activeOrderItem;
             const isRunning         = !!item && item.status === "running";
-            const billReadyOrder    = billReadyMap[table.id];
-            const isBillReady       = !!billReadyOrder && !isRunning;
+            const isBillReady       = !!item && item.status === "finished";
+            const billReadyOrder    = isBillReady ? openOrders.find((o) => o.items.some((i) => i.id === item.id)) : undefined;
             const minsUntilBooking  = table.upcomingBooking
               ? (new Date(table.upcomingBooking.scheduled_start).getTime() - Date.now()) / 60000
               : Infinity;
