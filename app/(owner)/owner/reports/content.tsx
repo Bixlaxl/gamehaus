@@ -185,6 +185,13 @@ export function ReportsContent({
     let totalRevenue    = 0;
     let totalSessions   = 0;
 
+    let grossSubtotal     = 0;
+    let totalCoupons      = 0;
+    let totalMemberships  = 0;
+    let totalPoints       = 0;
+    let totalFreeHours    = 0;
+    let totalCostOfExtras = 0;
+
     for (const o of filteredOrders) {
       const orderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
       totalRevenue += orderRev;
@@ -224,6 +231,9 @@ export function ReportsContent({
         costOfExtras += e.cost_price * e.quantity;
       }
 
+      grossSubtotal += (rawTableVal + rawExtraVal);
+      totalCostOfExtras += costOfExtras;
+
       // Tracing discounts
       const couponDiscount = o.public_discount_amount ?? 0;
       const totalMembershipDiscount = Math.max(0, (o.discount_amount ?? 0) - couponDiscount);
@@ -245,6 +255,11 @@ export function ReportsContent({
       const netOrderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
       const orderTotalAmount = o.total_amount ?? Math.max(0, (o.subtotal ?? (rawTableVal + rawExtraVal)) - (o.discount_amount ?? 0));
       const pointsDiscount = Math.max(0, orderTotalAmount - netOrderRev);
+
+      totalCoupons += couponDiscount;
+      totalMemberships += memberDiscountAmount;
+      totalPoints += pointsDiscount;
+      totalFreeHours += freeHoursDiscount;
 
       const sumBeforePoints = netTablesBeforePoints + netExtrasBeforePoints;
       let netTables = 0;
@@ -304,6 +319,12 @@ export function ReportsContent({
       revenueByLocation, totalRevenue, totalSessions,
       tableRevenue, inventoryProfit, totalProfit, marginPct,
       paymentBreakdown, topCustomers,
+      grossSubtotal,
+      totalCoupons,
+      totalMemberships,
+      totalPoints,
+      totalFreeHours,
+      totalCostOfExtras,
     };
   }, [filteredOrders, locations]);
 
@@ -311,6 +332,12 @@ export function ReportsContent({
     revenueByLocation, totalRevenue, totalSessions,
     tableRevenue, inventoryProfit, totalProfit, marginPct,
     paymentBreakdown, topCustomers,
+    grossSubtotal,
+    totalCoupons,
+    totalMemberships,
+    totalPoints,
+    totalFreeHours,
+    totalCostOfExtras,
   } = stats;
 
   return (
@@ -475,40 +502,102 @@ export function ReportsContent({
         </div>
       </div>
 
-      {/* Profit breakdown */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Profit Breakdown</h2>
-        </div>
-        <div className="divide-y divide-gray-100">
-          {[
-            { label: "Table Sessions", profit: tableRevenue, note: "100% margin (no cost)" },
-            { label: "Inventory Sales", profit: inventoryProfit, note: "selling − cost price" },
-          ].map(({ label, profit, note }) => {
-            const pct = totalProfit > 0 ? Math.round((profit / totalProfit) * 100) : 0;
-            return (
-              <div key={label} className="px-5 py-3 flex items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <div>
-                      <span className="text-sm font-medium text-gray-900">{label}</span>
-                      <span className="text-xs text-gray-400 ml-2">{note}</span>
+      {/* Profit & Deductions Breakdowns */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Profit breakdown */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900">Profit Breakdown</h2>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {[
+                { label: "Table Sessions", profit: tableRevenue, note: "100% margin (no cost)" },
+                { label: "Inventory Sales", profit: inventoryProfit, note: "selling − cost price" },
+              ].map(({ label, profit, note }) => {
+                const pct = totalProfit > 0 ? Math.round((profit / totalProfit) * 100) : 0;
+                return (
+                  <div key={label} className="px-5 py-4 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">{label}</span>
+                          <span className="text-xs text-gray-400 ml-2">{note}</span>
+                        </div>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
+                          {formatCurrency(profit)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, background: "#10b981" }}
+                        />
+                      </div>
                     </div>
-                    <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
-                      {formatCurrency(profit)}
-                    </span>
+                    <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">{pct}%</span>
                   </div>
-                  <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${pct}%`, background: "#10b981" }}
-                    />
-                  </div>
-                </div>
-                <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">{pct}%</span>
+                );
+              })}
+            </div>
+          </div>
+          <div className="bg-gray-50/50 px-5 py-4 border-t border-gray-100 flex justify-between items-center">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Gross Profit</span>
+            <span className="text-base font-bold text-emerald-600 tabular-nums">{formatCurrency(totalProfit)}</span>
+          </div>
+        </div>
+
+        {/* Deductions breakdown */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900">Revenue & Deductions Breakdown</h2>
+            </div>
+            <div className="divide-y divide-gray-100 text-sm">
+              <div className="px-5 py-2.5 flex justify-between items-center">
+                <span className="text-gray-600">Gross Booking Subtotal</span>
+                <span className="font-medium text-gray-900 tabular-nums">+{formatCurrency(grossSubtotal)}</span>
               </div>
-            );
-          })}
+              {totalCoupons > 0 && (
+                <div className="px-5 py-2.5 flex justify-between items-center text-red-600 bg-red-50/25 font-medium">
+                  <span>Coupons Applied</span>
+                  <span className="tabular-nums">-{formatCurrency(totalCoupons)}</span>
+                </div>
+              )}
+              {totalMemberships > 0 && (
+                <div className="px-5 py-2.5 flex justify-between items-center text-red-600 bg-red-50/25 font-medium">
+                  <span>Membership Discounts</span>
+                  <span className="tabular-nums">-{formatCurrency(totalMemberships)}</span>
+                </div>
+              )}
+              {totalFreeHours > 0 && (
+                <div className="px-5 py-2.5 flex justify-between items-center text-red-600 bg-red-50/25 font-medium">
+                  <span>Free Hours Value</span>
+                  <span className="tabular-nums">-{formatCurrency(totalFreeHours)}</span>
+                </div>
+              )}
+              {totalPoints > 0 && (
+                <div className="px-5 py-2.5 flex justify-between items-center text-red-600 bg-red-50/25 font-medium">
+                  <span>Loyalty Points Redeemed</span>
+                  <span className="tabular-nums">-{formatCurrency(totalPoints)}</span>
+                </div>
+              )}
+              <div className="px-5 py-3 flex justify-between items-center font-bold text-gray-900 bg-gray-50/30 border-y border-gray-100">
+                <span>Net Revenue (Total Collected)</span>
+                <span className="tabular-nums">{formatCurrency(totalRevenue)}</span>
+              </div>
+              {totalCostOfExtras > 0 && (
+                <div className="px-5 py-2.5 flex justify-between items-center text-gray-500">
+                  <span>Cost of Inventory Sold (COGS)</span>
+                  <span className="font-medium tabular-nums">-{formatCurrency(totalCostOfExtras)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="bg-gray-50/50 px-5 py-4 border-t border-gray-100 flex justify-between items-center">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Net Gross Profit</span>
+            <span className="text-base font-bold text-emerald-600 tabular-nums">{formatCurrency(totalProfit)}</span>
+          </div>
         </div>
       </div>
 
