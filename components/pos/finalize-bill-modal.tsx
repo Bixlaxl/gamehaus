@@ -337,7 +337,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       body: JSON.stringify({
         payments:        paymentsPayload,
         points_redeemed: clampedRedeem,
-        membership_id:   validatedMemberships.length > 0 ? validatedMemberships[0].id : undefined,
+        membership_id:   validatedMemberships.length > 0 ? (validatedMemberships[0].short_id || validatedMemberships[0].id) : undefined,
         ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
       }),
     });
