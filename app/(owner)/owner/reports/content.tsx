@@ -74,12 +74,30 @@ type ReportLocation = {
   closing_time: string;
 };
 
+type ReportMembership = {
+  id: string;
+  customer_phone: string;
+  starts_at: string;
+  created_at: string;
+  plan: { id: string; name: string; price: number } | null;
+};
+
+type ReportHistoryOrder = Pick<ReportOrder, "id" | "amount_due" | "advance_paid" | "finalized_at"> & {
+  location_id?: string | null;
+  location: { id: string; name: string } | null;
+};
+
 export function ReportsContent({
   initialReportData,
   initialFrom,
   initialTo,
 }: {
-  initialReportData: { orders: ReportOrder[]; locations: ReportLocation[] };
+  initialReportData: {
+    orders: ReportOrder[];
+    locations: ReportLocation[];
+    history?: ReportHistoryOrder[];
+    memberships?: ReportMembership[];
+  };
   initialFrom: string;
   initialTo: string;
 }) {
@@ -97,7 +115,12 @@ export function ReportsContent({
     }
   }
 
-  const { data: reportData, isLoading } = useQuery<{ orders: ReportOrder[]; locations: ReportLocation[]; history: ReportOrder[] }>({
+  const { data: reportData, isLoading } = useQuery<{
+    orders: ReportOrder[];
+    locations: ReportLocation[];
+    history: ReportHistoryOrder[];
+    memberships?: ReportMembership[];
+  }>({
     queryKey: ["reports", from, to],
     queryFn: async () => {
       const res = await fetch(`/api/owner/reports?from=${from}&to=${to}`);
@@ -109,7 +132,12 @@ export function ReportsContent({
     // Only apply the SSR-rendered data when the visible window matches.
     // Changing the preset / from / to gives the new queryKey a fresh fetch
     // instead of TanStack treating the stale initialData as still-fresh.
-    initialData: from === initialFrom && to === initialTo ? { ...initialReportData, history: [] } : undefined,
+    initialData: from === initialFrom && to === initialTo ? {
+      orders: initialReportData.orders,
+      locations: initialReportData.locations,
+      history: initialReportData.history ?? [],
+      memberships: initialReportData.memberships ?? [],
+    } : undefined,
     initialDataUpdatedAt: from === initialFrom && to === initialTo ? Date.now() : undefined,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -164,12 +192,18 @@ export function ReportsContent({
 
   const orders    = reportData?.orders    ?? [];
   const locations = reportData?.locations ?? [];
+  const memberships = reportData?.memberships ?? [];
 
   const filteredOrders = useMemo(
     () => selectedLocationId
       ? orders.filter((o) => o.location?.id === selectedLocationId)
       : orders,
     [orders, selectedLocationId]
+  );
+
+  const filteredMemberships = useMemo(
+    () => selectedLocationId ? [] : memberships,
+    [memberships, selectedLocationId]
   );
 
   // Single pass over filteredOrders for all derived stats — avoids 5+ separate loops on every render
@@ -191,6 +225,12 @@ export function ReportsContent({
     let totalPoints       = 0;
     let totalFreeHours    = 0;
     let totalCostOfExtras = 0;
+
+    // Sum up upfront membership sales
+    let totalMembershipSales = 0;
+    for (const m of filteredMemberships) {
+      totalMembershipSales += m.plan?.price ?? 0;
+    }
 
     for (const o of filteredOrders) {
       const orderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
@@ -305,8 +345,9 @@ export function ReportsContent({
     }
 
     const revenueByLocation = [...revByLoc.values()];
-    const totalProfit       = tableRevenue + inventoryProfit;
-    const marginPct         = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
+    const adjustedTotalRevenue = totalRevenue + totalMembershipSales;
+    const totalProfit       = tableRevenue + inventoryProfit + totalMembershipSales;
+    const marginPct         = adjustedTotalRevenue > 0 ? Math.round((totalProfit / adjustedTotalRevenue) * 100) : 0;
     const paymentBreakdown  = [...methodMap.entries()]
       .map(([method, amount]) => ({ method, amount }))
       .sort((a, b) => b.amount - a.amount);
@@ -316,17 +357,24 @@ export function ReportsContent({
       .slice(0, 10);
 
     return {
-      revenueByLocation, totalRevenue, totalSessions,
-      tableRevenue, inventoryProfit, totalProfit, marginPct,
-      paymentBreakdown, topCustomers,
+      revenueByLocation,
+      totalRevenue: adjustedTotalRevenue,
+      totalSessions,
+      tableRevenue,
+      inventoryProfit,
+      totalProfit,
+      marginPct,
+      paymentBreakdown,
+      topCustomers,
       grossSubtotal,
       totalCoupons,
       totalMemberships,
       totalPoints,
       totalFreeHours,
       totalCostOfExtras,
+      totalMembershipSales,
     };
-  }, [filteredOrders, locations]);
+  }, [filteredOrders, filteredMemberships, locations]);
 
   const {
     revenueByLocation, totalRevenue, totalSessions,
@@ -338,6 +386,7 @@ export function ReportsContent({
     totalPoints,
     totalFreeHours,
     totalCostOfExtras,
+    totalMembershipSales,
   } = stats;
 
   return (
@@ -558,6 +607,12 @@ export function ReportsContent({
                 <span className="text-gray-600">Gross Booking Subtotal</span>
                 <span className="font-medium text-gray-900 tabular-nums">+{formatCurrency(grossSubtotal)}</span>
               </div>
+              {totalMembershipSales > 0 && (
+                <div className="px-5 py-2.5 flex justify-between items-center text-emerald-600 bg-emerald-50/25 font-medium">
+                  <span>Membership Plan Sales</span>
+                  <span className="tabular-nums">+{formatCurrency(totalMembershipSales)}</span>
+                </div>
+              )}
               {totalCoupons > 0 && (
                 <div className="px-5 py-2.5 flex justify-between items-center text-red-600 bg-red-50/25 font-medium">
                   <span>Coupons Applied</span>

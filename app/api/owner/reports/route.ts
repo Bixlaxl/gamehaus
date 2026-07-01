@@ -87,9 +87,22 @@ export async function GET(request: Request) {
 
   if (histError) return NextResponse.json(err(histError.message, "DB_ERROR"), { status: 500 });
 
+  // Fetch customer memberships assigned in date range
+  const { data: memberships, error: membError } = await admin
+    .from("customer_memberships")
+    .select(`
+      id, customer_phone, starts_at, created_at,
+      plan:membership_plans(id, name, price)
+    `)
+    .gte("created_at", fromISO)
+    .lte("created_at", toISO);
+
+  if (membError) return NextResponse.json(err(membError.message, "DB_ERROR"), { status: 500 });
+
   return NextResponse.json(ok({
     locations: locations ?? [],
     orders: orders ?? [],
     history: history ?? [],
+    memberships: memberships ?? [],
   }));
 }

@@ -33,9 +33,35 @@ export default async function ReportsPage() {
     .gte("finalized_at", fromISO)
     .lte("finalized_at", toISO);
 
+  // Fetch 6 months history for SSR hydration
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(today.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
+  sixMonthsAgo.setHours(0, 0, 0, 0);
+  const histFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + opening + "+05:30").toISOString();
+
+  const { data: history } = await admin
+    .from("orders")
+    .select(`id, amount_due, advance_paid, finalized_at, location_id, location:locations(id, name)`)
+    .eq("status", "finalized")
+    .gte("finalized_at", histFromISO)
+    .order("finalized_at", { ascending: true });
+
+  // Fetch customer memberships assigned in date range
+  const { data: memberships } = await admin
+    .from("customer_memberships")
+    .select(`id, customer_phone, starts_at, created_at, plan:membership_plans(id, name, price)`)
+    .gte("created_at", fromISO)
+    .lte("created_at", toISO);
+
   return (
     <ReportsContent
-      initialReportData={{ orders: orders ?? [], locations: locations ?? [] }}
+      initialReportData={{
+        orders: orders ?? [],
+        locations: locations ?? [],
+        history: history ?? [],
+        memberships: memberships ?? [],
+      }}
       initialFrom={fromDate}
       initialTo={toDate}
     />
