@@ -14,7 +14,6 @@ export default async function CustomersPage() {
     admin
       .from("locations")
       .select("id, name")
-      .eq("is_active", true)
       .order("name"),
     admin
       .from("orders")

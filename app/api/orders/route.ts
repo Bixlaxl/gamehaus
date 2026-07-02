@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
+import { cancelExpiredUnpaidOrders } from "@/lib/booking-cleanup";
 
 export const runtime = 'edge';
 
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
   }
 
   // ── Conflict check ────────────────────────────────────────────────────────
+  await cancelExpiredUnpaidOrders();
   // Re-verify every requested slot is still free at the moment of booking.
   const scheduledItems = items.filter((i) => i.scheduled_start && i.scheduled_end);
   if (scheduledItems.length > 0) {
@@ -321,7 +323,7 @@ export async function POST(request: Request) {
   }
 
   // Run bookings insert and customer profile upsert in parallel
-  const bookingsPromise = (type === "online") ? (() => {
+  const bookingsPromise = (type === "walk_in") ? (() => {
     const bookings = createdItems
       .filter((item) => item.scheduled_start && item.scheduled_end)
       .map((item) => ({

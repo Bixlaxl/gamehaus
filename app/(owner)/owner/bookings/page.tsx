@@ -8,8 +8,7 @@ export default async function BookingsPage() {
   const admin = createAdminClient();
   const { data: locations } = await admin
     .from("locations")
-    .select("id, name, opening_time, closing_time")
-    .eq("is_active", true);
+    .select("id, name, opening_time, closing_time");
 
   const loc = locations?.[0];
   const opening = loc?.opening_time ?? "10:00";
@@ -27,15 +26,23 @@ export default async function BookingsPage() {
 
   const { data: bookings } = await admin
     .from("bookings")
-    .select(`*, order:orders(customer_name, customer_phone, advance_paid), order_item:order_items(table:tables(name, type, location:locations(name, id)))`)
+    .select(`*, order:orders(customer_name, customer_phone, advance_paid, type, status), order_item:order_items(table:tables(name, type, location:locations(name, id)))`)
     .gte("scheduled_start", from)
     .lte("scheduled_start", to)
     .order("scheduled_start");
 
+  const filteredBookings = (bookings ?? []).filter((b: any) => {
+    const o = b.order;
+    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <BookingsContent
       initialLocations={locations ?? []}
-      initialBookings={bookings ?? []}
+      initialBookings={filteredBookings}
     />
   );
 }

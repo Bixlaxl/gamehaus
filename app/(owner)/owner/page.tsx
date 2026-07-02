@@ -215,7 +215,7 @@ export default async function OwnerDashboard({
 
     // Bookings — join orders to get location
     admin.from("bookings")
-      .select("id, order:orders!inner(location_id)")
+      .select("id, order:orders!inner(location_id, type, status, advance_paid)")
       .eq("status", "confirmed")
       .gte("scheduled_start", todayStart.toISOString())
       .lte("scheduled_start", todayEnd.toISOString()),
@@ -278,7 +278,15 @@ export default async function OwnerDashboard({
   const filteredLastMonth  = (lastMonthOrders  ?? []).filter(filterLoc);
   const filteredWeek       = (weekOrders       ?? []).filter(filterLoc);
   const filteredLive       = (allLiveSessions  ?? []).filter(filterTableLoc);
-  const filteredBookings   = (allTodayBookings ?? []).filter(filterOrderLoc);
+  const filteredBookings   = (allTodayBookings ?? [])
+    .filter(filterOrderLoc)
+    .filter((b: any) => {
+      const o = b.order;
+      if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+        return false;
+      }
+      return true;
+    });
   const filteredRecent     = (allRecentOrders  ?? []).filter(filterLoc).slice(0, 8);
   const filteredLiveDetail = (allLiveDetail    ?? []).filter(filterTableLoc).slice(0, 8);
 

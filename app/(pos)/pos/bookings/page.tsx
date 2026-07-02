@@ -48,18 +48,26 @@ export default async function StaffBookingsPage() {
     .from("bookings")
     .select(`
       *,
-      order:orders(customer_name, customer_phone, advance_paid),
+      order:orders(customer_name, customer_phone, advance_paid, type, status),
       order_item:order_items(table:tables(name, type, location:locations(name, id)))
     `)
     .gte("scheduled_start", from)
     .lte("scheduled_start", to)
     .order("scheduled_start");
 
-  // Filter to staff's own location (server defensive; the GET endpoint also does this)
-  const ownLocationBookings = (bookings ?? []).filter((b) => {
-    const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;
-    return t?.location?.id === profile.location_id;
-  });
+  // Filter to staff's own location and remove unpaid online bookings
+  const ownLocationBookings = (bookings ?? [])
+    .filter((b) => {
+      const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;
+      return t?.location?.id === profile.location_id;
+    })
+    .filter((b: any) => {
+      const o = b.order;
+      if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+        return false;
+      }
+      return true;
+    });
 
   return (
     // BookingsContent was built for the owner light-mode panel; on the staff

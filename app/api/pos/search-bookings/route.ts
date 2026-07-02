@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("bookings")
-    .select("*, order:orders!inner(customer_name, customer_phone, location_id)")
+    .select("*, order:orders!inner(customer_name, customer_phone, location_id, type, status, advance_paid)")
     .eq("status", "confirmed")
     .eq("orders.location_id", locationId)
     .gte("scheduled_start", new Date(dayStartMs).toISOString())
@@ -63,9 +63,14 @@ export async function GET(request: Request) {
     return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
   }
 
-  // Empty query → show the whole today/tomorrow list as the default view.
-  // Non-empty → narrow client-side (small set, no extra round trip).
-  const rows = data ?? [];
+  // Filter out unpaid online bookings
+  const rows = (data ?? []).filter((b: any) => {
+    const o = b.order;
+    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+      return false;
+    }
+    return true;
+  });
   if (!q) {
     return NextResponse.json(ok(rows));
   }

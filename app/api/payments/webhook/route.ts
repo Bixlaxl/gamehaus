@@ -55,6 +55,35 @@ export async function POST(request: Request) {
 
       const now = new Date().toISOString();
 
+      const orderId = paymentRow.order_id;
+
+      const { data: existingBookings } = await admin
+        .from("bookings")
+        .select("id")
+        .eq("order_id", orderId);
+
+      const bookingsPromise = (!existingBookings || existingBookings.length === 0) ? (async () => {
+        const { data: items } = await admin
+          .from("order_items")
+          .select("id, scheduled_start, scheduled_end")
+          .eq("order_id", orderId)
+          .eq("is_deleted", false);
+          
+        const bookingsToInsert = (items ?? [])
+          .filter((item) => item.scheduled_start && item.scheduled_end)
+          .map((item) => ({
+            order_id: orderId,
+            order_item_id: item.id,
+            scheduled_start: item.scheduled_start!,
+            scheduled_end: item.scheduled_end!,
+            held_until: new Date(new Date(item.scheduled_start!).getTime() + 15 * 60 * 1000).toISOString(),
+            status: "confirmed" as const,
+          }));
+        if (bookingsToInsert.length > 0) {
+          await admin.from("bookings").insert(bookingsToInsert);
+        }
+      })() : Promise.resolve();
+
       // All three are independent — run in parallel
       const [, , { data: order }] = await Promise.all([
         admin.from("payments").update({
@@ -62,8 +91,9 @@ export async function POST(request: Request) {
           razorpay_payment_id: payment.id,
           collected_at:        now,
         }).eq("id", paymentRow.id),
-        admin.from("orders").update({ advance_paid: paymentRow.amount }).eq("id", paymentRow.order_id),
-        admin.from("orders").select("customer_phone, customer_name, points_redeemed").eq("id", paymentRow.order_id).single(),
+        admin.from("orders").update({ advance_paid: paymentRow.amount }).eq("id", orderId),
+        admin.from("orders").select("customer_phone, customer_name, points_redeemed").eq("id", orderId).single(),
+        bookingsPromise,
       ]);
 
       if (order?.customer_phone) {

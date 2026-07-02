@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { addOneDay } from "@/lib/utils";
+import { cancelExpiredUnpaidOrders } from "@/lib/booking-cleanup";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export async function GET(
   if (!date) return NextResponse.json(err("date required", "VALIDATION_ERROR"), { status: 400 });
 
   const admin = createAdminClient();
+  await cancelExpiredUnpaidOrders();
 
   // IST is UTC+5:30. Operating hours can cross midnight up to 04:00 AM next day.
   // Query up to noon of the next day so all overnight bookings are captured.

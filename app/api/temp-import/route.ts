@@ -1,0 +1,274 @@
+import { NextResponse } from "next/server";
+import * as fs from "fs";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+function parseCSVDate(datePart: string, timePart: string): string {
+  try {
+    const dParts = datePart.trim().split("/");
+    const tParts = timePart.trim().split(":");
+    if (dParts.length !== 3 || tParts.length !== 3) {
+      return new Date().toISOString();
+    }
+    // DD/MM/YYYY
+    const day = parseInt(dParts[0]);
+    const month = parseInt(dParts[1]) - 1;
+    const year = parseInt(dParts[2]);
+    
+    const hours = parseInt(tParts[0]);
+    const minutes = parseInt(tParts[1]);
+    const seconds = parseInt(tParts[2]);
+
+    const date = new Date(year, month, day, hours, minutes, seconds);
+    return date.toISOString();
+  } catch (e) {
+    return new Date().toISOString();
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const passcode = searchParams.get("passcode");
+    if (passcode !== "gamehaus-import-2026") {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const path = require("path");
+    const csvPath = path.join(process.cwd(), "customers (1).csv");
+    if (!fs.existsSync(csvPath)) {
+      return NextResponse.json({ success: false, error: "CSV file not found at " + csvPath });
+    }
+
+    const content = fs.readFileSync(csvPath, "utf-8");
+    const lines = content.split("\n");
+    const records = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const parts = line.split(",");
+      if (parts.length < 8) {
+        continue;
+      }
+
+      const id = parts[0].trim();
+      let phone = parts[2].trim();
+      phone = phone.replace(/\D/g, "");
+      if (phone.length === 12 && phone.startsWith("91")) {
+        phone = phone.substring(2);
+      }
+      
+      if (phone.length !== 10) {
+        continue;
+      }
+
+      const name = parts[1].trim();
+      const isMember = parts[4].trim() === "true";
+      const pointsBalance = parseInt(parts[5].trim()) || 0;
+      const totalSpent = parseFloat(parts[6].trim()) || 0;
+      
+      const datePart = parts[7];
+      const timePart = parts[8] || "00:00:00";
+      const createdAt = parseCSVDate(datePart, timePart);
+
+      records.push({
+        id,
+        phone,
+        name: name || null,
+        isMember,
+        points_balance: pointsBalance,
+        total_spent: totalSpent,
+        created_at: createdAt,
+        visit_count: totalSpent > 0 ? 1 : 0
+      });
+    }
+
+    // Deduplicate records in CSV by phone number
+    const uniqueMap = new Map();
+    for (const rec of records) {
+      const existing = uniqueMap.get(rec.phone);
+      if (existing) {
+        existing.total_spent += rec.total_spent;
+        existing.points_balance += rec.points_balance;
+        existing.visit_count += rec.visit_count;
+        if (rec.isMember) {
+          existing.isMember = true;
+        }
+      } else {
+        uniqueMap.set(rec.phone, rec);
+      }
+    }
+    const csvRecords = Array.from(uniqueMap.values());
+
+    const admin = createAdminClient();
+
+    // 1. Get NerfTurf location ID
+    const { data: locations, error: locError } = await admin
+      .from("locations")
+      .select("id, name");
+
+    if (locError) {
+      return NextResponse.json({ success: false, error: "Failed to fetch locations: " + locError.message });
+    }
+
+    const nerfLoc = locations?.find(l => l.name.toLowerCase().includes("nerf")) || locations?.[0];
+    if (!nerfLoc) {
+      return NextResponse.json({ success: false, error: "No locations found in database" });
+    }
+    const locationId = nerfLoc.id;
+
+    // 2. Fetch membership plans
+    const { data: plans, error: planError } = await admin
+      .from("membership_plans")
+      .select("id, name");
+    
+    if (planError) {
+      return NextResponse.json({ success: false, error: "Failed to fetch plans: " + planError.message });
+    }
+    const planId = plans?.[0]?.id;
+
+    // 3. Clean slate: Delete existing historical orders & payments for NerfTurf before 2026
+    const { error: deleteError } = await admin
+      .from("orders")
+      .delete()
+      .eq("location_id", locationId)
+      .lt("created_at", "2026-01-01T00:00:00Z");
+
+    if (deleteError) {
+      return NextResponse.json({ success: false, error: "Failed to delete old import orders: " + deleteError.message });
+    }
+
+    // 4. Fetch existing profiles to merge totals
+    const { data: existingProfiles, error: profError } = await admin
+      .from("customer_profiles")
+      .select("id, phone, name, points_balance, total_spent, visit_count, created_at");
+
+    if (profError) {
+      return NextResponse.json({ success: false, error: "Failed to fetch existing profiles: " + profError.message });
+    }
+
+    const profileMap = new Map(existingProfiles?.map(p => [p.phone, p]));
+
+    // 5. Prepare inserts and upserts
+    const crypto = require("crypto");
+    const profilesToUpsert = [];
+    const ordersToInsert = [];
+    const paymentsToInsert = [];
+    const membershipsToInsert = [];
+
+    for (const rec of csvRecords) {
+      const existing = profileMap.get(rec.phone);
+      
+      if (existing) {
+        // Merge customer data and preserve database ID to avoid unique constraints conflict
+        profilesToUpsert.push({
+          id: existing.id,
+          phone: rec.phone,
+          name: rec.name || existing.name,
+          points_balance: existing.points_balance + rec.points_balance,
+          total_spent: existing.total_spent + rec.total_spent,
+          visit_count: (existing.visit_count || 0) + rec.visit_count,
+          created_at: existing.created_at || rec.created_at
+        });
+      } else {
+        // Create new profile record with ID from CSV
+        profilesToUpsert.push({
+          id: rec.id,
+          phone: rec.phone,
+          name: rec.name,
+          points_balance: rec.points_balance,
+          total_spent: rec.total_spent,
+          visit_count: rec.visit_count,
+          created_at: rec.created_at
+        });
+      }
+
+      // Generate order history if they spent money
+      if (rec.total_spent > 0) {
+        const orderId = crypto.randomUUID();
+        ordersToInsert.push({
+          id: orderId,
+          location_id: locationId,
+          type: "walk_in" as const,
+          customer_name: rec.name || "Customer",
+          customer_phone: rec.phone,
+          status: "finalized" as const,
+          subtotal: rec.total_spent,
+          discount_amount: 0,
+          public_discount_amount: 0,
+          total_amount: rec.total_spent,
+          advance_paid: 0,
+          amount_due: rec.total_spent,
+          points_redeemed: 0,
+          created_at: rec.created_at,
+          finalized_at: rec.created_at
+        });
+
+        paymentsToInsert.push({
+          order_id: orderId,
+          amount: rec.total_spent,
+          method: "cash" as const,
+          status: "completed" as const,
+          created_at: rec.created_at
+        });
+      }
+
+      // Add memberships if Is Member is true
+      if (rec.isMember && planId) {
+        membershipsToInsert.push({
+          customer_phone: rec.phone,
+          plan_id: planId,
+          starts_at: rec.created_at,
+          expires_at: new Date(new Date(rec.created_at).setMonth(new Date(rec.created_at).getMonth() + 1)).toISOString(),
+          is_active: true,
+          free_hrs_used: 0,
+          free_hours_ledger: {},
+          created_at: rec.created_at
+        });
+      }
+    }
+
+    // 6. Execute DB operations in batches
+    const batchSize = 100;
+    
+    // Profiles
+    for (let i = 0; i < profilesToUpsert.length; i += batchSize) {
+      const batch = profilesToUpsert.slice(i, i + batchSize);
+      const { error } = await admin.from("customer_profiles").upsert(batch, { onConflict: "phone" });
+      if (error) return NextResponse.json({ success: false, error: `Profiles batch ${i} failed: ${error.message}` });
+    }
+
+    // Orders
+    for (let i = 0; i < ordersToInsert.length; i += batchSize) {
+      const batch = ordersToInsert.slice(i, i + batchSize);
+      const { error } = await admin.from("orders").insert(batch);
+      if (error) return NextResponse.json({ success: false, error: `Orders batch ${i} failed: ${error.message}` });
+    }
+
+    // Payments
+    for (let i = 0; i < paymentsToInsert.length; i += batchSize) {
+      const batch = paymentsToInsert.slice(i, i + batchSize);
+      const { error } = await admin.from("payments").insert(batch);
+      if (error) return NextResponse.json({ success: false, error: `Payments batch ${i} failed: ${error.message}` });
+    }
+
+    // Memberships
+    for (let i = 0; i < membershipsToInsert.length; i += batchSize) {
+      const batch = membershipsToInsert.slice(i, i + batchSize);
+      const { error } = await admin.from("customer_memberships").insert(batch);
+      if (error) return NextResponse.json({ success: false, error: `Memberships batch ${i} failed: ${error.message}` });
+    }
+
+    return NextResponse.json({
+      success: true,
+      locationAssigned: nerfLoc.name,
+      importedProfiles: profilesToUpsert.length,
+      createdOrders: ordersToInsert.length,
+      createdPayments: paymentsToInsert.length,
+      createdMemberships: membershipsToInsert.length
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message });
+  }
+}

@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(`
       *,
-      order:orders(customer_name, customer_phone, advance_paid, order_items(id, status)),
+      order:orders(customer_name, customer_phone, advance_paid, type, status, order_items(id, status)),
       order_item:order_items(table:tables(name, type, location:locations(name, id)))
     `)
     .gte("scheduled_start", from)
@@ -52,10 +52,14 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  // Staff sees only their own location. Filter post-fetch since Supabase's
-  // PostgREST nested-eq() filter on table.location.id is awkward; the volume
-  // is small (<a few hundred bookings per day) so JS-side filtering is fine.
-  const rows = data ?? [];
+  // Filter out unpaid online bookings
+  const rows = (data ?? []).filter((b: any) => {
+    const o = b.order;
+    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+      return false;
+    }
+    return true;
+  });
   const filtered = viewer.role === "staff" && viewer.location_id
     ? rows.filter((b) => {
         const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;

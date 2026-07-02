@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(`
       *,
-      order:orders!inner(customer_name, customer_phone, location_id, advance_paid, order_items(id, status)),
+      order:orders!inner(customer_name, customer_phone, location_id, advance_paid, type, status, order_items(id, status)),
       order_item:order_items!order_item_id(table_id, status, selected_mode_name)
     `)
     .eq("orders.location_id", locationId)
@@ -79,6 +79,12 @@ export async function GET(request: Request) {
   const filtered = (data ?? [])
     .filter((b: BookingRow) => {
       if (seenIds.has(b.id)) return false;
+      
+      const order = b.order as any;
+      if (order && order.type === "online" && (order.advance_paid ?? 0) === 0 && order.status === "open") {
+        return false;
+      }
+      
       seenIds.add(b.id);
       return true;
     })
