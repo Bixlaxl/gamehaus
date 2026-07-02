@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
 
     // Query specific sample phones from customers (1).csv
-    const samplePhones = ["9884525101", "6379674060", "8695823456", "9941935430", "9994166622"];
+    const samplePhones = ["9884525101", "6379674060", "8695823456", "9941935430", "9994166622", "8248779649"];
     
     const { data: profiles, error: profError } = await admin
       .from("customer_profiles")
@@ -22,6 +22,12 @@ export async function GET(request: Request) {
     if (profError) {
       return NextResponse.json({ success: false, error: "Profiles fetch error: " + profError.message });
     }
+
+    const { data: plans } = await admin.from("membership_plans").select("*");
+    const { data: memberships } = await admin
+      .from("customer_memberships")
+      .select("*, plan:membership_plans(name)")
+      .eq("customer_phone", "8248779649");
 
     // Query count of all profiles
     const { count, error: countError } = await admin
@@ -46,6 +52,8 @@ export async function GET(request: Request) {
       totalProfiles: count,
       nerfLocationId: nerfId,
       nerfOrdersCount,
+      plans,
+      memberships,
       profiles
     });
   } catch (err: any) {
