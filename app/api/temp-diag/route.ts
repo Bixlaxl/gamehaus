@@ -11,42 +11,59 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
 
-    // 1. Fetch total count of finalized orders
-    const { count, error: countError } = await admin
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "finalized");
+    // Replicate /api/owner/reports logic for "Last 30 days"
+    const from = "2026-06-03";
+    const to = "2026-07-02";
 
-    // 2. Fetch a sample of recent finalized orders
-    const { data: sample, error: sampleError } = await admin
-      .from("orders")
-      .select("id, customer_name, customer_phone, finalized_at, amount_due")
-      .eq("status", "finalized")
-      .order("finalized_at", { ascending: false })
-      .limit(10);
+    // 1. Fetch active locations
+    const { data: locations, error: locError } = await admin
+      .from("locations")
+      .select("*")
+      .eq("is_active", true);
 
-    // 3. Count orders in range June 3 to July 2
-    const fromISO = new Date("2026-06-03T10:00:00+05:30").toISOString();
-    const toISO = new Date("2026-07-02T23:00:00+05:30").toISOString();
+    if (locError) {
+      return NextResponse.json({ success: false, error: "locations fetch error: " + locError.message });
+    }
 
-    const { count: rangeCount, error: rangeError } = await admin
+    // Calculate local date range bounds
+    const loc = locations?.[0];
+    const opening = loc?.opening_time ?? "10:00";
+    const closing = loc?.closing_time ?? "23:00";
+    const [openH]  = opening.split(":").map(Number);
+    const [closeH] = closing.split(":").map(Number);
+    const crossesMidnight = closeH < openH;
+
+    const fromISO = new Date(from + "T" + opening + "+05:30").toISOString();
+    const toEndDate = crossesMidnight
+      ? (() => { const d = new Date(to + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
+      : to;
+    const toISO = new Date(toEndDate + "T" + closing + "+05:30").toISOString();
+
+    // 2. Fetch orders in date range
+    const { data: orders, error: ordError } = await admin
       .from("orders")
-      .select("*", { count: "exact", head: true })
+      .select(`
+        id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, total_amount, points_redeemed, type, finalized_at,
+        location:locations(id, name),
+        items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
+        payments(method, amount, status),
+        extras:order_extras(price, cost_price, quantity, is_deleted)
+      `)
       .eq("status", "finalized")
       .gte("finalized_at", fromISO)
       .lte("finalized_at", toISO);
 
-    // 4. Check if there are orders in any range or locations
-    const { data: locations } = await admin.from("locations").select("*");
+    if (ordError) {
+      return NextResponse.json({ success: false, error: "orders fetch error: " + ordError.message });
+    }
 
     return NextResponse.json({
       success: true,
-      totalFinalized: count,
-      rangeCount,
+      locationsCount: locations?.length,
+      ordersCount: orders?.length,
       fromISO,
       toISO,
-      sample,
-      locations
+      firstOrder: orders?.[0] || null
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message });
