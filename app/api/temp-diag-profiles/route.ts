@@ -56,10 +56,25 @@ export async function GET(request: Request) {
       .select("*")
       .ilike("name", "%nissan%");
 
+    // Query first 5 Nerf Turf orders to check raw timestamps
+    let sampleOrders: any[] = [];
+    if (locations) {
+      const nerfLoc = locations.find(l => l.name.toLowerCase().includes("nerf"));
+      if (nerfLoc) {
+        const { data: rawOrders } = await admin
+          .from("orders")
+          .select("id, customer_name, customer_phone, created_at, finalized_at, total_amount")
+          .eq("location_id", nerfLoc.id)
+          .limit(5);
+        sampleOrders = rawOrders || [];
+      }
+    }
+
     return NextResponse.json({
       success: true,
       locations,
       orderCounts,
+      sampleOrders,
       nissanProfiles
     });
   } catch (err: any) {
