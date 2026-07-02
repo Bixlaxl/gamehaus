@@ -81,8 +81,7 @@ export async function GET(request: Request) {
       planId = defaultPlanId;
     }
 
-    // 3. Clean slate: Delete existing historical orders & payments for NerfTurf before 2026
-    // 3. Clean slate: Delete ALL existing orders & payments for NerfTurf location
+    // 3. Clean slate: Delete ALL existing orders & payments for NerfTurf location in batches
     const { data: ordersToDelete } = await admin
       .from("orders")
       .select("id")
@@ -90,21 +89,26 @@ export async function GET(request: Request) {
 
     if (ordersToDelete && ordersToDelete.length > 0) {
       const orderIds = ordersToDelete.map(o => o.id);
+      const deleteBatchSize = 100;
       
-      const { error: payDeleteError } = await admin
-        .from("payments")
-        .delete()
-        .in("order_id", orderIds);
-      if (payDeleteError) {
-        return NextResponse.json({ success: false, error: "Failed to delete old payments: " + payDeleteError.message });
-      }
+      for (let i = 0; i < orderIds.length; i += deleteBatchSize) {
+        const batchIds = orderIds.slice(i, i + deleteBatchSize);
+        
+        const { error: payDeleteError } = await admin
+          .from("payments")
+          .delete()
+          .in("order_id", batchIds);
+        if (payDeleteError) {
+          return NextResponse.json({ success: false, error: `Failed to delete old payments batch ${i}: ` + payDeleteError.message });
+        }
 
-      const { error: ordDeleteError } = await admin
-        .from("orders")
-        .delete()
-        .in("id", orderIds);
-      if (ordDeleteError) {
-        return NextResponse.json({ success: false, error: "Failed to delete old orders: " + ordDeleteError.message });
+        const { error: ordDeleteError } = await admin
+          .from("orders")
+          .delete()
+          .in("id", batchIds);
+        if (ordDeleteError) {
+          return NextResponse.json({ success: false, error: `Failed to delete old orders batch ${i}: ` + ordDeleteError.message });
+        }
       }
     }
 
