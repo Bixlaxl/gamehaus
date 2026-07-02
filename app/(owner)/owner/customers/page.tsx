@@ -5,6 +5,41 @@ import { CustomersContent } from "./content";
 
 const PAGE_SIZE = 500;
 
+async function fetchAllStats(admin: any) {
+  let list: { phone: string; points_balance: number; total_spent: number; visit_count: number }[] = [];
+  let offset = 0;
+  const size = 1000;
+  while (true) {
+    const { data, error } = await admin
+      .from("customer_profiles")
+      .select("phone, points_balance, total_spent, visit_count")
+      .range(offset, offset + size - 1);
+    if (error || !data || data.length === 0) break;
+    list = list.concat(data);
+    if (data.length < size) break;
+    offset += size;
+  }
+  return list;
+}
+
+async function fetchAllOrderPhones(admin: any) {
+  let list: { customer_phone: string; location_id: string }[] = [];
+  let offset = 0;
+  const size = 1000;
+  while (true) {
+    const { data, error } = await admin
+      .from("orders")
+      .select("customer_phone, location_id")
+      .not("customer_phone", "is", null)
+      .range(offset, offset + size - 1);
+    if (error || !data || data.length === 0) break;
+    list = list.concat(data as { customer_phone: string; location_id: string }[]);
+    if (data.length < size) break;
+    offset += size;
+  }
+  return list;
+}
+
 export default async function CustomersPage({
   searchParams,
 }: {
@@ -90,31 +125,32 @@ export default async function CustomersPage({
   const [
     { data: customers, count: totalCount },
     { data: locations },
-    { data: allStats }
+    allStats,
+    locationPhones
   ] = await Promise.all([
     query,
     admin
       .from("locations")
       .select("id, name")
       .order("name"),
-    admin
-      .from("customer_profiles")
-      .select("points_balance, total_spent, visit_count")
+    fetchAllStats(admin),
+    fetchAllOrderPhones(admin)
   ]);
 
   const totalPages = Math.ceil((totalCount ?? 0) / PAGE_SIZE);
 
   // Compute global aggregates across all pages (unfiltered base)
-  const statsList = allStats ?? [];
-  const statsTotalCustomers = statsList.length;
-  const statsRepeatCustomers = statsList.filter(c => c.visit_count > 1).length;
-  const statsTotalPoints = statsList.reduce((s, c) => s + (c.points_balance || 0), 0);
-  const statsTotalRevenue = statsList.reduce((s, c) => s + (c.total_spent || 0), 0);
+  const statsTotalCustomers = allStats.length;
+  const statsRepeatCustomers = allStats.filter(c => c.visit_count > 1).length;
+  const statsTotalPoints = allStats.reduce((s, c) => s + (c.points_balance || 0), 0);
+  const statsTotalRevenue = allStats.reduce((s, c) => s + (c.total_spent || 0), 0);
 
   return (
     <CustomersContent
       initialCustomers={customers ?? []}
       locations={locations ?? []}
+      orders={locationPhones}
+      allStats={allStats}
       page={page}
       totalPages={totalPages}
       totalCount={totalCount ?? 0}
