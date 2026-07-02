@@ -1,9 +1,8 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { CheckCircle, Calendar, Clock, MapPin, ChevronRight } from "lucide-react";
+import { CheckCircle, Calendar, Clock, MapPin, ChevronRight, AlertTriangle } from "lucide-react";
 
 interface BookingItem {
   id: string;
@@ -19,6 +18,9 @@ interface Order {
   customer_name: string | null;
   customer_phone: string | null;
   advance_paid: number;
+  total_amount: number | null;
+  type: "online" | "walk_in";
+  status: "open" | "finalized" | "cancelled";
   items: BookingItem[] | null;
 }
 
@@ -45,6 +47,9 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
   const advancePaid = order?.advance_paid ?? 0;
   const amountDue   = Math.max(0, totalAmount - discountAmount - advancePaid);
 
+  const isOnline = order?.type === "online";
+  const isPaymentPending = isOnline && (order?.total_amount ?? 0) > 0 && (order?.advance_paid ?? 0) === 0 && order?.status === "open";
+
   if (!order) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: bg }}>
@@ -68,22 +73,48 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
           className="rounded-3xl overflow-hidden border mb-5"
           style={{ background: surface, borderColor: border, boxShadow: dark ? "0 4px 40px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.08)" }}
         >
-          {/* Green accent top */}
-          <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #10B981, #059669)" }} />
+          {/* Accent top */}
+          <div
+            className="h-1 w-full"
+            style={{
+              background: isPaymentPending
+                ? "linear-gradient(90deg, #EF4444, #DC2626)"
+                : "linear-gradient(90deg, #10B981, #059669)"
+            }}
+          />
 
           <div className="p-7 text-center">
-            <div
-              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ background: "rgba(16,185,129,0.12)" }}
-            >
-              <CheckCircle className="h-8 w-8" style={{ color: "#10B981" }} />
-            </div>
-            <h1 className="text-2xl font-bold mb-1" style={{ color: textPri }}>
-              Booking Confirmed!
-            </h1>
-            <p className="text-sm" style={{ color: textSec }}>
-              See you soon{order.customer_name ? `, ${order.customer_name}` : ""}!
-            </p>
+            {isPaymentPending ? (
+              <>
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ background: "rgba(239,68,68,0.12)" }}
+                >
+                  <AlertTriangle className="h-8 w-8" style={{ color: "#EF4444" }} />
+                </div>
+                <h1 className="text-2xl font-bold mb-1" style={{ color: textPri }}>
+                  Payment Pending / Failed
+                </h1>
+                <p className="text-sm px-4" style={{ color: textSec }}>
+                  Your online payment was not completed. Please try booking again.
+                </p>
+              </>
+            ) : (
+              <>
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ background: "rgba(16,185,129,0.12)" }}
+                >
+                  <CheckCircle className="h-8 w-8" style={{ color: "#10B981" }} />
+                </div>
+                <h1 className="text-2xl font-bold mb-1" style={{ color: textPri }}>
+                  Booking Confirmed!
+                </h1>
+                <p className="text-sm" style={{ color: textSec }}>
+                  See you soon{order.customer_name ? `, ${order.customer_name}` : ""}!
+                </p>
+              </>
+            )}
           </div>
 
           {/* Divider with dots */}
@@ -175,22 +206,36 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
 
           {/* Instructions & Non-refundable notice */}
           <div className="mx-5 mb-6 space-y-2.5">
-            <div className="px-4 py-3 rounded-2xl" style={{ background: inputBg }}>
-              <p className="flex items-start gap-2 text-xs" style={{ color: textSec }}>
-                <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: "#D4541A" }} />
-                Please arrive 5 minutes early. Show this confirmation at reception to check in.
-              </p>
-            </div>
-            {amountDue > 0 && (
+            {isPaymentPending ? (
               <div
                 className="px-4 py-3 rounded-2xl"
                 style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}
               >
-                <p className="flex items-start gap-2 text-xs" style={{ color: dark ? "#aaa" : "#777" }}>
-                  <span className="mt-0.5 shrink-0 text-sm leading-none" style={{ color: "#EF4444" }}>⚠</span>
-                  {`Your advance payment is strictly non-refundable. Please pay the remaining ₹${amountDue.toLocaleString("en-IN")} at the venue.`}
+                <p className="flex items-start gap-2 text-xs" style={{ color: "#EF4444" }}>
+                  <span className="mt-0.5 shrink-0 text-sm leading-none">⚠</span>
+                  This booking slot has not been secured because the online payment failed or was not completed. Please try booking again.
                 </p>
               </div>
+            ) : (
+              <>
+                <div className="px-4 py-3 rounded-2xl" style={{ background: inputBg }}>
+                  <p className="flex items-start gap-2 text-xs" style={{ color: textSec }}>
+                    <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: "#D4541A" }} />
+                    Please arrive 5 minutes early. Show this confirmation at reception to check in.
+                  </p>
+                </div>
+                {amountDue > 0 && (
+                  <div
+                    className="px-4 py-3 rounded-2xl"
+                    style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}
+                  >
+                    <p className="flex items-start gap-2 text-xs" style={{ color: dark ? "#aaa" : "#777" }}>
+                      <span className="mt-0.5 shrink-0 text-sm leading-none" style={{ color: "#EF4444" }}>⚠</span>
+                      {`Your advance payment is strictly non-refundable. Please pay the remaining ₹${amountDue.toLocaleString("en-IN")} at the venue.`}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -201,7 +246,7 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
           className="flex items-center justify-center gap-1.5 w-full py-4 rounded-2xl font-bold text-white text-sm transition-all active:scale-[0.98]"
           style={{ background: "#D4541A", boxShadow: "0 6px 20px rgba(212,84,26,0.3)" }}
         >
-          Book Another Table
+          {isPaymentPending ? "Try Booking Again" : "Book Another Table"}
           <ChevronRight className="h-4 w-4" />
         </Link>
 
