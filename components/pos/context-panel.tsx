@@ -943,8 +943,8 @@ function PanelSession({
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
   const maxPointsByBill = Math.floor(bill.totalDue / redeemRate);
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
-  // Minimum configurable points required to redeem
-  const clampedRedeem = (redeemPoints >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  // Minimum configurable points balance required to qualify for redemption
+  const clampedRedeem = ((customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
   const displayTotal  = Math.max(0, Math.round((bill.totalDue - (clampedRedeem * redeemRate)) * 100) / 100);
 
   function handleRedeemChange(val: string) {
@@ -1678,7 +1678,7 @@ function PanelSession({
               <span className="text-xs font-medium text-gray-500 dark:text-[#999] shrink-0">/ {maxRedeem} max</span>
             </div>
             <p className="text-[10px] text-gray-400 dark:text-[#555] pl-5">
-              Min. {minPointsToRedeem} pts to redeem{redeemPoints > 0 && redeemPoints < minPointsToRedeem ? ` — enter ${minPointsToRedeem} or more` : ""}
+              Requires min. balance of {minPointsToRedeem} pts to redeem.
             </p>
           </div>
         )}

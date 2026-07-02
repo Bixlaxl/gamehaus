@@ -520,8 +520,8 @@ export default function CheckoutPage() {
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
   const maxPointsByBill = Math.floor(baseAfterMembership / redeemRate);
   const maxRedeem     = Math.min(customer?.points_balance ?? 0, maxPointsByBill);
-  // Minimum points to redeem is dynamically configured
-  const clampedRedeem = (redeemPoints >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  // Minimum points balance to qualify for redemption is dynamically configured
+  const clampedRedeem = ((customer?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
   const amountToPay   = Math.max(0, baseAfterMembership - (clampedRedeem * redeemRate));
 
   function triggerLookup(currentPhone: string, currentName: string) {
@@ -1087,10 +1087,7 @@ export default function CheckoutPage() {
                       <span className="text-sm" style={{ color: textSec }}>/ {maxRedeem} pts max</span>
                     </div>
                     <p className="text-xs mt-1.5" style={{ color: textMut }}>
-                      Min. {minPointsToRedeem} pts to redeem
-                      {redeemPoints > 0 && redeemPoints < minPointsToRedeem && (
-                        <span style={{ color: "#EF4444" }}> — enter {minPointsToRedeem} or more</span>
-                      )}
+                      Requires min. balance of {minPointsToRedeem} pts to redeem.
                     </p>
                   </div>
                 )}

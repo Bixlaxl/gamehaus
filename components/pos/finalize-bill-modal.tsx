@@ -212,8 +212,8 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   const maxPointsByBill   = Math.floor(billAfterMembership / redeemRate);
   const maxRedeem         = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
-  // Minimum points to redeem is dynamically configured
-  const clampedRedeem     = (redeemPoints >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  // Minimum points balance to qualify for redemption is dynamically configured
+  const clampedRedeem     = ((customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
   const finalDue          = Math.max(0, Math.round((billAfterMembership - (clampedRedeem * redeemRate)) * 100) / 100);
   const pointsToEarn      = Math.floor(finalDue / earnRate);
 
@@ -734,7 +734,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                   <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
                 </div>
                 <p className="text-[10px] text-gray-400 dark:text-[#555]">
-                  Min. {minPointsToRedeem} pts to redeem{redeemPoints > 0 && redeemPoints < minPointsToRedeem ? ` — enter ${minPointsToRedeem} or more` : ""}
+                  Requires min. balance of {minPointsToRedeem} pts to redeem.
                 </p>
               </div>
             )}

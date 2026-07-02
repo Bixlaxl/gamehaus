@@ -89,11 +89,7 @@ export const createOrderSchema = z.object({
   customer_name: z.string().min(1),
   customer_phone: z.string().optional(),
   membership_id: z.string().uuid().optional(),
-  // 0 means no redemption; any value 1–99 is invalid (minimum redemption is 100 pts)
-  points_redeemed: z.number().int().min(0)
-    .refine((v) => v === 0 || v >= 100, { message: "Minimum 100 points required to redeem" })
-    .optional()
-    .default(0),
+  points_redeemed: z.number().int().min(0).optional().default(0),
   coupon_code: z.string().optional(),
   payment_mode: z.enum(["advance", "full"]).optional(),
   extras: z.array(

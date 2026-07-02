@@ -92,8 +92,9 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     const balance = profile?.points_balance ?? 0;
-    if (validatedPoints < minToRedeem) validatedPoints = 0;
-    else {
+    if (balance < minToRedeem) {
+      validatedPoints = 0;
+    } else {
       const maxByBill = Math.floor(subtotal / redeemRate);
       validatedPoints = Math.min(validatedPoints, balance, maxByBill);
     }

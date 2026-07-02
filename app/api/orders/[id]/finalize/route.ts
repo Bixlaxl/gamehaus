@@ -232,13 +232,14 @@ export async function POST(
   // the bill below zero or exceed the customer's actual balance.
   // Minimum redemption is dynamically configured — anything below is treated as zero.
   let validatedPoints = points_redeemed;
-  if (validatedPoints > 0 && validatedPoints < minToRedeem) {
-    validatedPoints = 0;
-  }
   if (validatedPoints > 0 && effectivePhone) {
     const balance = (pointsProfileResult as { data: { points_balance: number } | null }).data?.points_balance ?? 0;
-    const maxByBill = Math.floor(billAfterMembership / redeemRate);
-    validatedPoints = Math.min(validatedPoints, balance, maxByBill);
+    if (balance < minToRedeem) {
+      validatedPoints = 0;
+    } else {
+      const maxByBill = Math.floor(billAfterMembership / redeemRate);
+      validatedPoints = Math.min(validatedPoints, balance, maxByBill);
+    }
   } else {
     validatedPoints = 0;
   }
