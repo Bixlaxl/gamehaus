@@ -511,18 +511,26 @@ export default function CheckoutPage() {
     }, 0);
   }, [validatedMemberships]);
 
-  const membershipPctDiscount = isMembershipValid && maxValidatedPct > 0
-    ? Math.round(Math.max(0, baseAfterCoupon - freeHoursDiscount) * maxValidatedPct / 100 * 100) / 100
+  // 1. Calculate coupon and membership discounts on the FULL subtotal
+  const fullBaseAfterCoupon = Math.max(0, subtotal - (paymentMode === "full" ? couponDiscount : 0));
+  const fullMembershipPctDiscount = isMembershipValid && maxValidatedPct > 0
+    ? Math.round(Math.max(0, fullBaseAfterCoupon - freeHoursDiscount) * maxValidatedPct / 100 * 100) / 100
     : 0;
-  const totalMembershipDiscount = freeHoursDiscount + membershipPctDiscount;
-  const baseAfterMembership = Math.max(0, baseAfterCoupon - totalMembershipDiscount);
+  const fullTotalMembershipDiscount = freeHoursDiscount + fullMembershipPctDiscount;
+  const fullBillAfterMembership = Math.max(0, fullBaseAfterCoupon - fullTotalMembershipDiscount);
+
+  // Expose these for UI rendering block below
+  const membershipPctDiscount = fullMembershipPctDiscount;
+  const totalMembershipDiscount = fullTotalMembershipDiscount;
 
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
-  const maxPointsByBill = Math.floor(baseAfterMembership / redeemRate);
+  const maxPointsByBill = Math.floor(fullBillAfterMembership / redeemRate);
   const maxRedeem     = Math.min(customer?.points_balance ?? 0, maxPointsByBill);
   // Minimum points balance to qualify for redemption is dynamically configured
   const clampedRedeem = ((customer?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
-  const amountToPay   = Math.max(0, baseAfterMembership - (clampedRedeem * redeemRate));
+  
+  const fullRemaining = Math.max(0, fullBillAfterMembership - (clampedRedeem * redeemRate));
+  const amountToPay   = paymentMode === "full" ? fullRemaining : Math.min(advanceAmount, fullRemaining);
 
   function triggerLookup(currentPhone: string, currentName: string) {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
