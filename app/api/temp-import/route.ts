@@ -129,14 +129,42 @@ export async function GET(request: Request) {
     const planId = plans?.[0]?.id;
 
     // 3. Clean slate: Delete existing historical orders & payments for NerfTurf before 2026
-    const { error: deleteError } = await admin
+    const { data: ordersToDelete } = await admin
       .from("orders")
-      .delete()
+      .select("id")
       .eq("location_id", locationId)
       .lt("created_at", "2026-01-01T00:00:00Z");
 
-    if (deleteError) {
-      return NextResponse.json({ success: false, error: "Failed to delete old import orders: " + deleteError.message });
+    if (ordersToDelete && ordersToDelete.length > 0) {
+      const orderIds = ordersToDelete.map(o => o.id);
+      
+      const { error: payDeleteError } = await admin
+        .from("payments")
+        .delete()
+        .in("order_id", orderIds);
+      if (payDeleteError) {
+        return NextResponse.json({ success: false, error: "Failed to delete old payments: " + payDeleteError.message });
+      }
+
+      const { error: ordDeleteError } = await admin
+        .from("orders")
+        .delete()
+        .in("id", orderIds);
+      if (ordDeleteError) {
+        return NextResponse.json({ success: false, error: "Failed to delete old orders: " + ordDeleteError.message });
+      }
+    }
+
+    // Delete existing old memberships for NerfTurf customers
+    const csvPhones = csvRecords.map(r => r.phone);
+    const { error: membDeleteError } = await admin
+      .from("customer_memberships")
+      .delete()
+      .in("customer_phone", csvPhones)
+      .lt("created_at", "2026-01-01T00:00:00Z");
+
+    if (membDeleteError) {
+      return NextResponse.json({ success: false, error: "Failed to delete old memberships: " + membDeleteError.message });
     }
 
     // 4. Fetch existing profiles to merge totals
