@@ -180,11 +180,22 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     }
   }
 
+  const isAdvanceBooking = (selectedOrder?.advance_paid ?? 0) > 0 && (selectedOrder?.advance_paid ?? 0) < (selectedOrder?.total_amount ?? 0);
+
   // Use public_discount_amount (coupon-only portion stored at booking time).
   // Member discount is always applied live via membershipPct so it covers
   // extensions + extras added after the booking — matching the finalize route.
   const publicFixedDiscount = (selectedOrder as any)?.public_discount_amount ?? selectedOrder?.discount_amount ?? 0;
-  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, publicFixedDiscount, membershipPct, totalFreeHoursDiscount);
+  const bill          = calculateBill(
+    activeItems,
+    activeExtras,
+    now,
+    null,
+    selectedOrder?.advance_paid ?? 0,
+    isAdvanceBooking ? 0 : publicFixedDiscount,
+    isAdvanceBooking ? 0 : membershipPct,
+    isAdvanceBooking ? 0 : totalFreeHoursDiscount
+  );
   // fullyPrePaid: all charges are already covered by advance (online full-pay).
   // Use bill.totalDue which is already net of ALL discounts + advance.
   const fullyPrePaid  = bill.totalDue <= 0 && (selectedOrder?.advance_paid ?? 0) > 0;
@@ -212,10 +223,10 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   const maxPointsByBill   = Math.floor(billAfterMembership / redeemRate);
   const maxRedeem         = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
-  // Minimum points balance to qualify for redemption is dynamically configured
-  const clampedRedeem     = ((customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  // Minimum points balance to qualify for redemption is dynamically configured — disabled for advance bookings
+  const clampedRedeem     = (!isAdvanceBooking && (customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
   const finalDue          = Math.max(0, Math.round((billAfterMembership - (clampedRedeem * redeemRate)) * 100) / 100);
-  const pointsToEarn      = Math.floor(finalDue / earnRate);
+  const pointsToEarn      = isAdvanceBooking ? 0 : Math.floor(finalDue / earnRate);
 
   const phoneForLookup = selectedOrder?.customer_phone ?? (manualPhone.length >= 10 ? manualPhone : null);
 
@@ -715,7 +726,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               </div>
             )}
 
-            {customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
+            {!isAdvanceBooking && customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>

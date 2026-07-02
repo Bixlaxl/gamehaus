@@ -511,12 +511,14 @@ export default function CheckoutPage() {
     }, 0);
   }, [validatedMemberships]);
 
+  const isAdvance = paymentMode === "advance";
+
   // 1. Calculate coupon and membership discounts on the FULL subtotal
-  const fullBaseAfterCoupon = Math.max(0, subtotal - (paymentMode === "full" ? couponDiscount : 0));
-  const fullMembershipPctDiscount = isMembershipValid && maxValidatedPct > 0
+  const fullBaseAfterCoupon = Math.max(0, subtotal - (isAdvance ? 0 : couponDiscount));
+  const fullMembershipPctDiscount = !isAdvance && isMembershipValid && maxValidatedPct > 0
     ? Math.round(Math.max(0, fullBaseAfterCoupon - freeHoursDiscount) * maxValidatedPct / 100 * 100) / 100
     : 0;
-  const fullTotalMembershipDiscount = freeHoursDiscount + fullMembershipPctDiscount;
+  const fullTotalMembershipDiscount = isAdvance ? 0 : (freeHoursDiscount + fullMembershipPctDiscount);
   const fullBillAfterMembership = Math.max(0, fullBaseAfterCoupon - fullTotalMembershipDiscount);
 
   // Expose these for UI rendering block below
@@ -526,11 +528,11 @@ export default function CheckoutPage() {
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
   const maxPointsByBill = Math.floor(fullBillAfterMembership / redeemRate);
   const maxRedeem     = Math.min(customer?.points_balance ?? 0, maxPointsByBill);
-  // Minimum points balance to qualify for redemption is dynamically configured
-  const clampedRedeem = ((customer?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  // Minimum points balance to qualify for redemption is dynamically configured — disabled for advance bookings
+  const clampedRedeem = (!isAdvance && (customer?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
   
   const fullRemaining = Math.max(0, fullBillAfterMembership - (clampedRedeem * redeemRate));
-  const amountToPay   = paymentMode === "full" ? fullRemaining : Math.min(advanceAmount, fullRemaining);
+  const amountToPay   = isAdvance ? Math.min(advanceAmount, fullRemaining) : fullRemaining;
 
   function triggerLookup(currentPhone: string, currentName: string) {
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
@@ -1075,7 +1077,7 @@ export default function CheckoutPage() {
                   </div>
                 )}
                 {/* Redeem input — only shown when customer has ≥ minPointsToRedeem points */}
-                {!lookingUp && customer && customer.points_balance >= minPointsToRedeem && (
+                {!lookingUp && customer && paymentMode === "full" && customer.points_balance >= minPointsToRedeem && (
                   <div className="mt-2">
                     <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest mb-2" style={{ color: textMut }}>
                       <Star className="h-3 w-3" /> Redeem points
