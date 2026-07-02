@@ -82,11 +82,11 @@ export async function GET(request: Request) {
     }
 
     // 3. Clean slate: Delete existing historical orders & payments for NerfTurf before 2026
+    // 3. Clean slate: Delete ALL existing orders & payments for NerfTurf location
     const { data: ordersToDelete } = await admin
       .from("orders")
       .select("id")
-      .eq("location_id", locationId)
-      .lt("created_at", "2026-01-01T00:00:00Z");
+      .eq("location_id", locationId);
 
     if (ordersToDelete && ordersToDelete.length > 0) {
       const orderIds = ordersToDelete.map(o => o.id);
@@ -144,6 +144,10 @@ export async function GET(request: Request) {
           existing.points_balance += pointsBalance;
           existing.visit_count += totalSpent > 0 ? 1 : 0;
           if (isMember) existing.isMember = true;
+          if (filename.includes("(1)") && totalSpent > 0) {
+            existing.hasNerfTurfSpend = true;
+            existing.nerfTurfSpent = (existing.nerfTurfSpent || 0) + totalSpent;
+          }
         } else {
           csvRecordsMap.set(phone, {
             id,
@@ -154,7 +158,8 @@ export async function GET(request: Request) {
             total_spent: totalSpent,
             created_at: createdAt,
             visit_count: totalSpent > 0 ? 1 : 0,
-            hasNerfTurfSpend: filename.includes("(1)") && totalSpent > 0
+            hasNerfTurfSpend: filename.includes("(1)") && totalSpent > 0,
+            nerfTurfSpent: filename.includes("(1)") && totalSpent > 0 ? totalSpent : 0
           });
         }
       }
@@ -170,8 +175,7 @@ export async function GET(request: Request) {
     const { error: membDeleteError } = await admin
       .from("customer_memberships")
       .delete()
-      .in("customer_phone", csvPhones)
-      .lt("created_at", "2026-01-01T00:00:00Z");
+      .in("customer_phone", csvPhones);
 
     if (membDeleteError) {
       return NextResponse.json({ success: false, error: "Failed to delete old memberships: " + membDeleteError.message });
@@ -230,8 +234,7 @@ export async function GET(request: Request) {
       });
 
       // Insert historical orders for NerfTurf spent customers (from NerfTurf CSV)
-      if (csv.hasNerfTurfSpend) {
-        // Find row in original NerfTurf CSV to match correct historical spent amount
+      if (csv.hasNerfTurfSpend && csv.nerfTurfSpent > 0) {
         const orderId = crypto.randomUUID();
         ordersToInsert.push({
           id: orderId,
@@ -240,12 +243,12 @@ export async function GET(request: Request) {
           customer_name: csv.name || "Customer",
           customer_phone: csv.phone,
           status: "finalized" as const,
-          subtotal: csv.total_spent,
+          subtotal: csv.nerfTurfSpent,
           discount_amount: 0,
           public_discount_amount: 0,
-          total_amount: csv.total_spent,
+          total_amount: csv.nerfTurfSpent,
           advance_paid: 0,
-          amount_due: csv.total_spent,
+          amount_due: csv.nerfTurfSpent,
           points_redeemed: 0,
           created_at: csv.created_at,
           finalized_at: csv.created_at
@@ -253,7 +256,7 @@ export async function GET(request: Request) {
 
         paymentsToInsert.push({
           order_id: orderId,
-          amount: csv.total_spent,
+          amount: csv.nerfTurfSpent,
           method: "cash" as const,
           status: "completed" as const,
           created_at: csv.created_at
