@@ -52,11 +52,19 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const id = parts[0].trim();
+      let phone = parts[2].trim();
+      // Strip any non-digit characters
+      phone = phone.replace(/\D/g, "");
+      // If it starts with 91 and has 12 digits (Indian country code prefix), strip the 91
+      if (phone.length === 12 && phone.startsWith("91")) {
+        phone = phone.substring(2);
+      }
+      
+      if (phone.length !== 10) {
+        continue;
+      }
+
       const name = parts[1].trim();
-      const phone = parts[2].trim();
-      const email = parts[3].trim();
-      const isMember = parts[4].trim() === "true";
       const pointsBalance = parseInt(parts[5].trim()) || 0;
       const totalSpent = parseFloat(parts[6].trim()) || 0;
       
@@ -65,7 +73,6 @@ export async function GET(request: Request) {
       const createdAt = parseCSVDate(datePart, timePart);
 
       records.push({
-        id,
         phone,
         name: name || null,
         points_balance: pointsBalance,
@@ -75,8 +82,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // Deduplicate records by phone number (keeping the latest occurrence) to prevent
-    // ON CONFLICT DO UPDATE from trying to modify the same row multiple times in one batch.
+    // Deduplicate records by phone number (keeping the latest occurrence)
     const uniqueMap = new Map();
     for (const rec of records) {
       uniqueMap.set(rec.phone, rec);
@@ -95,7 +101,11 @@ export async function GET(request: Request) {
 
       if (error) {
         console.error(`Error in batch ${i}:`, error.message);
-        return NextResponse.json({ success: false, error: error.message });
+        return NextResponse.json({ 
+          success: false, 
+          error: error.message,
+          batchSample: batch.slice(0, 3)
+        });
       } else {
         successfulUpserts += batch.length;
       }
@@ -103,8 +113,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      totalRecords: deduplicatedRecords.length,
-      imported: successfulUpserts
+      totalParsed: records.length,
+      totalUnique: deduplicatedRecords.length,
+      imported: successfulUpserts,
+      sample: deduplicatedRecords.slice(0, 3)
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message });
