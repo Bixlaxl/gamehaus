@@ -9,7 +9,28 @@ export async function GET() {
   const pubKey        = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? "";
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET ?? "";
 
+  // Test credentials live against Razorpay by calling a harmless read endpoint
+  let credentialsValid: boolean | string = false;
+  try {
+    const credentials = Buffer.from(`${keyId.trim()}:${keySecret.trim()}`).toString("base64");
+    const testRes = await fetch("https://api.razorpay.com/v1/orders?count=1", {
+      headers: {
+        "Authorization": `Basic ${credentials}`,
+        "Accept": "application/json",
+      },
+    });
+    if (testRes.ok) {
+      credentialsValid = true;
+    } else {
+      const body = await testRes.text();
+      credentialsValid = `FAILED (HTTP ${testRes.status}): ${body.slice(0, 200)}`;
+    }
+  } catch (e: any) {
+    credentialsValid = `ERROR: ${e?.message}`;
+  }
+
   const info = {
+    credentialTest: credentialsValid,
     RAZORPAY_KEY_ID: {
       present:    keyId.length > 0,
       length:     keyId.length,
