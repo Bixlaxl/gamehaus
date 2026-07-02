@@ -75,12 +75,20 @@ export async function GET(request: Request) {
       });
     }
 
+    // Deduplicate records by phone number (keeping the latest occurrence) to prevent
+    // ON CONFLICT DO UPDATE from trying to modify the same row multiple times in one batch.
+    const uniqueMap = new Map();
+    for (const rec of records) {
+      uniqueMap.set(rec.phone, rec);
+    }
+    const deduplicatedRecords = Array.from(uniqueMap.values());
+
     const admin = createAdminClient();
     const batchSize = 100;
     let successfulUpserts = 0;
 
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
+    for (let i = 0; i < deduplicatedRecords.length; i += batchSize) {
+      const batch = deduplicatedRecords.slice(i, i + batchSize);
       const { error } = await admin
         .from("customer_profiles")
         .upsert(batch, { onConflict: "phone" });
@@ -95,7 +103,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      totalRecords: records.length,
+      totalRecords: deduplicatedRecords.length,
       imported: successfulUpserts
     });
   } catch (err: any) {
