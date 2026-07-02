@@ -14,9 +14,12 @@ export async function POST(
   const admin = createAdminClient();
 
   let isEmergency = false;
+  let isSilent = false;
   try {
     const body = await request.json().catch(() => ({}));
     if (body?.emergency === true) isEmergency = true;
+    // silent=true → skip WhatsApp notification (used when cancelling due to payment failure)
+    if (body?.silent === true) isSilent = true;
   } catch {}
 
   try {
@@ -212,7 +215,12 @@ export async function POST(
     }
 
     // 7. Trigger WhatsApp Cancellation Notification
-    await sendWhatsAppCancellation(orderId, refundPct, refundAmount);
+    // Skip if: caller explicitly requested silence, OR no payment was ever made
+    // (e.g. payment gateway failed before customer even saw checkout — no need to alarm them)
+    const neverPaid = amountPaidVal === 0;
+    if (!isSilent && !neverPaid) {
+      await sendWhatsAppCancellation(orderId, refundPct, refundAmount);
+    }
 
     return NextResponse.json(ok({ success: true, refundAmount, refundPct }));
   } catch (error) {
