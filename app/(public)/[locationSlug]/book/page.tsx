@@ -57,6 +57,9 @@ interface RazorpayOptions {
     razorpay_order_id: string;
     razorpay_signature: string;
   }) => void;
+  modal?: {
+    ondismiss?: () => void;
+  };
 }
 
 const TYPE_EMOJI: Record<string, string> = {
@@ -708,6 +711,12 @@ export default function CheckoutPage() {
       | { success: false; error: string };
 
     if (!rpBody.success) {
+      // Cancel the DB order immediately so the slot is freed for other customers
+      fetch(`/api/orders/${order_id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emergency: true }),
+      }).catch(() => {/* best-effort, ignore errors */});
       setError(rpBody.error);
       setLoading(false);
       submitting.current = false;
@@ -734,6 +743,19 @@ export default function CheckoutPage() {
         handler: async (response) => {
           cart.clearCart();
           router.push(`/booking/${order_id}?payment_id=${response.razorpay_payment_id}`);
+        },
+        modal: {
+          ondismiss: () => {
+            // User closed the popup without paying — free the slot immediately
+            fetch(`/api/orders/${order_id}/cancel`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ emergency: true }),
+            }).catch(() => {/* best-effort */});
+            setError("Payment was cancelled. Your slot has been released. You can try again.");
+            setLoading(false);
+            submitting.current = false;
+          },
         },
       };
 
