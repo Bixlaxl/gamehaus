@@ -143,6 +143,9 @@ export function ReportsContent({
     placeholderData: keepPreviousData,
   });
 
+  const orders    = reportData?.orders    ?? [];
+  const locations = reportData?.locations ?? [];
+  const memberships = reportData?.memberships ?? [];
   const monthlyHistory = reportData?.history ?? [];
   const isHistoryLoading = isLoading;
 
@@ -159,11 +162,11 @@ export function ReportsContent({
       list.push({ monthKey, label, revenue: 0, ordersCount: 0, MoM: 0 });
     }
     
-    const orders = selectedLocationId
+    const historicalOrders = selectedLocationId
       ? monthlyHistory.filter(o => o.location?.id === selectedLocationId)
       : monthlyHistory;
       
-    for (const order of orders) {
+    for (const order of historicalOrders) {
       if (!order.finalized_at) continue;
       const istMs = new Date(order.finalized_at).getTime() + 5.5 * 60 * 60 * 1000;
       const istDate = new Date(istMs);
@@ -174,6 +177,21 @@ export function ReportsContent({
         const orderRev = (order.amount_due ?? 0) + (order.advance_paid ?? 0);
         bucket.revenue += orderRev;
         bucket.ordersCount += 1;
+      }
+    }
+
+    // Add upfront membership sales to the history chart if in global "All Locations" view
+    if (!selectedLocationId) {
+      for (const m of memberships) {
+        if (!m.created_at || !m.plan?.price) continue;
+        const istMs = new Date(m.created_at).getTime() + 5.5 * 60 * 60 * 1000;
+        const istDate = new Date(istMs);
+        const mKey = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, "0")}`;
+
+        const bucket = list.find(b => b.monthKey === mKey);
+        if (bucket) {
+          bucket.revenue += m.plan.price;
+        }
       }
     }
     
@@ -188,11 +206,7 @@ export function ReportsContent({
     }
     
     return list;
-  }, [monthlyHistory, selectedLocationId]);
-
-  const orders    = reportData?.orders    ?? [];
-  const locations = reportData?.locations ?? [];
-  const memberships = reportData?.memberships ?? [];
+  }, [monthlyHistory, memberships, selectedLocationId]);
 
   const filteredOrders = useMemo(
     () => selectedLocationId

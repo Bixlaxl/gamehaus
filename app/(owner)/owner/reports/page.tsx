@@ -47,15 +47,15 @@ export default async function ReportsPage() {
     .gte("finalized_at", histFromISO)
     .order("finalized_at", { ascending: true });
 
-  // Fetch customer memberships assigned in date range
+  // Fetch customer memberships assigned in the last 6 months (matching the history range)
   // Use full-day IST boundaries so created_at (UTC) is captured regardless of business hours
-  const membFromISO = new Date(fromDate + "T00:00:00+05:30").toISOString();
+  const membHistFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T00:00:00+05:30").toISOString();
   const membToISO   = new Date(toDate   + "T23:59:59+05:30").toISOString();
 
   const { data: memberships } = await admin
     .from("customer_memberships")
     .select(`id, customer_phone, starts_at, created_at, plan:membership_plans(id, name, price)`)
-    .gte("created_at", membFromISO)
+    .gte("created_at", membHistFromISO)
     .lte("created_at", membToISO);
 
   return (
