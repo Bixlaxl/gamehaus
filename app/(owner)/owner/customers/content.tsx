@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Users, TrendingUp, Star, Award, MapPin, Download } from "lucide-react";
+import { Search, Users, TrendingUp, Star, Award, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { CustomerProfile } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -40,11 +41,18 @@ export function CustomersContent({
   initialCustomers,
   locations,
   orders = [],
+  page = 1,
+  totalPages = 1,
+  totalCount = 0,
 }: {
   initialCustomers: Customer[];
   locations: { id: string; name: string }[];
   orders?: OrderRecord[];
+  page?: number;
+  totalPages?: number;
+  totalCount?: number;
 }) {
+  const router = useRouter();
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [search,           setSearch]           = useState("");
   const [sortBy,           setSortBy]           = useState("last_visit");
@@ -222,13 +230,19 @@ export function CustomersContent({
     doc.save(`gamehaus-customers-${fileLocSuffix}-${new Date().toISOString().split("T")[0]}.pdf`);
   };
 
+  const goToPage = (p: number) => {
+    router.push(`/owner/customers?page=${p}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Customers</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Showing {customers.length} of {totalCustomers} customers
+            {search || minVisits || minPoints
+              ? `Showing ${customers.length} matching customers (page ${page} of ${totalPages} · ${totalCount.toLocaleString("en-IN")} total)`
+              : `${totalCount.toLocaleString("en-IN")} total customers · page ${page} of ${totalPages}`}
           </p>
         </div>
 
@@ -368,6 +382,49 @@ export function CustomersContent({
           </tbody>
         </table>
       </div>
+
+      {/* Pagination bar */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => goToPage(page - 1)}
+            disabled={page <= 1}
+            className="flex items-center gap-1"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Prev
+          </Button>
+
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => goToPage(p)}
+                className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                  p === page
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => goToPage(page + 1)}
+            disabled={page >= totalPages}
+            className="flex items-center gap-1"
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
