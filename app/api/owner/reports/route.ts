@@ -29,11 +29,10 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
-  // Fetch active locations
+  // Fetch locations
   const { data: locations, error: locError } = await admin
     .from("locations")
-    .select("*")
-    .eq("is_active", true);
+    .select("*");
   if (locError) return NextResponse.json(err(locError.message, "DB_ERROR"), { status: 500 });
 
   // Calculate local date range bounds

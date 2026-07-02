@@ -129,16 +129,6 @@ export function ReportsContent({
       if (!json.success) throw new Error(json.error?.message || "Failed to fetch reports");
       return json.data;
     },
-    // Only apply the SSR-rendered data when the visible window matches.
-    // Changing the preset / from / to gives the new queryKey a fresh fetch
-    // instead of TanStack treating the stale initialData as still-fresh.
-    initialData: from === initialFrom && to === initialTo ? {
-      orders: initialReportData.orders,
-      locations: initialReportData.locations,
-      history: initialReportData.history ?? [],
-      memberships: initialReportData.memberships ?? [],
-    } : undefined,
-    initialDataUpdatedAt: from === initialFrom && to === initialTo ? Date.now() : undefined,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
@@ -215,10 +205,14 @@ export function ReportsContent({
     [orders, selectedLocationId]
   );
 
-  const filteredMemberships = useMemo(
-    () => selectedLocationId ? [] : memberships,
-    [memberships, selectedLocationId]
-  );
+  const filteredMemberships = useMemo(() => {
+    if (selectedLocationId) return [];
+    return memberships.filter((m) => {
+      if (!m.created_at) return false;
+      const dateStr = m.created_at.split("T")[0];
+      return dateStr >= from && dateStr <= to;
+    });
+  }, [memberships, selectedLocationId, from, to]);
 
   // Single pass over filteredOrders for all derived stats — avoids 5+ separate loops on every render
   const stats = useMemo(() => {

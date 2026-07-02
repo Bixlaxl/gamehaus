@@ -11,7 +11,7 @@ export default async function ReportsPage() {
   const toDate   = today.toISOString().split("T")[0];
   const fromDate = new Date(Date.now() - 29 * 86400000).toISOString().split("T")[0];
 
-  const { data: locations } = await admin.from("locations").select("*").eq("is_active", true);
+  const { data: locations } = await admin.from("locations").select("*");
 
   const loc     = locations?.[0];
   const opening = loc?.opening_time ?? "10:00";
