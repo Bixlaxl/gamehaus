@@ -6,7 +6,7 @@ This document is the authoritative developer reference and operational manual fo
 
 ## 1. Project Overview & Tech Stack
 
-Gamehaus is a booking and POS system for physical snooker/gaming café locations (Bandra, Andheri). It handles public online table bookings, real-time staff POS check-ins, walk-ins, multi-session tracking, inventory item sales, and loyalty reward points.
+Gamehaus is a booking and POS system for physical snooker/gaming café locations (Gamehaus, NerfTurf). It handles public online table bookings, real-time staff POS check-ins, walk-ins, multi-session tracking, inventory item sales, and loyalty reward points.
 
 * **Framework:** Next.js 14 App Router (`app/` directory). All routes run on **Edge Runtime** (`export const runtime = 'edge'`).
 * **Database & Auth:** Supabase (PostgreSQL + RLS + Realtime). Auth session synchronized between server and browser via `@supabase/ssr` cookies.
