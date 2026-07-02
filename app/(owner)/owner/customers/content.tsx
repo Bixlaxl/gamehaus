@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +21,13 @@ type OrderRecord = {
   location_id: string;
 };
 
+type CustomerStats = {
+  phone: string;
+  points_balance: number;
+  total_spent: number;
+  visit_count: number;
+};
+
 const SORT_OPTIONS = [
   { value: "last_visit",     label: "Last visit" },
   { value: "total_spent",    label: "Total spent" },
@@ -41,6 +46,7 @@ export function CustomersContent({
   initialCustomers,
   locations,
   orders = [],
+  allStats = [],
   page = 1,
   totalPages = 1,
   totalCount = 0,
@@ -48,10 +54,16 @@ export function CustomersContent({
   globalRepeatCustomers,
   globalTotalPoints,
   globalTotalRevenue,
+  currentQ = "",
+  currentSortBy = "last_visit",
+  currentMinVisits = "",
+  currentMinPoints = "",
+  currentLocation = "all",
 }: {
   initialCustomers: Customer[];
   locations: { id: string; name: string }[];
   orders?: OrderRecord[];
+  allStats?: CustomerStats[];
   page?: number;
   totalPages?: number;
   totalCount?: number;
@@ -59,13 +71,93 @@ export function CustomersContent({
   globalRepeatCustomers?: number;
   globalTotalPoints?: number;
   globalTotalRevenue?: number;
+  currentQ?: string;
+  currentSortBy?: string;
+  currentMinVisits?: string;
+  currentMinPoints?: string;
+  currentLocation?: string;
 }) {
   const router = useRouter();
-  const [selectedLocation, setSelectedLocation] = useState<string>("all");
-  const [search,           setSearch]           = useState("");
-  const [sortBy,           setSortBy]           = useState("last_visit");
-  const [minVisits,        setMinVisits]        = useState("");
-  const [minPoints,        setMinPoints]        = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<string>(currentLocation);
+  const [search,           setSearch]           = useState(currentQ);
+  const [sortBy,           setSortBy]           = useState(currentSortBy);
+  const [minVisits,        setMinVisits]        = useState(currentMinVisits);
+  const [minPoints,        setMinPoints]        = useState(currentMinPoints);
+
+  // Sync state with URL when back button or external route changes occur
+  useEffect(() => { setSelectedLocation(currentLocation); }, [currentLocation]);
+  useEffect(() => { setSearch(currentQ); }, [currentQ]);
+  useEffect(() => { setSortBy(currentSortBy); }, [currentSortBy]);
+  useEffect(() => { setMinVisits(currentMinVisits); }, [currentMinVisits]);
+  useEffect(() => { setMinPoints(currentMinPoints); }, [currentMinPoints]);
+
+  const updateFilters = (newParams: {
+    page?: number;
+    q?: string;
+    sortBy?: string;
+    minVisits?: string;
+    minPoints?: string;
+    location?: string;
+  }) => {
+    const params = new URLSearchParams(window.location.search);
+    
+    if (newParams.page !== undefined) {
+      params.set("page", String(newParams.page));
+    } else {
+      params.set("page", "1"); // Reset to page 1 on filter change
+    }
+
+    if (newParams.q !== undefined) {
+      if (newParams.q.trim()) params.set("q", newParams.q.trim());
+      else params.delete("q");
+    }
+    if (newParams.sortBy !== undefined) {
+      params.set("sortBy", newParams.sortBy);
+    }
+    if (newParams.minVisits !== undefined) {
+      if (newParams.minVisits.trim()) params.set("minVisits", newParams.minVisits.trim());
+      else params.delete("minVisits");
+    }
+    if (newParams.minPoints !== undefined) {
+      if (newParams.minPoints.trim()) params.set("minPoints", newParams.minPoints.trim());
+      else params.delete("minPoints");
+    }
+    if (newParams.location !== undefined) {
+      params.set("location", newParams.location);
+    }
+    
+    router.push(`/owner/customers?${params.toString()}`);
+  };
+
+  // Debounced search input trigger
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search !== currentQ) {
+        updateFilters({ q: search });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search, currentQ]);
+
+  const handleLocationChange = (val: string) => {
+    setSelectedLocation(val);
+    updateFilters({ location: val });
+  };
+
+  const handleSortChange = (val: string) => {
+    setSortBy(val);
+    updateFilters({ sortBy: val });
+  };
+
+  const handleMinVisitsChange = (val: string) => {
+    setMinVisits(val);
+    updateFilters({ minVisits: val });
+  };
+
+  const handleMinPointsChange = (val: string) => {
+    setMinPoints(val);
+    updateFilters({ minPoints: val });
+  };
 
   // Build phone set for the selected location
   const locationPhoneSet = useMemo(() => {
@@ -79,44 +171,33 @@ export function CustomersContent({
     return set;
   }, [selectedLocation, orders]);
 
-  // Base list filtered by location
-  const locationFilteredCustomers = useMemo(() => {
-    if (!locationPhoneSet) return initialCustomers;
-    return initialCustomers.filter((c) => locationPhoneSet.has(c.phone));
-  }, [initialCustomers, locationPhoneSet]);
+  // Customers is already paginated/sorted/filtered by the server!
+  const customers = initialCustomers;
 
-  const customers = useMemo(() => {
-    let list = [...locationFilteredCustomers];
+  // Stats computation across all pages
+  const totalCustomers = useMemo(() => {
+    if (selectedLocation === "all") return globalTotalCustomers ?? totalCount;
+    if (!locationPhoneSet) return 0;
+    return allStats.filter(c => locationPhoneSet.has(c.phone)).length;
+  }, [selectedLocation, locationPhoneSet, allStats, globalTotalCustomers, totalCount]);
 
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      list = list.filter((c) =>
-        (c.name ?? "").toLowerCase().includes(q) || c.phone.includes(q)
-      );
-    }
-    if (minVisits) list = list.filter((c) => c.visit_count >= parseInt(minVisits));
-    if (minPoints) list = list.filter((c) => c.points_balance >= parseInt(minPoints));
+  const repeatCustomers = useMemo(() => {
+    if (selectedLocation === "all") return globalRepeatCustomers ?? 0;
+    if (!locationPhoneSet) return 0;
+    return allStats.filter(c => locationPhoneSet.has(c.phone) && c.visit_count > 1).length;
+  }, [selectedLocation, locationPhoneSet, allStats, globalRepeatCustomers]);
 
-    list.sort((a, b) => {
-      switch (sortBy) {
-        case "total_spent":    return b.total_spent - a.total_spent;
-        case "visit_count":    return b.visit_count - a.visit_count;
-        case "points_balance": return b.points_balance - a.points_balance;
-        default: {
-          const ta = a.last_visit_at ? new Date(a.last_visit_at).getTime() : 0;
-          const tb = b.last_visit_at ? new Date(b.last_visit_at).getTime() : 0;
-          return tb - ta;
-        }
-      }
-    });
+  const totalPoints = useMemo(() => {
+    if (selectedLocation === "all") return globalTotalPoints ?? 0;
+    if (!locationPhoneSet) return 0;
+    return allStats.filter(c => locationPhoneSet.has(c.phone)).reduce((s, c) => s + (c.points_balance || 0), 0);
+  }, [selectedLocation, locationPhoneSet, allStats, globalTotalPoints]);
 
-    return list;
-  }, [locationFilteredCustomers, search, sortBy, minVisits, minPoints]);
-
-  const totalCustomers  = selectedLocation === "all" ? (globalTotalCustomers ?? totalCount) : locationFilteredCustomers.length;
-  const repeatCustomers = selectedLocation === "all" ? (globalRepeatCustomers ?? locationFilteredCustomers.filter((c) => c.visit_count > 1).length) : locationFilteredCustomers.filter((c) => c.visit_count > 1).length;
-  const totalPoints     = selectedLocation === "all" ? (globalTotalPoints ?? locationFilteredCustomers.reduce((s, c) => s + c.points_balance, 0)) : locationFilteredCustomers.reduce((s, c) => s + c.points_balance, 0);
-  const totalRevenue    = selectedLocation === "all" ? (globalTotalRevenue ?? locationFilteredCustomers.reduce((s, c) => s + c.total_spent, 0)) : locationFilteredCustomers.reduce((s, c) => s + c.total_spent, 0);
+  const totalRevenue = useMemo(() => {
+    if (selectedLocation === "all") return globalTotalRevenue ?? 0;
+    if (!locationPhoneSet) return 0;
+    return allStats.filter(c => locationPhoneSet.has(c.phone)).reduce((s, c) => s + (c.total_spent || 0), 0);
+  }, [selectedLocation, locationPhoneSet, allStats, globalTotalRevenue]);
 
   const stats = [
     { label: "Total Customers",       value: totalCustomers,                            icon: Users,     color: "text-blue-600",   bg: "bg-blue-50"   },
@@ -239,7 +320,9 @@ export function CustomersContent({
   };
 
   const goToPage = (p: number) => {
-    router.push(`/owner/customers?page=${p}`);
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", String(p));
+    router.push(`/owner/customers?${params.toString()}`);
   };
 
   return (
@@ -267,7 +350,7 @@ export function CustomersContent({
 
           {/* Location Selector */}
           <div className="w-52">
-            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+            <Select value={selectedLocation} onValueChange={handleLocationChange}>
               <SelectTrigger>
                 <SelectValue placeholder="All Locations" />
               </SelectTrigger>
@@ -314,7 +397,7 @@ export function CustomersContent({
           type="number"
           placeholder="Min visits"
           value={minVisits}
-          onChange={(e) => setMinVisits(e.target.value)}
+          onChange={(e) => handleMinVisitsChange(e.target.value)}
           className="w-28"
           min="0"
         />
@@ -322,11 +405,11 @@ export function CustomersContent({
           type="number"
           placeholder="Min points"
           value={minPoints}
-          onChange={(e) => setMinPoints(e.target.value)}
+          onChange={(e) => handleMinPointsChange(e.target.value)}
           className="w-28"
           min="0"
         />
-        <Select value={sortBy} onValueChange={setSortBy}>
+        <Select value={sortBy} onValueChange={handleSortChange}>
           <SelectTrigger className="w-44">
             <SelectValue />
           </SelectTrigger>
