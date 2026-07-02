@@ -34,73 +34,6 @@ export async function GET(request: Request) {
     }
 
     const path = require("path");
-    const csvPath = path.join(process.cwd(), "customers (1).csv");
-    if (!fs.existsSync(csvPath)) {
-      return NextResponse.json({ success: false, error: "CSV file not found at " + csvPath });
-    }
-
-    const content = fs.readFileSync(csvPath, "utf-8");
-    const lines = content.split("\n");
-    const records = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      const parts = line.split(",");
-      if (parts.length < 8) {
-        continue;
-      }
-
-      const id = parts[0].trim();
-      let phone = parts[2].trim();
-      phone = phone.replace(/\D/g, "");
-      if (phone.length === 12 && phone.startsWith("91")) {
-        phone = phone.substring(2);
-      }
-      
-      if (phone.length !== 10) {
-        continue;
-      }
-
-      const name = parts[1].trim();
-      const isMember = parts[4].trim() === "true";
-      const pointsBalance = parseInt(parts[5].trim()) || 0;
-      const totalSpent = parseFloat(parts[6].trim()) || 0;
-      
-      const datePart = parts[7];
-      const timePart = parts[8] || "00:00:00";
-      const createdAt = parseCSVDate(datePart, timePart);
-
-      records.push({
-        id,
-        phone,
-        name: name || null,
-        isMember,
-        points_balance: pointsBalance,
-        total_spent: totalSpent,
-        created_at: createdAt,
-        visit_count: totalSpent > 0 ? 1 : 0
-      });
-    }
-
-    // Deduplicate records in CSV by phone number
-    const uniqueMap = new Map();
-    for (const rec of records) {
-      const existing = uniqueMap.get(rec.phone);
-      if (existing) {
-        existing.total_spent += rec.total_spent;
-        existing.points_balance += rec.points_balance;
-        existing.visit_count += rec.visit_count;
-        if (rec.isMember) {
-          existing.isMember = true;
-        }
-      } else {
-        uniqueMap.set(rec.phone, rec);
-      }
-    }
-    const csvRecords = Array.from(uniqueMap.values());
-
     const admin = createAdminClient();
 
     // 1. Get NerfTurf location ID
@@ -118,7 +51,7 @@ export async function GET(request: Request) {
     }
     const locationId = nerfLoc.id;
 
-    // 2. Fetch membership plans
+    // 2. Fetch or create a default membership plan if empty
     const { data: plans, error: planError } = await admin
       .from("membership_plans")
       .select("id, name");
@@ -126,7 +59,27 @@ export async function GET(request: Request) {
     if (planError) {
       return NextResponse.json({ success: false, error: "Failed to fetch plans: " + planError.message });
     }
-    const planId = plans?.[0]?.id;
+
+    const crypto = require("crypto");
+    let planId = plans?.[0]?.id;
+    if (!planId) {
+      const defaultPlanId = crypto.randomUUID();
+      const { error: createPlanError } = await admin
+        .from("membership_plans")
+        .insert({
+          id: defaultPlanId,
+          name: "Premium Membership",
+          price: 1000,
+          duration_days: 30,
+          discount_pct: 0,
+          free_hrs: 0,
+          is_active: true
+        });
+      if (createPlanError) {
+        return NextResponse.json({ success: false, error: "Failed to create default membership plan: " + createPlanError.message });
+      }
+      planId = defaultPlanId;
+    }
 
     // 3. Clean slate: Delete existing historical orders & payments for NerfTurf before 2026
     const { data: ordersToDelete } = await admin
@@ -155,7 +108,64 @@ export async function GET(request: Request) {
       }
     }
 
-    // Delete existing old memberships for NerfTurf customers
+    // 4. Parse CSV files
+    const csvRecordsMap = new Map();
+
+    // Helper to parse a CSV
+    const parseCSV = (filename: string) => {
+      const csvPath = path.join(process.cwd(), filename);
+      if (!fs.existsSync(csvPath)) return;
+      const content = fs.readFileSync(csvPath, "utf-8");
+      const lines = content.split("\n");
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const parts = line.split(",");
+        if (parts.length < 8) continue;
+
+        const id = parts[0].trim();
+        const name = parts[1].trim();
+        let phone = parts[2].trim().replace(/\D/g, "");
+        if (phone.length === 12 && phone.startsWith("91")) {
+          phone = phone.substring(2);
+        }
+        if (phone.length !== 10) continue;
+
+        const isMember = parts[4].trim() === "true";
+        const pointsBalance = parseInt(parts[5].trim()) || 0;
+        const totalSpent = parseFloat(parts[6].trim()) || 0;
+        const datePart = parts[7];
+        const timePart = parts[8] || "00:00:00";
+        const createdAt = parseCSVDate(datePart, timePart);
+
+        const existing = csvRecordsMap.get(phone);
+        if (existing) {
+          existing.total_spent += totalSpent;
+          existing.points_balance += pointsBalance;
+          existing.visit_count += totalSpent > 0 ? 1 : 0;
+          if (isMember) existing.isMember = true;
+        } else {
+          csvRecordsMap.set(phone, {
+            id,
+            phone,
+            name: name || null,
+            isMember,
+            points_balance: pointsBalance,
+            total_spent: totalSpent,
+            created_at: createdAt,
+            visit_count: totalSpent > 0 ? 1 : 0,
+            hasNerfTurfSpend: filename.includes("(1)") && totalSpent > 0
+          });
+        }
+      }
+    };
+
+    parseCSV("customers (2).csv"); // Gamehaus
+    parseCSV("customers (1).csv"); // NerfTurf
+
+    const csvRecords = Array.from(csvRecordsMap.values());
+
+    // 5. Delete existing old memberships for NerfTurf customers
     const csvPhones = csvRecords.map(r => r.phone);
     const { error: membDeleteError } = await admin
       .from("customer_memberships")
@@ -167,97 +177,105 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Failed to delete old memberships: " + membDeleteError.message });
     }
 
-    // 4. Fetch existing profiles to merge totals
-    const { data: existingProfiles, error: profError } = await admin
-      .from("customer_profiles")
-      .select("id, phone, name, points_balance, total_spent, visit_count, created_at");
+    // 6. Fetch 2026 orders to add to totals
+    const { data: orders2026 } = await admin
+      .from("orders")
+      .select("customer_phone, total_amount, points_redeemed")
+      .eq("status", "finalized")
+      .gte("created_at", "2026-01-01T00:00:00Z");
 
-    if (profError) {
-      return NextResponse.json({ success: false, error: "Failed to fetch existing profiles: " + profError.message });
+    const orders2026Map = new Map();
+    for (const o of (orders2026 ?? [])) {
+      if (!o.customer_phone) continue;
+      const existing = orders2026Map.get(o.customer_phone) || { total: 0, redeemed: 0, count: 0 };
+      existing.total += o.total_amount;
+      existing.redeemed += o.points_redeemed || 0;
+      existing.count += 1;
+      orders2026Map.set(o.customer_phone, existing);
     }
 
-    const profileMap = new Map(existingProfiles?.map(p => [p.phone, p]));
+    // 7. Get earn rupees settings for points
+    const { data: settingsRow } = await admin.from("settings").select("value").eq("key", "app_settings").maybeSingle();
+    const earnRupees = (settingsRow as any)?.value?.loyalty?.earn_rupees_per_point || 100;
 
-    // 5. Prepare inserts and upserts
-    const crypto = require("crypto");
+    // 8. Fetch current DB profiles to keep existing DB ids
+    const { data: existingProfiles } = await admin
+      .from("customer_profiles")
+      .select("id, phone");
+    const dbProfileMap = new Map(existingProfiles?.map(p => [p.phone, p.id]));
+
+    // 9. Prepare DB modifications
     const profilesToUpsert = [];
     const ordersToInsert = [];
     const paymentsToInsert = [];
     const membershipsToInsert = [];
 
-    for (const rec of csvRecords) {
-      const existing = profileMap.get(rec.phone);
+    for (const csv of csvRecords) {
+      const orders2026Data = orders2026Map.get(csv.phone) || { total: 0, redeemed: 0, count: 0 };
       
-      if (existing) {
-        // Merge customer data and preserve database ID to avoid unique constraints conflict
-        profilesToUpsert.push({
-          id: existing.id,
-          phone: rec.phone,
-          name: rec.name || existing.name,
-          points_balance: existing.points_balance + rec.points_balance,
-          total_spent: existing.total_spent + rec.total_spent,
-          visit_count: (existing.visit_count || 0) + rec.visit_count,
-          created_at: existing.created_at || rec.created_at
-        });
-      } else {
-        // Create new profile record with ID from CSV
-        profilesToUpsert.push({
-          id: rec.id,
-          phone: rec.phone,
-          name: rec.name,
-          points_balance: rec.points_balance,
-          total_spent: rec.total_spent,
-          visit_count: rec.visit_count,
-          created_at: rec.created_at
-        });
-      }
+      const cleanTotalSpent = csv.total_spent + orders2026Data.total;
+      const cleanVisitCount = csv.visit_count + orders2026Data.count;
+      const cleanPointsBalance = csv.points_balance + Math.floor(orders2026Data.total / earnRupees) - orders2026Data.redeemed;
+      
+      const existingId = dbProfileMap.get(csv.phone);
 
-      // Generate order history if they spent money
-      if (rec.total_spent > 0) {
+      profilesToUpsert.push({
+        id: existingId || csv.id,
+        phone: csv.phone,
+        name: csv.name,
+        points_balance: Math.max(0, cleanPointsBalance),
+        total_spent: cleanTotalSpent,
+        visit_count: cleanVisitCount,
+        created_at: csv.created_at
+      });
+
+      // Insert historical orders for NerfTurf spent customers (from NerfTurf CSV)
+      if (csv.hasNerfTurfSpend) {
+        // Find row in original NerfTurf CSV to match correct historical spent amount
         const orderId = crypto.randomUUID();
         ordersToInsert.push({
           id: orderId,
           location_id: locationId,
           type: "walk_in" as const,
-          customer_name: rec.name || "Customer",
-          customer_phone: rec.phone,
+          customer_name: csv.name || "Customer",
+          customer_phone: csv.phone,
           status: "finalized" as const,
-          subtotal: rec.total_spent,
+          subtotal: csv.total_spent,
           discount_amount: 0,
           public_discount_amount: 0,
-          total_amount: rec.total_spent,
+          total_amount: csv.total_spent,
           advance_paid: 0,
-          amount_due: rec.total_spent,
+          amount_due: csv.total_spent,
           points_redeemed: 0,
-          created_at: rec.created_at,
-          finalized_at: rec.created_at
+          created_at: csv.created_at,
+          finalized_at: csv.created_at
         });
 
         paymentsToInsert.push({
           order_id: orderId,
-          amount: rec.total_spent,
+          amount: csv.total_spent,
           method: "cash" as const,
           status: "completed" as const,
-          created_at: rec.created_at
+          created_at: csv.created_at
         });
       }
 
       // Add memberships if Is Member is true
-      if (rec.isMember && planId) {
+      if (csv.isMember) {
         membershipsToInsert.push({
-          customer_phone: rec.phone,
+          customer_phone: csv.phone,
           plan_id: planId,
-          starts_at: rec.created_at,
-          expires_at: new Date(new Date(rec.created_at).setMonth(new Date(rec.created_at).getMonth() + 1)).toISOString(),
+          starts_at: csv.created_at,
+          expires_at: new Date(new Date(csv.created_at).setMonth(new Date(csv.created_at).getMonth() + 1)).toISOString(),
           is_active: true,
           free_hrs_used: 0,
           free_hours_ledger: {},
-          created_at: rec.created_at
+          created_at: csv.created_at
         });
       }
     }
 
-    // 6. Execute DB operations in batches
+    // 10. Execute DB operations in batches
     const batchSize = 100;
     
     // Profiles
