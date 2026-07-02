@@ -934,18 +934,7 @@ function PanelSession({
     const pct = m.plan?.discount_pct ?? 0;
     return pct > max ? pct : max;
   }, 0);
-  const isAdvanceBooking = (order.advance_paid ?? 0) > 0 && (order.advance_paid ?? 0) < (order.total_amount ?? 0);
-
-  const bill         = calculateBill(
-    activeItems,
-    activeExtras,
-    now,
-    null,
-    order.advance_paid ?? 0,
-    isAdvanceBooking ? 0 : publicDiscount,
-    isAdvanceBooking ? 0 : applicableMembershipPct,
-    isAdvanceBooking ? 0 : freeHrsDiscount
-  );
+  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   const redeemRate        = settings?.loyalty?.redeem_rupees_per_point ?? 1;
@@ -954,8 +943,8 @@ function PanelSession({
   const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
   const maxPointsByBill = Math.floor(bill.totalDue / redeemRate);
   const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
-  // Minimum configurable points balance required to qualify for redemption — disabled for advance bookings
-  const clampedRedeem = (!isAdvanceBooking && (customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  // Minimum configurable points balance required to qualify for redemption
+  const clampedRedeem = ((customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
   const displayTotal  = Math.max(0, Math.round((bill.totalDue - (clampedRedeem * redeemRate)) * 100) / 100);
 
   function handleRedeemChange(val: string) {
@@ -1668,7 +1657,7 @@ function PanelSession({
         </div>
 
         {/* Loyalty points row — only when bill is ready and customer has >= minPointsToRedeem pts */}
-        {!isAdvanceBooking && !hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
+        {!hasRunning && order.customer_phone && customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
           <div className="px-5 py-2.5 border-t border-gray-100 dark:border-[#1a1a1a] flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
               <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />

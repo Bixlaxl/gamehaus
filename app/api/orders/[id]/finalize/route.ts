@@ -203,17 +203,18 @@ export async function POST(
     (item as any).membership_id = coveringMembership.id;
   }
 
-  const isAdvanceBooking = (order.advance_paid ?? 0) > 0 && (order.advance_paid ?? 0) < (order.total_amount ?? 0);
-
   const bill = calculateBill(
     activeItems as OrderItem[],
     (extras ?? []) as OrderExtra[],
     now,
-    isAdvanceBooking ? null : coupon,
+    coupon,
     order.advance_paid,
-    isAdvanceBooking ? 0 : ((order as any).public_discount_amount ?? 0),
-    isAdvanceBooking ? 0 : membershipDiscountPct,
-    isAdvanceBooking ? 0 : totalFreeHoursDiscount
+    // Use public_discount_amount (coupon-only) NOT discount_amount (which mixes in
+    // the member portion baked at booking time). Member discount is always applied
+    // live below so it correctly covers extensions + extras added post-booking.
+    (order as any).public_discount_amount ?? 0,
+    membershipDiscountPct,
+    totalFreeHoursDiscount
   );
 
   const membershipDiscount = Math.round((bill.freeHoursDiscountAmount + bill.memberDiscountAmount) * 100) / 100;
@@ -230,7 +231,7 @@ export async function POST(
   // Validate points against remaining balance — cap so redemption can't push
   // the bill below zero or exceed the customer's actual balance.
   // Minimum redemption is dynamically configured — anything below is treated as zero.
-  let validatedPoints = isAdvanceBooking ? 0 : points_redeemed;
+  let validatedPoints = points_redeemed;
   if (validatedPoints > 0 && effectivePhone) {
     const balance = (pointsProfileResult as { data: { points_balance: number } | null }).data?.points_balance ?? 0;
     if (balance < minToRedeem) {
@@ -246,7 +247,7 @@ export async function POST(
   // Apply points discount: each point is worth `redeemRate` rupees off the bill.
   const pointsDiscount = validatedPoints * redeemRate;
   const finalDue = Math.max(0, Math.round((billAfterMembership - pointsDiscount) * 100) / 100);
-  const pointsEarned = isAdvanceBooking ? 0 : Math.floor(finalDue / earnRate);
+  const pointsEarned = Math.floor(finalDue / earnRate);
 
   // Validate split total: sum of payment amounts must equal finalDue, within
   // ₹1 to absorb minor rounding (the modal rounds amounts to whole rupees).
