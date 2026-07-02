@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       .lte("finalized_at", toISO);
 
     // 4. Check if there are orders in any range or locations
-    const { data: locations } = await admin.from("locations").select("id, name");
+    const { data: locations } = await admin.from("locations").select("*");
 
     return NextResponse.json({
       success: true,
