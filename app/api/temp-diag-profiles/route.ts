@@ -11,50 +11,56 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
 
-    // Query specific sample phones from customers (1).csv
-    const samplePhones = ["9551290978", "9965576992", "9087895328", "9789860175"];
+    // Query all locations
+    const { data: locations, error: locError } = await admin
+      .from("locations")
+      .select("id, name");
+
+    if (locError) {
+      return NextResponse.json({ success: false, error: "Locations fetch error: " + locError.message });
+    }
+
+    // Query orders count per location
+    const orderCounts: Record<string, { total: number; before2026: number; in2026: number; months: Record<string, number> }> = {};
     
-    const { data: profiles, error: profError } = await admin
+    for (const loc of locations ?? []) {
+      const { data: orders } = await admin
+        .from("orders")
+        .select("created_at")
+        .eq("location_id", loc.id);
+
+      const stats = {
+        total: orders?.length || 0,
+        before2026: 0,
+        in2026: 0,
+        months: {} as Record<string, number>
+      };
+
+      for (const o of orders ?? []) {
+        const created = new Date(o.created_at);
+        if (created.getFullYear() < 2026) {
+          stats.before2026 += 1;
+        } else {
+          stats.in2026 += 1;
+        }
+        const mKey = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}`;
+        stats.months[mKey] = (stats.months[mKey] || 0) + 1;
+      }
+
+      orderCounts[loc.name] = stats;
+    }
+
+    // Query details of user "Nissan" to see what rows exist for him
+    const { data: nissanProfiles } = await admin
       .from("customer_profiles")
       .select("*")
-      .in("phone", samplePhones);
-
-    if (profError) {
-      return NextResponse.json({ success: false, error: "Profiles fetch error: " + profError.message });
-    }
-
-    const { data: plans } = await admin.from("membership_plans").select("*");
-    const { data: memberships } = await admin
-      .from("customer_memberships")
-      .select("*, plan:membership_plans(name)")
-      .eq("customer_phone", "8248779649");
-
-    // Query count of all profiles
-    const { count, error: countError } = await admin
-      .from("customer_profiles")
-      .select("*", { count: "exact", head: true });
-
-    // Query count of all NerfTurf orders
-    const { data: nerfLoc } = await admin.from("locations").select("id, name");
-    const nerfId = nerfLoc?.find(l => l.name.toLowerCase().includes("nerf"))?.id;
-    
-    let nerfOrdersCount = 0;
-    if (nerfId) {
-      const { count: oCount } = await admin
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("location_id", nerfId);
-      nerfOrdersCount = oCount || 0;
-    }
+      .ilike("name", "%nissan%");
 
     return NextResponse.json({
       success: true,
-      totalProfiles: count,
-      nerfLocationId: nerfId,
-      nerfOrdersCount,
-      plans,
-      memberships,
-      profiles
+      locations,
+      orderCounts,
+      nissanProfiles
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message });
