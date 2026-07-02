@@ -54,14 +54,19 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  // Filter by name/phone client-side on the server — small result set
+  // Filter out hollow imported historical orders (which have neither table sessions nor inventory extras)
+  const nonHollowRows = (data ?? []).filter(
+    (o) => (o.items && o.items.length > 0) || (o.extras && o.extras.length > 0)
+  );
+
+  // Filter by name/phone if query parameter is set
   const rows = q
-    ? (data ?? []).filter((o) => {
+    ? nonHollowRows.filter((o) => {
         const name  = (o.customer_name  ?? "").toLowerCase();
         const phone = (o.customer_phone ?? "");
         return name.includes(q) || phone.includes(q);
       })
-    : (data ?? []);
+    : nonHollowRows;
 
   return NextResponse.json(ok(rows));
 }

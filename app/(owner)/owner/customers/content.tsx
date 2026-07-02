@@ -44,6 +44,10 @@ export function CustomersContent({
   page = 1,
   totalPages = 1,
   totalCount = 0,
+  globalTotalCustomers,
+  globalRepeatCustomers,
+  globalTotalPoints,
+  globalTotalRevenue,
 }: {
   initialCustomers: Customer[];
   locations: { id: string; name: string }[];
@@ -51,6 +55,10 @@ export function CustomersContent({
   page?: number;
   totalPages?: number;
   totalCount?: number;
+  globalTotalCustomers?: number;
+  globalRepeatCustomers?: number;
+  globalTotalPoints?: number;
+  globalTotalRevenue?: number;
 }) {
   const router = useRouter();
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
@@ -105,10 +113,10 @@ export function CustomersContent({
     return list;
   }, [locationFilteredCustomers, search, sortBy, minVisits, minPoints]);
 
-  const totalCustomers  = locationFilteredCustomers.length;
-  const repeatCustomers = locationFilteredCustomers.filter((c) => c.visit_count > 1).length;
-  const totalPoints     = locationFilteredCustomers.reduce((s, c) => s + c.points_balance, 0);
-  const totalRevenue    = locationFilteredCustomers.reduce((s, c) => s + c.total_spent, 0);
+  const totalCustomers  = selectedLocation === "all" ? (globalTotalCustomers ?? totalCount) : locationFilteredCustomers.length;
+  const repeatCustomers = selectedLocation === "all" ? (globalRepeatCustomers ?? locationFilteredCustomers.filter((c) => c.visit_count > 1).length) : locationFilteredCustomers.filter((c) => c.visit_count > 1).length;
+  const totalPoints     = selectedLocation === "all" ? (globalTotalPoints ?? locationFilteredCustomers.reduce((s, c) => s + c.points_balance, 0)) : locationFilteredCustomers.reduce((s, c) => s + c.points_balance, 0);
+  const totalRevenue    = selectedLocation === "all" ? (globalTotalRevenue ?? locationFilteredCustomers.reduce((s, c) => s + c.total_spent, 0)) : locationFilteredCustomers.reduce((s, c) => s + c.total_spent, 0);
 
   const stats = [
     { label: "Total Customers",       value: totalCustomers,                            icon: Users,     color: "text-blue-600",   bg: "bg-blue-50"   },
@@ -329,6 +337,54 @@ export function CustomersContent({
           </SelectContent>
         </Select>
       </div>
+
+      {/* Pagination bar (Top) */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border border-gray-100 bg-gray-50/50 rounded-xl px-4 py-2.5 gap-2 text-sm">
+          <span className="text-gray-500 font-medium">
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(page - 1)}
+              disabled={page <= 1}
+              className="flex items-center gap-1 h-8 text-xs"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => goToPage(p)}
+                  className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${
+                    p === page
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= totalPages}
+              className="flex items-center gap-1 h-8 text-xs"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

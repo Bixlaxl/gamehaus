@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search, X, Banknote, Smartphone, Phone, MessageSquare, ExternalLink } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, X, Banknote, Smartphone, Phone, MessageSquare, ExternalLink, Plus, Trash } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 
 // Subset of fields the bills feed actually uses — exported so the SSR page
@@ -60,6 +64,8 @@ interface Props {
   locationId: string;
   locationName: string;
   initial: BillRow[];
+  tables?: { id: string; name: string; type: string; hourly_rate: number }[];
+  inventoryItems?: { id: string; name: string; category: string; selling_price: number; stock_count: number }[];
 }
 
 function fmtDateTime(iso: string | null) {
@@ -75,10 +81,122 @@ function tableNameOf(t: BillRow["items"][number]["table"]): string {
   return t.name;
 }
 
-export function BillsContent({ locationId, locationName, initial }: Props) {
+export function BillsContent({
+  locationId,
+  locationName,
+  initial,
+  tables = [],
+  inventoryItems = [],
+}: Props) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<BillRow | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualSessions, setManualSessions] = useState<{ id: string; tableId: string; hours: number }[]>([]);
+  const [manualExtras, setManualExtras] = useState<{ id: string; itemId: string; quantity: number }[]>([]);
+  const [manualPaymentMethod, setManualPaymentMethod] = useState<"cash" | "upi">("cash");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Compute live manual total preview
+  const manualTotalPreview = useMemo(() => {
+    let sessionCost = 0;
+    for (const s of manualSessions) {
+      const tbl = tables.find((t) => t.id === s.tableId);
+      if (tbl) {
+        sessionCost += tbl.hourly_rate * (s.hours || 0);
+      }
+    }
+    let extrasCost = 0;
+    for (const e of manualExtras) {
+      const item = inventoryItems.find((i) => i.id === e.itemId);
+      if (item) {
+        extrasCost += item.selling_price * (e.quantity || 0);
+      }
+    }
+    return Math.round((sessionCost + extrasCost) * 100) / 100;
+  }, [manualSessions, manualExtras, tables, inventoryItems]);
+
+  async function handleCreateManualBill(e: React.FormEvent) {
+    e.preventDefault();
+    if (!manualName.trim()) {
+      toast.error("Customer name is required");
+      return;
+    }
+    if (manualPhone && !/^[6-9]\d{9}$/.test(manualPhone)) {
+      toast.error("Enter a valid 10-digit Indian phone number starting with 6-9");
+      return;
+    }
+    if (manualSessions.length === 0 && manualExtras.length === 0) {
+      toast.error("Provide at least one table session or item");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        location_id: locationId,
+        customer_name: manualName,
+        customer_phone: manualPhone || undefined,
+        table_sessions: manualSessions.map((s) => {
+          const tbl = tables.find((t) => t.id === s.tableId);
+          const now = Date.now();
+          const startStr = new Date(now - s.hours * 60 * 60 * 1000).toISOString();
+          const endStr = new Date(now).toISOString();
+          return {
+            table_id: s.tableId,
+            rate_per_hour: tbl?.hourly_rate ?? 0,
+            start: startStr,
+            end: endStr,
+          };
+        }),
+        extras: manualExtras.map((e) => {
+          const item = inventoryItems.find((i) => i.id === e.itemId);
+          return {
+            inventory_item_id: e.itemId,
+            name: item?.name ?? "Item",
+            price: item?.selling_price ?? 0,
+            quantity: e.quantity,
+          };
+        }),
+        payments: [
+          {
+            method: manualPaymentMethod,
+            amount: manualTotalPreview,
+          },
+        ],
+        points_redeemed: 0,
+      };
+
+      const res = await fetch("/api/pos/manual-bill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+
+      toast.success("Manual bill created successfully!");
+      setManualName("");
+      setManualPhone("");
+      setManualSessions([]);
+      setManualExtras([]);
+      setManualPaymentMethod("cash");
+      setManualOpen(false);
+
+      queryClient.invalidateQueries({ queryKey: ["staff-bills"] });
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create manual bill");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   const { data: bills = initial } = useQuery<BillRow[]>({
     queryKey: ["staff-bills", locationId, search],
@@ -136,14 +254,24 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
             {locationName} · {totals.count} bill{totals.count === 1 ? "" : "s"} · {formatCurrency(totals.revenue)} total
           </p>
         </div>
-        <div className="relative">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or phone…"
-            className="pl-9 w-64"
-          />
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setManualOpen(true)}
+            className="bg-[#D4541A] hover:bg-[#c04b16] text-white rounded-xl h-9 px-4 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Manual Bill</span>
+          </Button>
+
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or phone…"
+              className="pl-9 w-64"
+            />
+          </div>
         </div>
       </div>
 
@@ -237,6 +365,233 @@ export function BillsContent({ locationId, locationName, initial }: Props) {
           onSendWhatsApp={(e) => handleSendWhatsApp(e, selected)}
           sending={sendingId === selected.id}
         />
+      )}
+
+      {manualOpen && (
+        <Dialog open onOpenChange={(o) => !o && setManualOpen(false)}>
+          <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border dark:border-[#222] text-gray-900 dark:text-gray-100">
+            <DialogHeader className="px-5 py-4 border-b dark:border-[#222]">
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                New Manual Bill
+              </DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleCreateManualBill} className="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-4">
+              {/* Customer details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Customer Name</label>
+                  <Input
+                    required
+                    placeholder="Enter name"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Customer Phone (Optional)</label>
+                  <Input
+                    placeholder="Enter phone"
+                    value={manualPhone}
+                    onChange={(e) => setManualPhone(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Table Sessions */}
+              <div className="space-y-2 border-t dark:border-[#222] pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Table Sessions</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setManualSessions([...manualSessions, { id: crypto.randomUUID(), tableId: tables[0]?.id ?? "", hours: 1 }])}
+                    className="h-8 px-2 text-xs flex items-center gap-1 border-gray-300 dark:border-gray-700"
+                    disabled={tables.length === 0}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Session
+                  </Button>
+                </div>
+
+                {manualSessions.map((s, idx) => (
+                  <div key={s.id} className="flex items-center gap-2 border dark:border-[#222] p-2 rounded-lg bg-gray-50/50 dark:bg-[#161616]">
+                    <div className="flex-1">
+                      <Select
+                        value={s.tableId}
+                        onValueChange={(val) => {
+                          const updated = [...manualSessions];
+                          updated[idx].tableId = val;
+                          setManualSessions(updated);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
+                          <SelectValue placeholder="Select Table" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
+                          {tables.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name} (₹{t.hourly_rate}/hr)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        placeholder="Hours"
+                        value={s.hours}
+                        onChange={(e) => {
+                          const updated = [...manualSessions];
+                          updated[idx].hours = parseFloat(e.target.value) || 0;
+                          setManualSessions(updated);
+                        }}
+                        className="h-8 text-xs text-right"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setManualSessions(manualSessions.filter((x) => x.id !== s.id))}
+                      className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-transparent"
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Extras / Inventory */}
+              <div className="space-y-2 border-t dark:border-[#222] pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Items / Beverages</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setManualExtras([...manualExtras, { id: crypto.randomUUID(), itemId: inventoryItems[0]?.id ?? "", quantity: 1 }])}
+                    className="h-8 px-2 text-xs flex items-center gap-1 border-gray-300 dark:border-gray-700"
+                    disabled={inventoryItems.length === 0}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </Button>
+                </div>
+
+                {manualExtras.map((e, idx) => (
+                  <div key={e.id} className="flex items-center gap-2 border dark:border-[#222] p-2 rounded-lg bg-gray-50/50 dark:bg-[#161616]">
+                    <div className="flex-1">
+                      <Select
+                        value={e.itemId}
+                        onValueChange={(val) => {
+                          const updated = [...manualExtras];
+                          updated[idx].itemId = val;
+                          setManualExtras(updated);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
+                          <SelectValue placeholder="Select Item" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
+                          {inventoryItems.map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.name} (₹{item.selling_price})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="w-20">
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Qty"
+                        value={e.quantity}
+                        onChange={(e) => {
+                          const updated = [...manualExtras];
+                          updated[idx].quantity = parseInt(e.target.value) || 0;
+                          setManualExtras(updated);
+                        }}
+                        className="h-8 text-xs text-right"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setManualExtras(manualExtras.filter((x) => x.id !== e.id))}
+                      className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-transparent"
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Payment Method */}
+              <div className="space-y-1.5 border-t dark:border-[#222] pt-4">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Payment Method</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setManualPaymentMethod("cash")}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                      manualPaymentMethod === "cash"
+                        ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400"
+                        : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    <Banknote className="h-4 w-4" /> Cash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManualPaymentMethod("upi")}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                      manualPaymentMethod === "upi"
+                        ? "bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-400"
+                        : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    <Smartphone className="h-4 w-4" /> UPI
+                  </button>
+                </div>
+              </div>
+
+              {/* Live Preview */}
+              <div className="border-t dark:border-[#222] pt-4 flex items-center justify-between text-sm">
+                <span className="font-semibold text-gray-500">Total Billed:</span>
+                <span className="text-lg font-bold text-[#D4541A]">{formatCurrency(manualTotalPreview)}</span>
+              </div>
+
+              <div className="pt-2 flex items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => setManualOpen(false)}
+                  variant="outline"
+                  className="flex-1 rounded-xl h-10 border-gray-300 dark:border-gray-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-[#D4541A] hover:bg-[#c04b16] text-white rounded-xl h-10 font-bold"
+                >
+                  {isSubmitting ? "Saving..." : "Create & Finalize Bill"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

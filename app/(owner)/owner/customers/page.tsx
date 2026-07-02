@@ -19,6 +19,7 @@ export default async function CustomersPage({
     { data: customers, count: totalCount },
     { data: locations },
     { data: locationPhones },
+    { data: allStats }
   ] = await Promise.all([
     admin
       .from("customer_profiles")
@@ -35,9 +36,19 @@ export default async function CustomersPage({
       .select("customer_phone, location_id")
       .not("customer_phone", "is", null)
       .limit(5000),
+    admin
+      .from("customer_profiles")
+      .select("points_balance, total_spent, visit_count")
   ]);
 
   const totalPages = Math.ceil((totalCount ?? 0) / PAGE_SIZE);
+
+  // Compute global aggregates across all pages
+  const statsList = allStats ?? [];
+  const statsTotalCustomers = totalCount ?? statsList.length;
+  const statsRepeatCustomers = statsList.filter(c => c.visit_count > 1).length;
+  const statsTotalPoints = statsList.reduce((s, c) => s + (c.points_balance || 0), 0);
+  const statsTotalRevenue = statsList.reduce((s, c) => s + (c.total_spent || 0), 0);
 
   return (
     <CustomersContent
@@ -47,6 +58,10 @@ export default async function CustomersPage({
       page={page}
       totalPages={totalPages}
       totalCount={totalCount ?? 0}
+      globalTotalCustomers={statsTotalCustomers}
+      globalRepeatCustomers={statsRepeatCustomers}
+      globalTotalPoints={statsTotalPoints}
+      globalTotalRevenue={statsTotalRevenue}
     />
   );
 }

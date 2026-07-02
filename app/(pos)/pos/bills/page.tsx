@@ -19,7 +19,12 @@ export default async function StaffBillsPage() {
   if (!profile?.location_id) redirect("/pos");
 
   const admin = createAdminClient();
-  const [{ data: location }, { data: initial }] = await Promise.all([
+  const [
+    { data: location },
+    { data: initial },
+    { data: tables },
+    { data: inventory }
+  ] = await Promise.all([
     admin.from("locations").select("name").eq("id", profile.location_id).single(),
     admin
       .from("orders")
@@ -35,14 +40,34 @@ export default async function StaffBillsPage() {
       .eq("location_id", profile.location_id)
       .order("finalized_at", { ascending: false })
       .limit(100),
+    admin
+      .from("tables")
+      .select("id, name, type, hourly_rate")
+      .eq("location_id", profile.location_id)
+      .eq("is_active", true)
+      .order("sort_order"),
+    admin
+      .from("inventory_items")
+      .select("id, name, category, selling_price, stock_count")
+      .eq("location_id", profile.location_id)
+      .eq("is_active", true)
+      .gt("stock_count", 0)
+      .order("name")
   ]);
+
+  // Filter out hollow imported historical orders (which have neither table sessions nor inventory extras)
+  const filteredInitial = (initial ?? []).filter(
+    (o) => (o.items && o.items.length > 0) || (o.extras && o.extras.length > 0)
+  );
 
   return (
     <main className="pos-bookings-dark flex-1 overflow-y-auto p-6">
       <BillsContent
         locationId={profile.location_id}
         locationName={location?.name ?? ""}
-        initial={(initial ?? []) as unknown as BillRow[]}
+        initial={filteredInitial as unknown as BillRow[]}
+        tables={tables ?? []}
+        inventoryItems={inventory ?? []}
       />
     </main>
   );
