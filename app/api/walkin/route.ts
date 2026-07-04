@@ -35,14 +35,25 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const now   = new Date();
 
-  // ── Enforce operating hours ────────────────────────────────────────────
+  // ── Enforce operating hours & active state ─────────────────────────────
   const { data: loc } = await admin
     .from("locations")
-    .select("opening_time, closing_time")
+    .select("opening_time, closing_time, is_active")
     .eq("id", location_id)
-    .single();
+    .maybeSingle();
 
-  if (loc?.opening_time && loc?.closing_time) {
+  if (!loc) {
+    return NextResponse.json(err("Location not found", "NOT_FOUND"), { status: 404 });
+  }
+
+  if (!loc.is_active) {
+    return NextResponse.json(
+      err("Walk-ins are disabled because this location is currently deactivated", "LOCATION_INACTIVE"),
+      { status: 400 }
+    );
+  }
+
+  if (loc.opening_time && loc.closing_time) {
     const [oh, om] = loc.opening_time.split(":").map(Number);
     const [ch, cm] = loc.closing_time.split(":").map(Number);
     const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
