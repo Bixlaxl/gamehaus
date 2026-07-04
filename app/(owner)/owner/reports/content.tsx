@@ -257,22 +257,32 @@ export function ReportsContent({
       // Profit: tables = 100% margin, extras = price - cost
       let rawTableVal = 0;
       let freeHoursDiscount = 0;
-      for (const i of o.items) {
-        if (i.status !== "finished") continue;
+      if (o.items && o.items.length > 0) {
+        for (const i of o.items) {
+          if (i.status !== "finished") continue;
+          totalSessions += 1;
+          if (locRow) {
+            locRow.sessionCount += 1;
+          }
+
+          let itemVal = 0;
+          if (i.final_amount !== null && i.final_amount !== undefined) {
+            itemVal = i.final_amount;
+          } else if (i.actual_start && i.expected_end) {
+            const mins = (new Date(i.expected_end).getTime() - new Date(i.actual_start).getTime()) / 60000;
+            itemVal = (i.rate_per_hour / 60) * mins;
+          }
+          rawTableVal += itemVal;
+          freeHoursDiscount += (i.free_hours_to_redeem ?? 0) * i.rate_per_hour;
+        }
+      } else {
+        // If it's a historical imported order (or has no explicit table sessions), count it as 1 session
         totalSessions += 1;
         if (locRow) {
           locRow.sessionCount += 1;
         }
-
-        let itemVal = 0;
-        if (i.final_amount !== null && i.final_amount !== undefined) {
-          itemVal = i.final_amount;
-        } else if (i.actual_start && i.expected_end) {
-          const mins = (new Date(i.expected_end).getTime() - new Date(i.actual_start).getTime()) / 60000;
-          itemVal = (i.rate_per_hour / 60) * mins;
-        }
-        rawTableVal += itemVal;
-        freeHoursDiscount += (i.free_hours_to_redeem ?? 0) * i.rate_per_hour;
+        // Fall back to setting the table value as the order's subtotal or computed total
+        rawTableVal = Number(o.subtotal) || ((o.amount_due ?? 0) + (o.advance_paid ?? 0) + (o.discount_amount ?? 0));
       }
 
       let rawExtraVal = 0;

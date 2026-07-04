@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   const { data: orders, error: ordError } = await admin
     .from("orders")
     .select(`
-      id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, total_amount, points_redeemed, type, finalized_at,
+      id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, finalized_at,
       location:locations(id, name),
       items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
       payments(method, amount, status),
@@ -61,7 +61,8 @@ export async function GET(request: Request) {
     `)
     .eq("status", "finalized")
     .gte("finalized_at", fromISO)
-    .lte("finalized_at", toISO);
+    .lte("finalized_at", toISO)
+    .limit(50000);
 
   if (ordError) return NextResponse.json(err(ordError.message, "DB_ERROR"), { status: 500 });
 
@@ -82,7 +83,8 @@ export async function GET(request: Request) {
     `)
     .eq("status", "finalized")
     .gte("finalized_at", histFromISO)
-    .order("finalized_at", { ascending: true });
+    .order("finalized_at", { ascending: true })
+    .limit(50000);
 
   if (histError) return NextResponse.json(err(histError.message, "DB_ERROR"), { status: 500 });
 
@@ -99,7 +101,8 @@ export async function GET(request: Request) {
       plan:membership_plans(id, name, price)
     `)
     .gte("created_at", membHistFromISO)
-    .lte("created_at", membToISO);
+    .lte("created_at", membToISO)
+    .limit(50000);
 
   if (membError) return NextResponse.json(err(membError.message, "DB_ERROR"), { status: 500 });
 
