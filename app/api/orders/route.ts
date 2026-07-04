@@ -61,6 +61,27 @@ export async function POST(request: Request) {
   // Online orders: public customers aren't logged in, use admin client
   // Walk-in orders: require staff authentication
   const admin = createAdminClient();
+
+  // Verify location is active
+  const { data: location, error: locError } = await admin
+    .from("locations")
+    .select("is_active")
+    .eq("id", location_id)
+    .maybeSingle();
+
+  if (locError) {
+    return NextResponse.json(err(locError.message, "DB_ERROR"), { status: 500 });
+  }
+  if (!location) {
+    return NextResponse.json(err("Location not found", "NOT_FOUND"), { status: 404 });
+  }
+  if (!location.is_active) {
+    return NextResponse.json(
+      err("Bookings are disabled because this location is currently deactivated", "LOCATION_INACTIVE"),
+      { status: 400 }
+    );
+  }
+
   let createdBy: string | null = null;
 
   if (type === "walk_in") {
