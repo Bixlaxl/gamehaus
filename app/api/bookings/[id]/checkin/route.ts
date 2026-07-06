@@ -91,6 +91,14 @@ export async function POST(
   const scheduledEnd   = new Date(booking.scheduled_end);
   const bookedMs       = scheduledEnd.getTime() - scheduledStart.getTime();
 
+  const maxEarlyCheckinMs = 45 * 60 * 1000;
+  if (scheduledStart.getTime() - now.getTime() > maxEarlyCheckinMs) {
+    return NextResponse.json(
+      err("Check-in is only allowed up to 45 minutes before the scheduled start time. Reschedule if they want to play now.", "TOO_EARLY"),
+      { status: 400 }
+    );
+  }
+
   let actualStart: Date;
   let expectedEnd: Date;
 

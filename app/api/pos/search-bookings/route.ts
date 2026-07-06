@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("bookings")
-    .select("*, order:orders!inner(customer_name, customer_phone, location_id, type, status, advance_paid)")
+    .select("*, order:orders!inner(customer_name, customer_phone, location_id, type, status, advance_paid, created_by)")
     .eq("status", "confirmed")
     .eq("orders.location_id", locationId)
     .gte("scheduled_start", new Date(dayStartMs).toISOString())
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
   // Filter out unpaid online bookings
   const rows = (data ?? []).filter((b: any) => {
     const o = b.order;
-    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open" && !o.created_by) {
       return false;
     }
     return true;

@@ -90,7 +90,9 @@ function computeTablesWithStatus(
     const upcomingBooking =
       bookings?.find((b) => {
         const oi = b.order_item as any;
-        return oi?.table_id === table.id && oi?.status === "scheduled";
+        const nowMs = Date.now();
+        const endMs = new Date(b.scheduled_end).getTime();
+        return oi?.table_id === table.id && oi?.status === "scheduled" && endMs > nowMs;
       }) ?? null;
     return {
       ...table,

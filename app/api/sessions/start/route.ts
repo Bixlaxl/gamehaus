@@ -36,6 +36,18 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Session is not in scheduled state", "INVALID_STATE"), { status: 400 });
   }
 
+  if (item.scheduled_start) {
+    const start = new Date(item.scheduled_start);
+    const nowTime = new Date();
+    const maxEarlyStartMs = 45 * 60 * 1000;
+    if (start.getTime() - nowTime.getTime() > maxEarlyStartMs) {
+      return NextResponse.json(
+        err("Session cannot be started more than 45 minutes before its scheduled start time. Reschedule if they want to play now.", "TOO_EARLY"),
+        { status: 400 }
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   const order = item.order as { type: string } | null;
 
