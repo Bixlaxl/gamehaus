@@ -83,10 +83,24 @@ function computeTablesWithStatus(
     )
   );
   return rawTables.map((table) => {
-    const activeItem =
-      activeItems.find((i) => i.table_id === table.id && i.status === "running") ??
-      activeItems.find((i) => i.table_id === table.id && i.status === "finished") ??
-      null;
+    const runningItem = activeItems.find((i) => i.table_id === table.id && i.status === "running");
+    let activeItem = runningItem ?? null;
+
+    if (!activeItem) {
+      const finishedItem = activeItems.find((i) => i.table_id === table.id && i.status === "finished");
+      if (finishedItem) {
+        // If this customer's order has another session that is still running,
+        // we free up this table card so the next customer can check in.
+        // The staff can still view/collect the finished session's bill
+        // from the other active table's card.
+        const hasOtherRunning = activeItems.some(
+          (i) => i.order_id === finishedItem.order_id && i.status === "running"
+        );
+        if (!hasOtherRunning) {
+          activeItem = finishedItem;
+        }
+      }
+    }
     const upcomingBooking =
       bookings?.find((b) => {
         const oi = b.order_item as any;
