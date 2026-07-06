@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(`
       *,
-      order:orders(customer_name, customer_phone, advance_paid, type, status, order_items(id, status)),
+      order:orders(customer_name, customer_phone, advance_paid, type, status, created_by, order_items(id, status)),
       order_item:order_items(table:tables(name, type, location:locations(name, id)))
     `)
     .gte("scheduled_start", from)
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   // Filter out unpaid online bookings
   const rows = (data ?? []).filter((b: any) => {
     const o = b.order;
-    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open") {
+    if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open" && !o.created_by) {
       return false;
     }
     return true;
