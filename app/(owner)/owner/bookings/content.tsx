@@ -125,7 +125,7 @@ export function BookingsContent({
   // Read the recompute trigger so this re-evaluates every 30s.
   void actionTick;
   const staffLoc = mode === "staff" && staffLocationId
-    ? (locations ?? []).find((l) => l.id === staffLocationId)
+    ? (locations ?? []).find((l) => l.id === staffLocationId) || (initialLocations ?? []).find((l) => l.id === staffLocationId)
     : null;
   const staffShop = staffLoc
     ? getShopWindow(new Date(), staffLoc.opening_time, staffLoc.closing_time)
