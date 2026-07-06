@@ -5,13 +5,14 @@ export async function cancelExpiredUnpaidOrders() {
   try {
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     
-    // Find open, unpaid online orders created more than 2 minutes ago
+    // Find open, unpaid online orders created more than 2 minutes ago by guests (created_by is null)
     const { data: expiredOrders } = await admin
       .from("orders")
       .select("id")
       .eq("type", "online")
       .eq("status", "open")
       .eq("advance_paid", 0)
+      .is("created_by", null)
       .lt("created_at", twoMinutesAgo);
 
     if (expiredOrders && expiredOrders.length > 0) {

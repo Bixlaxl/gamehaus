@@ -53,7 +53,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  const orders = (data ?? []).filter((o) => !(o.type === "online" && (o.advance_paid ?? 0) === 0));
+  const orders = (data ?? []).filter((o) => !(o.type === "online" && (o.advance_paid ?? 0) === 0 && !o.created_by));
   const phones = Array.from(new Set(orders.map((o) => o.customer_phone).filter((p): p is string => !!p)));
 
   let profileMap: Record<string, number> = {};
