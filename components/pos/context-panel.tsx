@@ -907,7 +907,7 @@ function PanelSession({
     staleTime: 5 * 60 * 1000,
   });
 
-  const activeItems  = order.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
+  const activeItems  = order.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
   const groupedExtras = Array.from(
     activeExtras.reduce((acc, current) => {

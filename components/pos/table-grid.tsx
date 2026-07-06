@@ -230,7 +230,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
 
   const points = customerInfo?.points_balance ?? order?.customer_points ?? 0;
   const posTablesRef = usePOSStore((s) => s.tables);
-  const activeItems = (order?.items ?? [item]).filter((i) => !i.is_deleted && i.status !== "cancelled");
+  const activeItems = (order?.items ?? [item]).filter((i) => !i.is_deleted && i.status !== "cancelled" && i.status !== "scheduled");
   const activeExtras = (order?.extras ?? []).filter((e) => !e.is_deleted);
   const publicDiscount = (order as any)?.public_discount_amount ?? order?.discount_amount ?? 0;
   const isMembershipApplied = !!order?.membership_id;
@@ -707,7 +707,7 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
   });
 
   const posTablesRef = usePOSStore((s) => s.tables);
-  const activeItems = order.items.filter((i) => !i.is_deleted && i.status !== "cancelled");
+  const activeItems = order.items.filter((i) => !i.is_deleted && i.status !== "cancelled" && i.status !== "scheduled");
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
   const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
   const isMembershipApplied = !!order?.membership_id;

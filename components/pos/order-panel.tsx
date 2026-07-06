@@ -37,7 +37,7 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
 
   if (!selectedOrder) return null;
 
-  const activeItems  = selectedOrder.items.filter((i) => i.status !== "cancelled" && !i.is_deleted);
+  const activeItems  = selectedOrder.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
   const activeExtras = selectedOrder.extras.filter((e) => !e.is_deleted);
   const groupedExtras = Array.from(
     activeExtras.reduce((acc, current) => {
