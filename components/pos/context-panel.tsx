@@ -782,9 +782,6 @@ function PeoplePicker({
     return dbKeys;
   }, [pricing, isSimulator]);
 
-  if (options.length === 0) return null;
-  const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
-  const current  = item.num_people ?? null;
   const baseRate = useMemo(() => {
     if (item.selected_mode_name && item.table?.modes && Array.isArray(item.table.modes)) {
       const mode = (item.table.modes as any[]).find(m => m.name === item.selected_mode_name);
@@ -794,6 +791,10 @@ function PeoplePicker({
     }
     return item.table?.hourly_rate ?? item.rate_per_hour;
   }, [item.table, item.selected_mode_name, item.rate_per_hour]);
+
+  if (options.length === 0) return null;
+  const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
+  const current  = item.num_people ?? null;
 
   async function pick(n: number) {
     if (saving) return;
