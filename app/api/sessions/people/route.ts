@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: item, error: itemErr } = await admin
     .from("order_items")
-    .select("id, table_id, status")
+    .select("id, table_id, status, selected_mode_name")
     .eq("id", order_item_id)
     .single();
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   const { data: table, error: tableErr } = await admin
     .from("tables")
-    .select("name, type, hourly_rate, people_pricing")
+    .select("name, type, hourly_rate, people_pricing, modes")
     .eq("id", item.table_id)
     .single();
 
@@ -53,14 +53,29 @@ export async function POST(request: Request) {
   }
 
   const isSimulator = table.type === "ps5" && table.name.toLowerCase().includes("simulator");
-  const pp = (table.people_pricing ?? {}) as Record<string, number>;
+  
+  let pp: Record<string, number> = {};
+  let baseRate = table.hourly_rate;
+
+  if (item.selected_mode_name && table.modes && Array.isArray(table.modes)) {
+    const mode = (table.modes as any[]).find(m => m.name === item.selected_mode_name);
+    if (mode) {
+      pp = (mode.people_pricing ?? {}) as Record<string, number>;
+      baseRate = mode.hourly_rate;
+    } else {
+      pp = (table.people_pricing ?? {}) as Record<string, number>;
+    }
+  } else {
+    pp = (table.people_pricing ?? {}) as Record<string, number>;
+  }
+
   const tieredRate = pp[String(num_people)];
   let newRate = typeof tieredRate === "number" && tieredRate > 0
     ? tieredRate
-    : table.hourly_rate;
+    : baseRate;
 
   if (isSimulator && !pp[String(num_people)] && num_people === 2) {
-    newRate = table.hourly_rate * 2;
+    newRate = baseRate * 2;
   }
 
   const { error: updateErr } = await admin

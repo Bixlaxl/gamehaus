@@ -764,7 +764,16 @@ function PeoplePicker({
   const [saving, setSaving] = useState<number | null>(null);
 
   const isSimulator = item.table ? isSimulatorTable(item.table) : false;
-  const pricing = useMemo(() => (item.table?.people_pricing ?? {}) as Record<string, number>, [item.table?.people_pricing]);
+  const pricing = useMemo(() => {
+    if (item.selected_mode_name && item.table?.modes && Array.isArray(item.table.modes)) {
+      const mode = (item.table.modes as any[]).find(m => m.name === item.selected_mode_name);
+      if (mode?.people_pricing) {
+        return mode.people_pricing as Record<string, number>;
+      }
+    }
+    return (item.table?.people_pricing ?? {}) as Record<string, number>;
+  }, [item.table, item.selected_mode_name]);
+
   const options  = useMemo(() => {
     const dbKeys = Object.keys(pricing).filter(k => Boolean(pricing[k])).sort((a, b) => Number(a) - Number(b));
     if (dbKeys.length === 0 && isSimulator) {
@@ -776,7 +785,15 @@ function PeoplePicker({
   if (options.length === 0) return null;
   const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
   const current  = item.num_people ?? null;
-  const baseRate = item.table?.hourly_rate ?? item.rate_per_hour;
+  const baseRate = useMemo(() => {
+    if (item.selected_mode_name && item.table?.modes && Array.isArray(item.table.modes)) {
+      const mode = (item.table.modes as any[]).find(m => m.name === item.selected_mode_name);
+      if (mode && typeof mode.hourly_rate === "number") {
+        return mode.hourly_rate;
+      }
+    }
+    return item.table?.hourly_rate ?? item.rate_per_hour;
+  }, [item.table, item.selected_mode_name, item.rate_per_hour]);
 
   async function pick(n: number) {
     if (saving) return;
