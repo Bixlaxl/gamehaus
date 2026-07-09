@@ -116,14 +116,35 @@ export function StaffContent({
   // ── Edit ─────────────────────────────────────────────────────────────────
   const editMutation = useMutation({
     mutationFn: async ({ id, name, email, password, location_id }: { id: string; name: string; email: string; password?: string; location_id: string }) => {
-      const payload: any = {
-        name,
-        email,
-        location_id: location_id || null,
-      };
-      if (password) {
-        payload.password = password;
+      const payload: any = {};
+      let hasChanges = false;
+
+      if (editTarget) {
+        if (name !== editTarget.name) {
+          payload.name = name;
+          hasChanges = true;
+        }
+        if (email !== editTarget.email) {
+          payload.email = email;
+          hasChanges = true;
+        }
+        const targetLoc = location_id || null;
+        const originalLoc = editTarget.location_id || null;
+        if (targetLoc !== originalLoc) {
+          payload.location_id = targetLoc;
+          hasChanges = true;
+        }
+        if (password) {
+          payload.password = password;
+          hasChanges = true;
+        }
       }
+
+      if (!hasChanges) {
+        setEditTarget(null);
+        return;
+      }
+
       const res = await fetch(`/api/staff/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

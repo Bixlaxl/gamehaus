@@ -112,10 +112,63 @@ export async function POST(request: Request) {
     }
   }
 
+  // Fetch real tables rates from database to overwrite user rates
+  const uniqueTableIds = [...new Set(items.map(i => i.table_id))];
+  const { data: dbTables, error: dbTablesErr } = await admin
+    .from("tables")
+    .select("id, hourly_rate, people_pricing, modes, type, name")
+    .in("id", uniqueTableIds);
+
+  if (dbTablesErr || !dbTables) {
+    return NextResponse.json(err("Failed to retrieve table data from database", "DB_ERROR"), { status: 500 });
+  }
+
+  if (dbTables.length !== uniqueTableIds.length) {
+    return NextResponse.json(err("One or more selected tables do not exist", "NOT_FOUND"), { status: 404 });
+  }
+
+  // Resolve true rates from database configurations
+  const resolvedItems = items.map((item) => {
+    const table = dbTables.find((t) => t.id === item.table_id)!;
+    const isSimulator = table.type === "ps5" && table.name.toLowerCase().includes("simulator");
+    
+    let pp: Record<string, number> = {};
+    let baseRate = Number(table.hourly_rate) || 0;
+
+    if (item.selected_mode_name && table.modes && Array.isArray(table.modes)) {
+      const mode = (table.modes as any[]).find(m => m.name === item.selected_mode_name);
+      if (mode) {
+        pp = (mode.people_pricing ?? {}) as Record<string, number>;
+        baseRate = Number(mode.hourly_rate) || 0;
+      } else {
+        pp = (table.people_pricing ?? {}) as Record<string, number>;
+      }
+    } else {
+      pp = (table.people_pricing ?? {}) as Record<string, number>;
+    }
+
+    const numPeople = item.num_people ?? null;
+    let ratePerHour = baseRate;
+    
+    if (numPeople) {
+      const tieredRate = pp[String(numPeople)];
+      if (typeof tieredRate === "number" && tieredRate > 0) {
+        ratePerHour = tieredRate;
+      } else if (isSimulator && numPeople === 2) {
+        ratePerHour = baseRate * 2;
+      }
+    }
+
+    return {
+      ...item,
+      rate_per_hour: ratePerHour, // Force overwrite from DB source of truth
+    };
+  });
+
   // ── Conflict check ────────────────────────────────────────────────────────
   await cancelExpiredUnpaidOrders();
   // Re-verify every requested slot is still free at the moment of booking.
-  const scheduledItems = items.filter((i) => i.scheduled_start && i.scheduled_end);
+  const scheduledItems = resolvedItems.filter((i) => i.scheduled_start && i.scheduled_end);
   if (scheduledItems.length > 0) {
     const tableIds = [...new Set(scheduledItems.map((i) => i.table_id))];
 
@@ -323,7 +376,7 @@ export async function POST(request: Request) {
   const { data: createdItems, error: itemsError } = await admin
     .from("order_items")
     .insert(
-      items.map((item) => ({
+      resolvedItems.map((item) => ({
         order_id: order.id,
         table_id: item.table_id,
         scheduled_start: item.scheduled_start ?? null,

@@ -18,6 +18,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
+  // Identify and log ignored fields in development
+  if (body && typeof body === "object") {
+    const bodyKeys = Object.keys(body);
+    const parsedKeys = Object.keys(parsed.data);
+    const ignoredKeys = bodyKeys.filter((k) => !parsedKeys.includes(k));
+    if (ignoredKeys.length > 0 && process.env.NODE_ENV === "development") {
+      console.warn("Ignored PATCH fields:", ignoredKeys.join(", "));
+    }
+  }
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tables")

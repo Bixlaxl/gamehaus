@@ -58,6 +58,11 @@ export const locationSchema = z.object({
     .regex(/^[a-z0-9-]+$/),
 });
 
+export const updateLocationSchema = locationSchema.extend({
+  image_urls: z.array(z.string()).optional(),
+  is_active: z.boolean().optional(),
+}).partial();
+
 // Table
 export const tableSchema = z.object({
   location_id: z.string().uuid(),

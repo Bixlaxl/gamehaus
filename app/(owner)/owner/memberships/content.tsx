@@ -150,23 +150,73 @@ export function MembershipsContent({
     mutationFn: async (values: PlanForm & { editId?: string; _selectedTableId?: string; _planCategory?: "pct" | "hours" }) => {
       const cat = values._planCategory ?? planCategory;
       const tid = values._selectedTableId ?? "";
-      const payload = {
-        name:            values.name,
-        price:           parseFloat(values.price),
-        duration_days:   parseInt(values.duration_days),
-        discount_pct:    cat === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
-        free_hrs:        cat === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
-        bound_table_ids: cat === "hours" ? (tid ? [tid] : values.bound_table_ids || []) : [],
-      };
-      const url    = values.editId ? `/api/memberships/${values.editId}` : "/api/memberships";
-      const method = values.editId ? "PATCH" : "POST";
-      const res    = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(payload),
-      });
-      const body = await res.json() as { success: boolean; error?: string };
-      if (!body.success) throw new Error(body.error);
+      const newPrice = parseFloat(values.price);
+      const newDuration = parseInt(values.duration_days);
+      const newDiscountPct = cat === "pct" ? parseFloat(values.discount_pct) || 0 : 0;
+      const newFreeHrs = cat === "hours" ? parseFloat(values.free_hrs) || 0 : 0;
+      const newBoundTableIds = cat === "hours" ? (tid ? [tid] : values.bound_table_ids || []) : [];
+
+      if (values.editId && editingPlan) {
+        const patchPayload: any = {};
+        let hasChanges = false;
+
+        if (values.name !== editingPlan.name) {
+          patchPayload.name = values.name;
+          hasChanges = true;
+        }
+        if (newPrice !== Number(editingPlan.price)) {
+          patchPayload.price = newPrice;
+          hasChanges = true;
+        }
+        if (newDuration !== editingPlan.duration_days) {
+          patchPayload.duration_days = newDuration;
+          hasChanges = true;
+        }
+        if (newDiscountPct !== Number(editingPlan.discount_pct)) {
+          patchPayload.discount_pct = newDiscountPct;
+          hasChanges = true;
+        }
+        if (newFreeHrs !== Number(editingPlan.free_hrs)) {
+          patchPayload.free_hrs = newFreeHrs;
+          hasChanges = true;
+        }
+        if (JSON.stringify(newBoundTableIds) !== JSON.stringify(editingPlan.bound_table_ids || [])) {
+          patchPayload.bound_table_ids = newBoundTableIds;
+          hasChanges = true;
+        }
+
+        if (!hasChanges) {
+          setPlanDialogOpen(false);
+          setEditingPlan(null);
+          setPlanForm(defaultPlanForm);
+          setSelectedTableId("");
+          return;
+        }
+
+        const res = await fetch(`/api/memberships/${values.editId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patchPayload),
+        });
+        const body = await res.json() as { success: boolean; error?: string };
+        if (!body.success) throw new Error(body.error);
+      } else {
+        const payload = {
+          name:            values.name,
+          price:           newPrice,
+          duration_days:   newDuration,
+          discount_pct:    newDiscountPct,
+          free_hrs:        newFreeHrs,
+          bound_table_ids: newBoundTableIds,
+        };
+        const res = await fetch("/api/memberships", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json() as { success: boolean; error?: string };
+        if (!body.success) throw new Error(body.error);
+      }
     },
     onMutate: (values) => {
       setPlanDialogOpen(false);

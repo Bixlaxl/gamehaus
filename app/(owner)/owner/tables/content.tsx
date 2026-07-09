@@ -163,23 +163,72 @@ export function TablesContent({
         ? payloadModes[0].hourly_rate
         : parseFloat(values.hourly_rate || "0");
 
-      const payload = {
-        location_id:    values.location_id,
-        name:           values.name,
-        type:           values.type,
-        size:           values.size || undefined,
-        description:    values.description || undefined,
-        hourly_rate:    primaryRate,
-        sort_order:     parseInt(values.sort_order || "0"),
-        people_pricing: values.is_multi_mode ? null : peoplePricing,
-        modes:          payloadModes,
-      };
+      if (values.editId && editing) {
+        const patchPayload: any = {};
+        let hasChanges = false;
 
-      if (values.editId) {
+        if (values.location_id !== editing.location_id) {
+          patchPayload.location_id = values.location_id;
+          hasChanges = true;
+        }
+        if (values.name !== editing.name) {
+          patchPayload.name = values.name;
+          hasChanges = true;
+        }
+        if (values.type !== editing.type) {
+          patchPayload.type = values.type;
+          hasChanges = true;
+        }
+        
+        const currentSize = values.size || null;
+        const dbSize = editing.size || null;
+        if (currentSize !== dbSize) {
+          patchPayload.size = currentSize;
+          hasChanges = true;
+        }
+
+        const currentDesc = values.description || null;
+        const dbDesc = editing.description || null;
+        if (currentDesc !== dbDesc) {
+          patchPayload.description = currentDesc;
+          hasChanges = true;
+        }
+
+        if (primaryRate !== Number(editing.hourly_rate)) {
+          patchPayload.hourly_rate = primaryRate;
+          hasChanges = true;
+        }
+
+        const currentSort = parseInt(values.sort_order || "0");
+        const dbSort = editing.sort_order;
+        if (currentSort !== dbSort) {
+          patchPayload.sort_order = currentSort;
+          hasChanges = true;
+        }
+
+        const currentPeoplePricing = values.is_multi_mode ? null : peoplePricing;
+        if (JSON.stringify(currentPeoplePricing) !== JSON.stringify(editing.people_pricing)) {
+          patchPayload.people_pricing = currentPeoplePricing;
+          hasChanges = true;
+        }
+
+        if (JSON.stringify(payloadModes) !== JSON.stringify(editing.modes)) {
+          patchPayload.modes = payloadModes;
+          hasChanges = true;
+        }
+
+        if (values.image_file) {
+          hasChanges = true;
+        }
+
+        if (!hasChanges) {
+          return;
+        }
+
         const res = await fetch(`/api/tables/${values.editId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(patchPayload),
         });
         const body = await res.json() as { success: true; data: { id: string; location_id: string } } | { success: false; error: string };
         if (!body.success) throw new Error(body.error);
@@ -192,6 +241,17 @@ export function TablesContent({
           });
         }
       } else {
+        const payload = {
+          location_id:    values.location_id,
+          name:           values.name,
+          type:           values.type,
+          size:           values.size || undefined,
+          description:    values.description || undefined,
+          hourly_rate:    primaryRate,
+          sort_order:     parseInt(values.sort_order || "0"),
+          people_pricing: values.is_multi_mode ? null : peoplePricing,
+          modes:          payloadModes,
+        };
         const res = await fetch("/api/tables", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

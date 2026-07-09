@@ -85,6 +85,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
               if (key === "inventory")               return false;
               if (key === "inventory-low-count")     return false;
               if (key === "staff-bookings")          return false;
+              // Exclude tables, locations, coupons and memberships to prevent stale pricing overwrites
+              if (key === "tables")                  return false;
+              if (key === "manual-booking-tables")   return false;
+              if (key === "locations")               return false;
+              if (key === "coupons")                 return false;
+              if (key === "membership-plans")        return false;
               return true;
             },
           },

@@ -134,15 +134,60 @@ export function CouponsContent({
   // ── Edit ─────────────────────────────────────────────────────────────────
   const editMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: Partial<CouponForm> }) => {
-      const { error } = await supabase.from("coupons").update({
-        ...(values.valid_until    !== undefined && { valid_until:    toEndOfDayIST(values.valid_until) }),
-        ...(values.valid_from     !== undefined && { valid_from:     toStartOfDayIST(values.valid_from) }),
-        ...(values.discount_type  !== undefined && { discount_type:  values.discount_type }),
-        ...(values.discount_value !== undefined && { discount_value: parseFloat(values.discount_value) }),
-        ...(values.max_uses       !== undefined && { max_uses:       values.max_uses ? parseInt(values.max_uses) : null }),
-        ...(values.location_id    !== undefined && { location_id:    values.location_id === "all" ? null : values.location_id }),
-        ...(values.is_public      !== undefined && { is_public:      values.is_public }),
-      }).eq("id", id);
+      const payload: any = {};
+      let hasChanges = false;
+
+      if (editTarget) {
+        if (values.valid_until !== undefined) {
+          const formatted = toEndOfDayIST(values.valid_until);
+          if (formatted !== editTarget.valid_until) {
+            payload.valid_until = formatted;
+            hasChanges = true;
+          }
+        }
+        if (values.valid_from !== undefined) {
+          const formatted = toStartOfDayIST(values.valid_from);
+          if (formatted !== editTarget.valid_from) {
+            payload.valid_from = formatted;
+            hasChanges = true;
+          }
+        }
+        if (values.discount_type !== undefined && values.discount_type !== editTarget.discount_type) {
+          payload.discount_type = values.discount_type;
+          hasChanges = true;
+        }
+        if (values.discount_value !== undefined) {
+          const val = parseFloat(values.discount_value);
+          if (val !== Number(editTarget.discount_value)) {
+            payload.discount_value = val;
+            hasChanges = true;
+          }
+        }
+        if (values.max_uses !== undefined) {
+          const val = values.max_uses ? parseInt(values.max_uses) : null;
+          if (val !== editTarget.max_uses) {
+            payload.max_uses = val;
+            hasChanges = true;
+          }
+        }
+        if (values.location_id !== undefined) {
+          const val = values.location_id === "all" ? null : values.location_id;
+          if (val !== editTarget.location_id) {
+            payload.location_id = val;
+            hasChanges = true;
+          }
+        }
+        if (values.is_public !== undefined && values.is_public !== editTarget.is_public) {
+          payload.is_public = values.is_public;
+          hasChanges = true;
+        }
+      }
+
+      if (!hasChanges) {
+        return;
+      }
+
+      const { error } = await supabase.from("coupons").update(payload).eq("id", id);
       if (error) throw error;
     },
     onMutate: async ({ id, values }) => {

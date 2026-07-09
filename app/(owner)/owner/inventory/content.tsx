@@ -111,21 +111,54 @@ export function InventoryContent({
 
   const upsertMutation = useMutation({
     mutationFn: async (values: ItemForm & { editId?: string }) => {
-      const payload = {
-        location_id:      values.location_id,
-        name:             values.name,
-        category:         values.category,
-        selling_price:    parseFloat(values.selling_price),
-        cost_price:       parseFloat(values.cost_price) || 0,
-        sort_order:       parseInt(values.sort_order) || 0,
-        show_at_checkout: values.show_at_checkout,
-      };
+      if (values.editId && editing) {
+        const patchPayload: any = {};
+        let hasChanges = false;
 
-      if (values.editId) {
+        if (values.location_id !== editing.location_id) {
+          patchPayload.location_id = values.location_id;
+          hasChanges = true;
+        }
+        if (values.name !== editing.name) {
+          patchPayload.name = values.name;
+          hasChanges = true;
+        }
+        if (values.category !== editing.category) {
+          patchPayload.category = values.category;
+          hasChanges = true;
+        }
+        const currentSP = parseFloat(values.selling_price);
+        if (currentSP !== Number(editing.selling_price)) {
+          patchPayload.selling_price = currentSP;
+          hasChanges = true;
+        }
+        const currentCP = parseFloat(values.cost_price) || 0;
+        if (currentCP !== Number(editing.cost_price)) {
+          patchPayload.cost_price = currentCP;
+          hasChanges = true;
+        }
+        const currentSort = parseInt(values.sort_order) || 0;
+        if (currentSort !== editing.sort_order) {
+          patchPayload.sort_order = currentSort;
+          hasChanges = true;
+        }
+        if (values.show_at_checkout !== editing.show_at_checkout) {
+          patchPayload.show_at_checkout = values.show_at_checkout;
+          hasChanges = true;
+        }
+
+        if (values.image_file) {
+          hasChanges = true;
+        }
+
+        if (!hasChanges) {
+          return;
+        }
+
         const res = await fetch(`/api/inventory/${values.editId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(patchPayload),
         });
         const body = await res.json() as { success: true; data: InventoryItem } | { success: false; error: string };
         if (!body.success) throw new Error(body.error);
@@ -138,6 +171,15 @@ export function InventoryContent({
           });
         }
       } else {
+        const payload = {
+          location_id:      values.location_id,
+          name:             values.name,
+          category:         values.category,
+          selling_price:    parseFloat(values.selling_price),
+          cost_price:       parseFloat(values.cost_price) || 0,
+          sort_order:       parseInt(values.sort_order) || 0,
+          show_at_checkout: values.show_at_checkout,
+        };
         const res = await fetch("/api/inventory", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

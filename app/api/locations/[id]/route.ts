@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ok, err, friendlyDbError } from "@/lib/validators/schemas";
+import { ok, err, friendlyDbError, updateLocationSchema } from "@/lib/validators/schemas";
 
 export const runtime = 'edge';
 
@@ -12,9 +12,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
   const { id } = await params;
-  const body = await request.json();
+  const body: unknown = await request.json();
+  
+  const parsed = updateLocationSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
+  }
+
+  // Identify and log ignored fields in development
+  if (body && typeof body === "object") {
+    const bodyKeys = Object.keys(body);
+    const parsedKeys = Object.keys(parsed.data);
+    const ignoredKeys = bodyKeys.filter((k) => !parsedKeys.includes(k));
+    if (ignoredKeys.length > 0 && process.env.NODE_ENV === "development") {
+      console.warn("Ignored PATCH fields:", ignoredKeys.join(", "));
+    }
+  }
+
   const admin = createAdminClient();
-  const { data, error } = await admin.from("locations").update(body).eq("id", id).select().single();
+  const { data, error } = await admin.from("locations").update(parsed.data).eq("id", id).select().single();
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
   return NextResponse.json(ok(data));
 }

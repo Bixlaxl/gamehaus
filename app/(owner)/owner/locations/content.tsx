@@ -124,26 +124,54 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
       const { editId, filesToUpload, ...formValues } = values;
       let finalUrls = [...formValues.image_urls];
 
-      if (editId) {
+      if (editId && editing) {
         if (filesToUpload.length > 0) {
           const uploadedUrls = await uploadFiles(editId, filesToUpload);
           finalUrls = [...finalUrls, ...uploadedUrls];
         }
 
-        const payload = {
-          name: formValues.name,
-          address: formValues.address,
-          phone: formValues.phone || null,
-          opening_time: formValues.opening_time,
-          closing_time: formValues.closing_time,
-          timezone: formValues.timezone,
-          image_urls: finalUrls,
-        };
+        const patchPayload: any = {};
+        let hasChanges = false;
+
+        if (formValues.name !== editing.name) {
+          patchPayload.name = formValues.name;
+          hasChanges = true;
+        }
+        if (formValues.address !== editing.address) {
+          patchPayload.address = formValues.address;
+          hasChanges = true;
+        }
+        const currentPhone = formValues.phone || null;
+        const dbPhone = editing.phone || null;
+        if (currentPhone !== dbPhone) {
+          patchPayload.phone = currentPhone;
+          hasChanges = true;
+        }
+        if (formValues.opening_time !== editing.opening_time) {
+          patchPayload.opening_time = formValues.opening_time;
+          hasChanges = true;
+        }
+        if (formValues.closing_time !== editing.closing_time) {
+          patchPayload.closing_time = formValues.closing_time;
+          hasChanges = true;
+        }
+        if (formValues.timezone !== editing.timezone) {
+          patchPayload.timezone = formValues.timezone;
+          hasChanges = true;
+        }
+        if (JSON.stringify(finalUrls) !== JSON.stringify(editing.image_urls || [])) {
+          patchPayload.image_urls = finalUrls;
+          hasChanges = true;
+        }
+
+        if (!hasChanges) {
+          return;
+        }
 
         const res = await fetch(`/api/locations/${editId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(patchPayload),
         });
         const json = await res.json();
         if (!json.success) throw new Error(json.error);
