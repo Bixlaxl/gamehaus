@@ -6,10 +6,15 @@ export const dynamic = "force-dynamic";
 
 export default async function BookingConfirmationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ bookingId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { bookingId } = await params;
+  const sp = await searchParams;
+  const paymentId = typeof sp.payment_id === "string" ? sp.payment_id : undefined;
+
   const supabase = createAdminClient();
 
   const { data: order } = await supabase
@@ -25,5 +30,5 @@ export default async function BookingConfirmationPage({
     .eq("id", bookingId)
     .single();
 
-  return <BookingConfirmation order={order} />;
+  return <BookingConfirmation order={order} paymentId={paymentId} />;
 }

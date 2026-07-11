@@ -16,6 +16,7 @@ export async function POST(
   const body = await request.json().catch(() => ({})) as {
     coupon_code?: string;
     customer_phone?: string;
+    payment_id?: string;
   };
 
   // Fetch order, items, and extras in parallel
@@ -31,6 +32,11 @@ export async function POST(
 
   if (orderError || !order) {
     return NextResponse.json(err("Order not found", "NOT_FOUND"), { status: 404 });
+  }
+
+  // Idempotency: if the order is already paid/confirmed, skip immediately
+  if (order.status === "open" && order.advance_paid > 0) {
+    return NextResponse.json(ok({ order_id: orderId }));
   }
 
   const effectivePhone = body.customer_phone || order.customer_phone;
@@ -122,6 +128,102 @@ export async function POST(
   const totalDiscount = Math.round((bill.discountAmount + bill.memberDiscountAmount + bill.freeHoursDiscountAmount) * 100) / 100;
   const netAdvancePaid = Math.max(0, bill.subtotal - totalDiscount);
 
+  // Security Guard: If payment is required but payment_id was not provided
+  if (netAdvancePaid > 0 && !body.payment_id) {
+    return NextResponse.json(err("Payment ID is required for this booking", "PAYMENT_REQUIRED"), { status: 400 });
+  }
+
+  let paidAmount = 0;
+  let paymentUpdatePromise: PromiseLike<any> = Promise.resolve();
+  let loyaltyProfilePromise: PromiseLike<any> = Promise.resolve();
+  let whatsappNotificationPromise: PromiseLike<any> = Promise.resolve();
+
+  if (body.payment_id) {
+    const keyId = (process.env.RAZORPAY_KEY_ID || "").trim();
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    const credentials = btoa(`${keyId}:${keySecret}`);
+
+    const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${body.payment_id}`, {
+      headers: {
+        "Authorization": `Basic ${credentials}`,
+      },
+    });
+    if (!rzpRes.ok) {
+      const errTxt = await rzpRes.text();
+      console.error("[Razorpay Payment Verification Failed]", errTxt);
+      return NextResponse.json(err("Failed to verify payment with Razorpay", "PAYMENT_VERIFICATION_ERROR"), { status: 400 });
+    }
+    const payment = await rzpRes.json() as { id: string; order_id: string; amount: number; status: string };
+
+    const { data: dbPayment, error: dbPayErr } = await admin
+      .from("payments")
+      .select("id, razorpay_order_id, status")
+      .eq("order_id", orderId)
+      .single();
+
+    if (dbPayErr || !dbPayment) {
+      return NextResponse.json(err("Payment record not found for this order", "PAYMENT_NOT_FOUND"), { status: 400 });
+    }
+
+    if (dbPayment.razorpay_order_id !== payment.order_id) {
+      return NextResponse.json(err("Payment record order ID mismatch", "PAYMENT_MISMATCH"), { status: 400 });
+    }
+
+    if (payment.status !== "captured" && payment.status !== "authorized") {
+      return NextResponse.json(err("Payment is incomplete or failed", "PAYMENT_INCOMPLETE"), { status: 400 });
+    }
+
+    paidAmount = payment.amount / 100;
+
+    // Update payment record
+    paymentUpdatePromise = admin.from("payments").update({
+      status: "completed",
+      razorpay_payment_id: body.payment_id,
+      collected_at: new Date().toISOString(),
+    }).eq("id", dbPayment.id).then(() => {});
+
+    // Update loyalty points
+    if (order.customer_phone) {
+      const phone = order.customer_phone;
+      loyaltyProfilePromise = (async () => {
+        const { getAppSettings } = await import("@/lib/settings");
+        const settings = await getAppSettings(admin);
+        const pointsEarned = Math.floor(paidAmount / settings.loyalty.earn_rupees_per_point);
+        const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
+
+        const { data: profile } = await admin
+          .from("customer_profiles")
+          .select("points_balance")
+          .eq("phone", phone)
+          .single();
+
+        if (profile) {
+          await admin.from("customer_profiles").update({
+            points_balance: Math.max(0, profile.points_balance + netPoints),
+            last_visit_at:  new Date().toISOString(),
+          }).eq("phone", phone);
+        } else {
+          await admin.from("customer_profiles").insert({
+            phone:          phone,
+            name:           order.customer_name,
+            points_balance: Math.max(0, netPoints),
+            visit_count:    0,
+            total_spent:    0,
+            last_visit_at:  new Date().toISOString(),
+          });
+        }
+      })();
+    }
+
+    // Trigger WhatsApp notification
+    whatsappNotificationPromise = (async () => {
+      const { sendWhatsAppConfirmation } = await import("@/lib/whatsapp");
+      await sendWhatsAppConfirmation(orderId).catch((e) => console.error("WhatsApp failed:", e));
+    })();
+  }
+
+  const finalPaidAmount = body.payment_id ? paidAmount : netAdvancePaid;
+
   const membershipUpdatePromises = Array.from(ledgerUpdates.values())
     .filter(e => e.hoursRedeemed > 0)
     .map(e =>
@@ -172,12 +274,15 @@ export async function POST(
         // For fully-free orders (free hours covering 100%), both values are 0 — safe.
         ...(order.advance_paid > 0
           ? {}
-          : { advance_paid: netAdvancePaid }),
+          : { advance_paid: finalPaidAmount }),
         amount_due: 0,
         membership_id: order.membership_id ?? primaryMembership?.id ?? null,
       })
       .eq("id", orderId),
     bookingsPromise,
+    paymentUpdatePromise,
+    loyaltyProfilePromise,
+    whatsappNotificationPromise,
     ...membershipUpdatePromises,
   ]);
 

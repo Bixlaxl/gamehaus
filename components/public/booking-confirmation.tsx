@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 import { CheckCircle, Calendar, Clock, MapPin, ChevronRight, AlertTriangle } from "lucide-react";
 
 interface BookingItem {
@@ -26,8 +27,9 @@ interface Order {
 
 const TYPE_EMOJI: Record<string, string> = { snooker: "🎱", pool: "🎱", ps5: "🎮" };
 
-export function BookingConfirmation({ order }: { order: Order | null }) {
+export function BookingConfirmation({ order, paymentId }: { order: Order | null; paymentId?: string }) {
   const { resolvedTheme } = useTheme();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -49,6 +51,41 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
 
   const isOnline = order?.type === "online";
   const isPaymentPending = isOnline && (order?.total_amount ?? 0) > 0 && (order?.advance_paid ?? 0) === 0 && order?.status === "open";
+
+  const [confirming, setConfirming] = useState(!!paymentId && isPaymentPending);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!paymentId || !isPaymentPending) return;
+
+    let active = true;
+    async function doConfirm() {
+      try {
+        const res = await fetch(`/api/orders/${order?.id}/confirm-online`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payment_id: paymentId,
+            customer_phone: order?.customer_phone,
+          }),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          throw new Error(json.error || "Failed to confirm payment");
+        }
+        if (active) {
+          router.refresh();
+        }
+      } catch (err: any) {
+        if (active) {
+          setConfirmError(err.message || "Failed to confirm payment");
+          setConfirming(false);
+        }
+      }
+    }
+    doConfirm();
+    return () => { active = false; };
+  }, [paymentId, isPaymentPending, order?.id, order?.customer_phone, router]);
 
   if (!order) {
     return (
@@ -84,7 +121,34 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
           />
 
           <div className="p-7 text-center">
-            {isPaymentPending ? (
+            {confirming ? (
+              <>
+                <div
+                  className="w-12 h-12 rounded-full border-4 border-t-[#D4541A] border-gray-200 animate-spin mx-auto mb-4"
+                />
+                <h1 className="text-2xl font-bold mb-1" style={{ color: textPri }}>
+                  Confirming Payment...
+                </h1>
+                <p className="text-sm px-4" style={{ color: textSec }}>
+                  Please do not close or refresh this page. We are securing your booking slot.
+                </p>
+              </>
+            ) : confirmError ? (
+              <>
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ background: "rgba(239,68,68,0.12)" }}
+                >
+                  <AlertTriangle className="h-8 w-8" style={{ color: "#EF4444" }} />
+                </div>
+                <h1 className="text-2xl font-bold mb-1" style={{ color: textPri }}>
+                  Verification Failed
+                </h1>
+                <p className="text-sm px-4" style={{ color: "#EF4444" }}>
+                  {confirmError}
+                </p>
+              </>
+            ) : isPaymentPending ? (
               <>
                 <div
                   className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
@@ -206,7 +270,26 @@ export function BookingConfirmation({ order }: { order: Order | null }) {
 
           {/* Instructions & Non-refundable notice */}
           <div className="mx-5 mb-6 space-y-2.5">
-            {isPaymentPending ? (
+            {confirming ? (
+              <div
+                className="px-4 py-3 rounded-2xl text-center animate-pulse"
+                style={{ background: "rgba(212,84,26,0.07)", border: "1px solid rgba(212,84,26,0.22)" }}
+              >
+                <p className="text-xs font-semibold" style={{ color: "#D4541A" }}>
+                  Verifying transaction with Razorpay. Please wait...
+                </p>
+              </div>
+            ) : confirmError ? (
+              <div
+                className="px-4 py-3 rounded-2xl"
+                style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}
+              >
+                <p className="flex items-start gap-2 text-xs" style={{ color: "#EF4444" }}>
+                  <span className="mt-0.5 shrink-0 text-sm leading-none">⚠</span>
+                  Could not auto-verify your payment. If money was deducted, please show your payment receipt to staff at reception.
+                </p>
+              </div>
+            ) : isPaymentPending ? (
               <div
                 className="px-4 py-3 rounded-2xl"
                 style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}
