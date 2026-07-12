@@ -89,25 +89,45 @@ export async function POST(request: Request) {
   // Check for confirmed online bookings on this table that would conflict (10-min buffer)
   const bufferTime = new Date(newExpectedEnd.getTime() + BUFFER_MINS * 60 * 1000);
 
-  const { data: conflictingBookings } = await admin
-    .from("bookings")
-    .select(`
-      id,
-      scheduled_start,
-      order:orders(customer_name),
-      order_item:order_items!inner(table_id)
-    `)
-    .eq("status", "confirmed")
-    .lt("scheduled_start", bufferTime.toISOString())
-    .gt("scheduled_start", new Date().toISOString());
+  const [{ data: conflictingBookings }, { data: conflictingScheduled }] = await Promise.all([
+    admin
+      .from("bookings")
+      .select(`
+        id,
+        scheduled_start,
+        order:orders(customer_name),
+        order_item:order_items!inner(table_id)
+      `)
+      .eq("status", "confirmed")
+      .lt("scheduled_start", bufferTime.toISOString())
+      .gt("scheduled_start", new Date().toISOString()),
+
+    admin
+      .from("order_items")
+      .select("id, table_id, scheduled_start, scheduled_end")
+      .eq("table_id", item.table_id)
+      .eq("status", "scheduled")
+      .eq("is_deleted", false)
+      .lt("scheduled_start", bufferTime.toISOString())
+      .gt("scheduled_end", new Date().toISOString()),
+  ]);
 
   const conflicts = (conflictingBookings ?? []).filter(
     (b) => (b.order_item as { table_id: string }).table_id === item.table_id
   );
 
+  let earliestStartMs = Infinity;
   if (conflicts.length > 0) {
-    const nextBooking = conflicts[0];
-    const nextStart = new Date(nextBooking.scheduled_start);
+    const s = new Date(conflicts[0].scheduled_start).getTime();
+    if (s < earliestStartMs) earliestStartMs = s;
+  }
+  if (conflictingScheduled && conflictingScheduled.length > 0) {
+    const s = new Date(conflictingScheduled[0].scheduled_start!).getTime();
+    if (s < earliestStartMs) earliestStartMs = s;
+  }
+
+  if (earliestStartMs !== Infinity) {
+    const nextStart = new Date(earliestStartMs);
     const latestAllowed = new Date(nextStart.getTime() - BUFFER_MINS * 60 * 1000);
     const maxExtendMins = Math.floor(
       (latestAllowed.getTime() - anchor.getTime()) / 60000
