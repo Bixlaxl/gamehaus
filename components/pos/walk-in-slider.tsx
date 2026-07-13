@@ -147,6 +147,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   }
 
   async function submitOrder(finalName: string) {
+    if (loading) return;
     setLoading(true); setError(null);
 
     const items = selectedTableIds.map((tid) => {

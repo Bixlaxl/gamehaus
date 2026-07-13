@@ -575,7 +575,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           </button>
           <button
             type="button"
-            onClick={() => { setError(null); create.mutate(); }}
+            onClick={() => {
+              if (create.isPending) return;
+              setError(null);
+              create.mutate();
+            }}
             disabled={create.isPending || slotConflict}
             className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"
           >
