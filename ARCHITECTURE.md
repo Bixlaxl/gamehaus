@@ -111,6 +111,7 @@ sequenceDiagram
   participant DB as Supabase Database
 
   Staff->>POS: Clicks Finalize
+  Note over POS: POS checks submittingRef.current<br/>to prevent double-click race conditions
   POS->>API: POST { points_redeemed, customer_phone_override }
   API->>DB: Fetch order details, items, extras, active membership, coupon, customer points
   API->>Engine: Run calculateBill(items, extras, coupon, advance_paid)
@@ -125,7 +126,12 @@ sequenceDiagram
   API->>WhatsApp: Trigger automated WhatsApp invoice notification
 ```
 
-### D. Reports Page Client-to-Server Secure Flow
+### D. Finalized Bill Deletion (Owner-Only)
+Finalized transactions/bills can only be deleted by the store Owner:
+1. **Client-side Restriction:** The deletion controls are completely removed from the POS/Staff view. Only the Owner dashboard bills panel (`app/(owner)/owner/bills/content.tsx`) renders the destructive `"Delete Bill"` button.
+2. **Server-side Security:** The API endpoint `DELETE /api/pos/bills/[id]` queries the auth session user's role from the database. Non-owner requests return `403 Forbidden` and are rejected before any database modifications occur.
+
+### E. Reports Page Client-to-Server Secure Flow
 The reports analytics dashboard bypasses client-side RLS to prevent empty queries.
 
 ```mermaid

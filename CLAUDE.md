@@ -100,6 +100,12 @@ Indian mobile numbers must be verified as exactly 10 digits starting with `6`, `
 >
 > **5. Multi-Table Bookings Session State**
 > For group walk-ins and multi-table bookings, finished tables must remain marked as occupied in the POS tables grid until the entire order is checked out. The POS store `computeTablesWithStatus` must check if other tables in the same active order are still `running`, preventing double-booking and premature clearing.
+>
+> **6. Double-Submit Protection on POS Finalization**
+> To prevent race conditions and duplicate fetch calls returning "Order is not open" errors, checkout finalization modals must guard their API requests using a local component ref (e.g., `submittingRef.current` boolean check) to block subsequent clicks while a request is in flight.
+>
+> **7. Owner-Only Finalized Bill Deletion**
+> Deletion of finalized transactions/bills is restricted strictly to owners. The endpoint `DELETE /api/pos/bills/[id]` must authenticate the user and return a `403 Forbidden` error if the role is not 'owner'. POS/Staff screens must not expose deletion controls.
 
 ---
 
