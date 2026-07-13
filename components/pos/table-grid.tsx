@@ -89,15 +89,15 @@ function IdleCardImpl({ table, isSelected, onClick, upcomingBooking }: {
             {typeIcon[table.type] ?? "🎯"}
           </div>
         )}
-        <span className="absolute top-3 right-3 text-sm font-black px-3 py-1.5 rounded bg-black/60 backdrop-blur-sm text-white uppercase tracking-wider">
+        <span className="absolute top-3 right-3 text-base font-black px-3.5 py-2 rounded-lg bg-black/60 backdrop-blur-sm text-white uppercase tracking-wider">
           Idle
         </span>
       </div>
       <div className="flex flex-col flex-1 p-5 gap-4">
-        <p className="font-extrabold text-gray-900 dark:text-white text-3xl leading-tight mb-0.5">
+        <p className="font-black text-gray-900 dark:text-white text-3xl md:text-4xl leading-tight mb-0.5">
           {fmtName(table.name)}
         </p>
-        <p className="text-xl font-bold text-gray-500 dark:text-[#bbb] flex-1">
+        <p className="text-2xl font-extrabold text-gray-500 dark:text-[#bbb] flex-1">
           {formatCurrency(table.hourly_rate)}/hr
         </p>
         {upcomingBooking ? (
@@ -325,14 +325,14 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <TableThumb table={table} size={36} />
-            <span className="text-lg font-black text-gray-800 dark:text-[#ddd] truncate">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <TableThumb table={table} size={42} />
+            <span className="text-xl md:text-2xl font-black text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
-            className="text-sm font-black px-2.5 py-1 rounded text-white shrink-0 ml-1 uppercase tracking-wider"
+            className="text-base font-black px-3.5 py-1.5 rounded-lg text-white shrink-0 ml-1.5 uppercase tracking-wider"
             style={{ background: accentColor }}
           >
             {isOvertime ? "Over time" : isFiveMinWarning ? "Ending" : "Live"}
@@ -340,24 +340,24 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
         </div>
 
         {/* Customer, Live Bill & Loyalty Points */}
-        <div className="flex items-start justify-between gap-3 mt-1">
+        <div className="flex items-start justify-between gap-3 mt-1.5">
           <div className="min-w-0 flex-1">
-            <p className="font-black text-gray-900 dark:text-white text-3xl leading-tight truncate">
+            <p className="font-black text-gray-900 dark:text-white text-4xl leading-tight truncate">
               {order?.customer_name ?? "—"}
             </p>
-            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-              <span className="text-sm font-mono font-bold tabular-nums text-gray-500 dark:text-[#aaa]">
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="text-base font-mono font-bold tabular-nums text-gray-500 dark:text-[#aaa]">
                 Started {startedAt}
               </span>
               {order?.customer_phone && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-sm font-black">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-sm font-black">
                   ★ {points} pts
                 </span>
               )}
             </div>
           </div>
           <div className="text-right shrink-0">
-            <span className="font-black text-3xl tabular-nums block" style={{ color: "#D4541A" }}>
+            <span className="font-black text-4xl tabular-nums block" style={{ color: "#D4541A" }}>
               {formatCurrency(liveBill)}
             </span>
           </div>
@@ -366,7 +366,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
         {/* People / controller count badge (only when tier pricing applied) */}
         {item.num_people != null && (
           <span
-            className="inline-flex w-fit items-center gap-1.5 text-xs font-black px-2 py-0.5 rounded uppercase tracking-wider"
+            className="inline-flex w-fit items-center gap-2 text-sm font-black px-3 py-1 rounded-lg uppercase tracking-wider"
             style={{ background: "rgba(212,84,26,0.12)", color: "#D4541A" }}
           >
             {item.num_people} {table.type === "ps5" ? "ctrl" : "ppl"}
@@ -565,14 +565,14 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <TableThumb table={table} size={36} />
-            <span className="text-lg font-black text-gray-800 dark:text-[#ddd] truncate">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <TableThumb table={table} size={42} />
+            <span className="text-xl md:text-2xl font-black text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
-            className="text-sm font-black px-2.5 py-1 rounded text-white shrink-0 ml-1 uppercase tracking-wider"
+            className="text-base font-black px-3.5 py-1.5 rounded-lg text-white shrink-0 ml-1.5 uppercase tracking-wider"
             style={{ background: "#f59e0b" }}
           >
             Booked
@@ -580,11 +580,11 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
         </div>
 
         {/* Customer details */}
-        <div className="space-y-1">
-          <p className="font-black text-gray-900 dark:text-white text-3xl leading-tight truncate">
+        <div className="space-y-1.5">
+          <p className="font-black text-gray-900 dark:text-white text-4xl leading-tight truncate">
             {booking.order?.customer_name}
           </p>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             {booking.order?.customer_phone && (
               <button
                 onClick={(e) => {
@@ -595,14 +595,14 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
                      () => toast.error("Copy failed"),
                   );
                 }}
-                className="inline-flex items-center gap-1.5 text-sm font-mono font-bold text-gray-500 dark:text-[#aaa] hover:text-[#f59e0b] dark:hover:text-[#f59e0b] truncate"
+                className="inline-flex items-center gap-1.5 text-base font-mono font-bold text-gray-500 dark:text-[#aaa] hover:text-[#f59e0b] dark:hover:text-[#f59e0b] truncate"
                 title="Click to copy number"
               >
                 <Phone className="h-3.5 w-3.5" />
                 {booking.order.customer_phone}
               </button>
             )}
-            <span className="text-sm text-gray-400 font-bold">
+            <span className="text-base text-gray-500 font-extrabold">
               Slot: {fmtTime(booking.scheduled_start)} – {fmtTime(booking.scheduled_end)}
             </span>
           </div>
@@ -610,7 +610,7 @@ function BookedCardImpl({ table, locationId, isSelected, onClick }: {
 
         {/* Big centered Booked countdown/timer */}
         <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
-          <span className="text-4xl lg:text-5xl font-black font-mono tracking-widest text-[#f59e0b] tabular-nums">
+          <span className="text-5xl lg:text-6xl font-black font-mono tracking-widest text-[#f59e0b] tabular-nums">
             {isOverdue
               ? `${Math.abs(Math.ceil(diffMs / 60000))}m late`
               : isImminent
@@ -740,14 +740,14 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <TableThumb table={table} size={36} />
-            <span className="text-lg font-black text-gray-800 dark:text-[#ddd] truncate">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <TableThumb table={table} size={42} />
+            <span className="text-xl md:text-2xl font-black text-gray-800 dark:text-[#ddd] truncate">
               {fmtName(table.name)}
             </span>
           </div>
           <span
-            className="text-sm font-black px-2.5 py-1 rounded text-white shrink-0 ml-1 uppercase tracking-wider"
+            className="text-base font-black px-3.5 py-1.5 rounded-lg text-white shrink-0 ml-1.5 uppercase tracking-wider"
             style={{ background: "#D4541A" }}
           >
             Bill Ready
@@ -756,15 +756,15 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
 
         {/* Customer */}
         <div>
-          <p className="font-black text-gray-900 dark:text-white text-3xl leading-tight truncate">
+          <p className="font-black text-gray-900 dark:text-white text-4xl leading-tight truncate">
             {order.customer_name}
           </p>
-          <p className="text-sm font-bold text-gray-600 dark:text-[#aaa]">Session ended</p>
+          <p className="text-base font-extrabold text-gray-500 dark:text-[#aaa]">Session ended</p>
         </div>
 
         {/* Big centered Bill amount */}
         <div className="my-2 py-8 flex flex-col items-center justify-center rounded-2xl bg-orange-100/30 dark:bg-orange-950/20 border border-orange-500/10">
-          <span className="text-4xl lg:text-5xl font-black font-mono tracking-widest tabular-nums" style={{ color: "#D4541A" }}>
+          <span className="text-5xl lg:text-6xl font-black font-mono tracking-widest tabular-nums" style={{ color: "#D4541A" }}>
             {formatCurrency(billDue)}
           </span>
           <span className="text-sm font-black uppercase tracking-widest text-gray-500 dark:text-[#aaa] mt-2">
@@ -775,7 +775,7 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
         {/* Quick collect — goes straight to finalize modal */}
         <button
           onClick={(e) => { e.stopPropagation(); setFinalizeOrderId(order.id); }}
-          className="w-full py-3 rounded-xl text-base font-extrabold text-white transition-all active:scale-95 hover:brightness-110 mt-auto"
+          className="w-full py-3.5 rounded-xl text-base font-black text-white transition-all active:scale-95 hover:brightness-110 mt-auto shadow"
           style={{ background: "#D4541A" }}
         >
           Collect Bill

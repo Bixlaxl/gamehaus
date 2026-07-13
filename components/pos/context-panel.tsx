@@ -1598,10 +1598,10 @@ function PanelSession({
             const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
             return (
               <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                <span className="truncate text-base font-semibold text-gray-800 dark:text-[#ddd]">
+                <span className="truncate text-lg font-extrabold text-gray-800 dark:text-[#ddd]">
                   {tn} · {line.durationMins}m
                 </span>
-                <span className="shrink-0 font-extrabold text-gray-900 dark:text-white tabular-nums text-base">
+                <span className="shrink-0 font-black text-gray-900 dark:text-white tabular-nums text-lg">
                   {formatCurrency(line.amount)}
                 </span>
               </div>
@@ -1609,10 +1609,10 @@ function PanelSession({
           })}
           {bill.extraLines.map((line) => (
             <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="truncate text-base font-semibold text-gray-800 dark:text-[#ddd]">
+              <span className="truncate text-lg font-extrabold text-gray-800 dark:text-[#ddd]">
                 {line.name} ×{line.quantity}
               </span>
-              <span className="shrink-0 font-extrabold text-gray-900 dark:text-white tabular-nums text-base">
+              <span className="shrink-0 font-black text-gray-900 dark:text-white tabular-nums text-lg">
                 {formatCurrency(line.amount)}
               </span>
             </div>
@@ -1686,20 +1686,20 @@ function PanelSession({
           </div>
         )}
 
-        <div className="px-5 pb-5 pt-3 border-t border-gray-100 dark:border-[#1a1a1a]">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
+        <div className="px-5 pb-6 pt-4 border-t border-gray-100 dark:border-[#1a1a1a] space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-base font-extrabold uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
               Total due
             </span>
-            <span className="text-4xl font-extrabold tabular-nums leading-none" style={{ color: "#D4541A" }}>
+            <span className="text-5xl font-black tabular-nums leading-none" style={{ color: "#D4541A" }}>
               {formatCurrency(hasRunning ? bill.totalDue : displayTotal)}
             </span>
           </div>
 
           {/* Extend-from-bill — only when bill is ready (session finished) */}
           {!hasRunning && finishedItem && (
-            <div className="mb-3">
-              <p className="text-xs font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb] mb-1.5">
+            <div className="mb-2 space-y-2">
+              <p className="text-xs font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
                 Add more time
               </p>
               <div className="grid grid-cols-3 gap-2">
@@ -1717,7 +1717,7 @@ function PanelSession({
                             : "Past closing time"
                           : `Resume session for ${mins} more minutes`
                       }
-                      className={`py-3 rounded-lg text-sm font-extrabold transition-all ${
+                      className={`py-3.5 rounded-xl text-base font-extrabold transition-all ${
                         blocked
                           ? "bg-gray-50 dark:bg-[#0d0d0d] text-gray-300 dark:text-[#333] cursor-not-allowed line-through"
                           : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-white border border-gray-200 dark:border-[#2a2a2a] hover:border-[#D4541A] hover:text-[#D4541A] cursor-pointer"
@@ -1729,7 +1729,7 @@ function PanelSession({
                 })}
               </div>
               {maxExtendMins === 0 && (
-                <p className="text-xs mt-1.5 text-gray-500 dark:text-[#999]">
+                <p className="text-xs mt-1.5 text-gray-500 dark:text-[#999] font-bold">
                   {upcomingForFinishedTable ? "Next booking too close to extend" : "Shop closing — extension unavailable"}
                 </p>
               )}
@@ -1739,10 +1739,10 @@ function PanelSession({
           <button
             onClick={() => setFinalizeId(order.id)}
             disabled={hasRunning}
-            className={`w-full py-3.5 rounded-xl text-base font-bold transition-opacity ${
+            className={`w-full py-4.5 rounded-2xl text-lg font-black tracking-wide transition-all shadow-lg active:scale-[0.99] ${
               hasRunning
                 ? "bg-gray-100 dark:bg-[#1a1a1a] text-gray-400 dark:text-[#555] cursor-not-allowed"
-                : "text-white hover:brightness-110 active:brightness-95 cursor-pointer shadow-lg"
+                : "text-white hover:brightness-110 active:brightness-95 cursor-pointer"
             }`}
             style={hasRunning ? {} : { background: "#D4541A", boxShadow: "0 6px 20px rgba(212,84,26,0.35)" }}
           >
