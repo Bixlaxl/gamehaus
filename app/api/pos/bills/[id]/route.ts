@@ -18,6 +18,16 @@ export async function DELETE(
 
   const admin = createAdminClient();
 
+  const { data: viewer } = await admin
+    .from("users")
+    .select("role")
+    .eq("id", session.user.id)
+    .single();
+
+  if (viewer?.role !== "owner") {
+    return NextResponse.json(err("Forbidden: Deleting bills is owner-only", "FORBIDDEN"), { status: 403 });
+  }
+
   // 1. Fetch order details to know customer phone, total amount, and extras for stock revert
   const [
     { data: order, error: orderError },

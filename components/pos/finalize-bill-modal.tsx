@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
@@ -82,6 +82,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const [membershipIdInput, setMembershipIdInput] = useState("");
   const [validatedMemberships, setValidatedMemberships] = useState<any[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
@@ -328,6 +329,8 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const splitOk  = Math.abs(splitSum - finalDue) <= 0.5;
 
   async function confirmPayment() {
+    if (submittingRef.current) return;
+
     // Build the payments array — single-method = 1 entry; split = up to 2
     const paymentsPayload = splitMode
       ? [
@@ -344,52 +347,61 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
 
-    const res = await fetch(`/api/orders/${finalizeOrderId}/finalize`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        payments:        paymentsPayload,
-        points_redeemed: clampedRedeem,
-        membership_id:   validatedMemberships.length > 0 ? (validatedMemberships[0].short_id || validatedMemberships[0].id) : undefined,
-        ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
-      }),
-    });
+    try {
+      const res = await fetch(`/api/orders/${finalizeOrderId}/finalize`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payments:        paymentsPayload,
+          points_redeemed: clampedRedeem,
+          membership_id:   validatedMemberships.length > 0 ? (validatedMemberships[0].short_id || validatedMemberships[0].id) : undefined,
+          ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
+        }),
+      });
 
-    const body = await res.json() as
-      | { success: true;  data: { total_due: number; points_earned: number } }
-      | { success: false; error: string };
+      const body = await res.json() as
+        | { success: true;  data: { total_due: number; points_earned: number } }
+        | { success: false; error: string };
 
-    if (!body.success) {
-      setError(body.error);
+      if (!body.success) {
+        setError(body.error);
+        setLoading(false);
+        submittingRef.current = false;
+        return;
+      }
+
+      // Capture handovers from current table state BEFORE queries invalidate
+      const finalizedTableIds = new Set((selectedOrder?.items ?? []).map((i) => i.table_id));
+      const handovers: HandoverBooking[] = storeTablesRef
+        .filter((t) => finalizedTableIds.has(t.id) && t.upcomingBooking !== null)
+        .map((t) => ({
+          id:              t.upcomingBooking!.id,
+          scheduled_start: t.upcomingBooking!.scheduled_start,
+          scheduled_end:   t.upcomingBooking!.scheduled_end,
+          order:           t.upcomingBooking!.order,
+        }));
+
+      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      selectOrder_fn(null);
       setLoading(false);
-      return;
-    }
+      submittingRef.current = false;
 
-    // Capture handovers from current table state BEFORE queries invalidate
-    const finalizedTableIds = new Set((selectedOrder?.items ?? []).map((i) => i.table_id));
-    const handovers: HandoverBooking[] = storeTablesRef
-      .filter((t) => finalizedTableIds.has(t.id) && t.upcomingBooking !== null)
-      .map((t) => ({
-        id:              t.upcomingBooking!.id,
-        scheduled_start: t.upcomingBooking!.scheduled_start,
-        scheduled_end:   t.upcomingBooking!.scheduled_end,
-        order:           t.upcomingBooking!.order,
-      }));
-
-    qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
-    qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
-    qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
-    selectOrder_fn(null);
-    setLoading(false);
-
-    if (handovers.length > 0) {
-      setHandoverBookings(handovers);
-      setStep("handover");
-    } else {
-      close();
+      if (handovers.length > 0) {
+        setHandoverBookings(handovers);
+        setStep("handover");
+      } else {
+        close();
+      }
+    } catch (err: any) {
+      setError(err.message || "A network error occurred. Please try again.");
+      setLoading(false);
+      submittingRef.current = false;
     }
   }
 

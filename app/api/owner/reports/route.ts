@@ -57,10 +57,10 @@ export async function GET(request: Request) {
     const { data, error: ordError } = await admin
       .from("orders")
       .select(`
-        id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, created_by, finalized_at,
+        id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, created_by, staff:users!orders_created_by_fkey(name), finalized_at,
         location:locations(id, name),
         items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
-        payments(method, amount, status),
+        payments(method, amount, status, collected_by, collector:users!payments_collected_by_fkey(name)),
         extras:order_extras(price, cost_price, quantity, is_deleted)
       `)
       .eq("status", "finalized")

@@ -364,18 +364,6 @@ export function BillsContent({
           onClose={() => setSelected(null)}
           onSendWhatsApp={(e) => handleSendWhatsApp(e, selected)}
           sending={sendingId === selected.id}
-          onDelete={async () => {
-            if (!confirm("Are you sure you want to delete this finalized bill? This will revert inventory stock and loyalty points.")) return;
-            const res = await fetch(`/api/pos/bills/${selected.id}`, { method: "DELETE" });
-            const body = await res.json();
-            if (body.success) {
-              toast.success("Bill deleted successfully!");
-              setSelected(null);
-              queryClient.invalidateQueries({ queryKey: ["staff-bills"] });
-            } else {
-              toast.error(body.error || "Failed to delete bill");
-            }
-          }}
         />
       )}
 
@@ -613,25 +601,14 @@ export function BillsContent({
 //  Detail modal — read-only view of a finalized bill
 // ────────────────────────────────────────────────────────────────────────────
 function BillDetailModal({
-  bill, onClose, onSendWhatsApp, sending, onDelete,
+  bill, onClose, onSendWhatsApp, sending,
 }: {
   bill: BillRow;
   onClose: () => void;
   onSendWhatsApp: (e: React.MouseEvent) => void;
   sending?: boolean;
-  onDelete: () => Promise<void>;
 }) {
   const activeExtras = bill.extras.filter((e) => !e.is_deleted);
-  const [deleting, setDeleting] = useState(false);
-
-  async function handleDelete() {
-    setDeleting(true);
-    try {
-      await onDelete();
-    } finally {
-      setDeleting(false);
-    }
-  }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -782,16 +759,7 @@ function BillDetailModal({
           </a>
           <div className="flex items-center gap-2">
             <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="px-3 py-2 rounded-md text-sm font-semibold text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400 hover:bg-red-100 disabled:opacity-50 transition-all active:scale-95"
-            >
-              {deleting ? "Deleting…" : "Delete Bill"}
-            </button>
-            <button
               onClick={onClose}
-              disabled={deleting}
               className="px-3 py-2 rounded-md text-sm font-semibold bg-white dark:bg-[#222] border dark:border-gray-800 hover:bg-gray-100"
             >
               <X className="h-4 w-4 inline mr-1" /> Close

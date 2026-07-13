@@ -84,10 +84,11 @@ type ReportOrder = {
   points_redeemed?: number | null;
   type: string;
   created_by: string | null;
+  staff: { name: string } | null;
   finalized_at: string | null;
   location: { id: string; name: string } | null;
   items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null; final_amount?: number | null; free_hours_to_redeem?: number | null }>;
-  payments: Array<{ method: string; amount: number; status: string }>;
+  payments: Array<{ method: string; amount: number; status: string; collected_by: string | null; collector: { name: string } | null }>;
   extras: Array<{ price: number; cost_price: number; quantity: number; is_deleted: boolean }>;
 };
 
@@ -125,7 +126,9 @@ export function ReportsContent({
   initialFrom: string;
   initialTo: string;
 }) {
-  const [reportMode, setReportMode]           = useState<"daily" | "range">("daily");
+  const [reportMode, setReportMode]           = useState<"daily" | "range">(
+    initialFrom === initialTo ? "daily" : "range"
+  );
   const [preset, setPreset]                 = useState<Preset>("30d");
   const [from, setFrom]                     = useState(initialFrom);
   const [to, setTo]                         = useState(initialTo);
@@ -280,6 +283,7 @@ export function ReportsContent({
     }
     const methodMap   = new Map<string, number>();
     const customerMap = new Map<string, { name: string; visits: number; spent: number }>();
+    const staffMap    = new Map<string, { name: string; revenue: number; orderCount: number }>();
     let tableRevenue    = 0;
     let inventoryProfit = 0;
     let totalRevenue    = 0;
@@ -308,6 +312,20 @@ export function ReportsContent({
     for (const o of filteredOrders) {
       const orderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
       totalRevenue += orderRev;
+
+      // Attribute the order to a staff member (either the collector who finalized the payments or the creator)
+      let staffName = "Online (System)";
+      const completedPaymentWithCollector = o.payments.find(p => p.status === "completed" && p.collector?.name);
+      if (completedPaymentWithCollector?.collector?.name) {
+        staffName = completedPaymentWithCollector.collector.name;
+      } else if (o.staff?.name) {
+        staffName = o.staff.name;
+      }
+
+      const staffRow = staffMap.get(staffName) || { name: staffName, revenue: 0, orderCount: 0 };
+      staffRow.revenue += orderRev;
+      staffRow.orderCount += 1;
+      staffMap.set(staffName, staffRow);
 
       // Booking source categorization
       if (o.type === "walk_in") {
@@ -426,6 +444,8 @@ export function ReportsContent({
           method: "razorpay",
           amount: o.advance_paid!,
           status: "completed",
+          collected_by: null,
+          collector: null,
         });
       }
 
@@ -480,6 +500,7 @@ export function ReportsContent({
       manualCount,
       onlineRevenue,
       onlineCount,
+      revenueByStaff: Array.from(staffMap.values()).sort((a, b) => b.revenue - a.revenue),
     };
   }, [filteredOrders, filteredMemberships, locations]);
 
@@ -638,8 +659,8 @@ export function ReportsContent({
         </div>
       </div>
 
-      {/* Three-column: by location + payment breakdown + booking sources */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Four-column layout: by location + payment breakdown + booking sources + staff revenue */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 
         {/* By location */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -756,6 +777,44 @@ export function ReportsContent({
                   );
                 });
               })()
+            )}
+          </div>
+        </div>
+
+        {/* Revenue by Staff breakdown */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Revenue by Staff</h2>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {totalRevenue === 0 ? (
+              <p className="px-5 py-6 text-xs text-gray-400 text-center">No staff data</p>
+            ) : (
+              stats.revenueByStaff.map(({ name, revenue, orderCount }) => {
+                const pct = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0;
+                return (
+                  <div key={name} className="px-5 py-3 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900 block">{name}</span>
+                          <span className="text-[11px] text-gray-400 block">{orderCount} order{orderCount === 1 ? "" : "s"}</span>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900 tabular-nums">
+                          {formatCurrency(revenue)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, background: "#D4541A" }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">{pct}%</span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

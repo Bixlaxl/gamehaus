@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search, Banknote, Smartphone, MessageSquare, MapPin } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, Banknote, Smartphone, MessageSquare, MapPin, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { BillRow } from "@/app/(pos)/pos/bills/content";
 
@@ -35,6 +36,7 @@ function tableNameOf(t: BillRow["items"][number]["table"]): string {
 }
 
 export function OwnerBillsContent({ initialLocations, initial }: Props) {
+  const queryClient = useQueryClient();
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<BillRow | null>(null);
@@ -96,6 +98,19 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
       toast.error(err?.message || "Failed to send WhatsApp bill");
     } finally {
       setSendingId(null);
+    }
+  }
+
+  async function handleDeleteBill(billId: string) {
+    if (!confirm("Are you sure you want to delete this finalized bill? This will revert inventory stock and loyalty points.")) return;
+    const res = await fetch(`/api/pos/bills/${billId}`, { method: "DELETE" });
+    const body = await res.json();
+    if (body.success) {
+      toast.success("Bill deleted successfully!");
+      setSelected(null);
+      queryClient.invalidateQueries({ queryKey: ["owner-bills"] });
+    } else {
+      toast.error(body.error || "Failed to delete bill");
     }
   }
 
@@ -245,6 +260,9 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
           onClose={() => setSelected(null)}
           onSendWhatsApp={(e) => handleSendWhatsApp(e, selected)}
           sending={sendingId === selected.id}
+          onDelete={async () => {
+            await handleDeleteBill(selected.id);
+          }}
         />
       )}
     </div>
@@ -252,15 +270,26 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
 }
 
 function OwnerBillDetailModal({
-  bill, locationName, onClose, onSendWhatsApp, sending,
+  bill, locationName, onClose, onSendWhatsApp, sending, onDelete,
 }: {
   bill: BillRow;
   locationName: string;
   onClose: () => void;
   onSendWhatsApp: (e: React.MouseEvent) => void;
   sending?: boolean;
+  onDelete: () => Promise<void>;
 }) {
   const activeExtras = bill.extras.filter((e) => !e.is_deleted);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -379,6 +408,36 @@ function OwnerBillDetailModal({
               </div>
             )}
           </section>
+        </div>
+
+        <div className="px-5 py-3 border-t flex items-center justify-between bg-muted/40">
+          <a
+            href={`/bill/${bill.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> View Public Bill Link
+          </a>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+              size="sm"
+            >
+              {deleting ? "Deleting…" : "Delete Bill"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onClose}
+              disabled={deleting}
+            >
+              <X className="h-4 w-4 inline mr-1" /> Close
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -4,12 +4,22 @@ export const dynamic = 'force-dynamic';
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ReportsContent } from "./content";
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const { from: spFrom, to: spTo } = await searchParams;
   const admin = createAdminClient();
 
-  const today = new Date();
-  const toDate   = today.toISOString().split("T")[0];
-  const fromDate = new Date(Date.now() - 29 * 86400000).toISOString().split("T")[0];
+  const getTodayLocalStr = () => {
+    const d = new Date(new Date().getTime() + 5.5 * 3600 * 1000);
+    return d.toISOString().split("T")[0];
+  };
+  const todayStr = getTodayLocalStr();
+
+  const toDate   = spTo || todayStr;
+  const fromDate = spFrom || todayStr;
 
   const { data: locations } = await admin.from("locations").select("*");
 
@@ -33,7 +43,7 @@ export default async function ReportsPage() {
   while (true) {
     const { data, error } = await admin
       .from("orders")
-      .select(`id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, created_by, finalized_at, location:locations(id, name), items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem), payments(method, amount, status), extras:order_extras(price, cost_price, quantity, is_deleted)`)
+      .select(`id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, created_by, staff:users!orders_created_by_fkey(name), finalized_at, location:locations(id, name), items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem), payments(method, amount, status, collected_by, collector:users!payments_collected_by_fkey(name)), extras:order_extras(price, cost_price, quantity, is_deleted)`)
       .eq("status", "finalized")
       .gte("finalized_at", fromISO)
       .lte("finalized_at", toISO)
@@ -48,6 +58,7 @@ export default async function ReportsPage() {
   }
 
   // Fetch 6 months history for SSR hydration
+  const today = new Date();
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(today.getMonth() - 5);
   sixMonthsAgo.setDate(1);
