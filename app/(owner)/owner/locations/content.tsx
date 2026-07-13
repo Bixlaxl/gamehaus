@@ -369,32 +369,32 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
         {locations?.map((loc) => (
           <div
             key={loc.id}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start justify-between gap-4"
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-start justify-between gap-4"
           >
             <div className="flex items-start gap-4">
               {loc.image_urls && loc.image_urls.length > 0 ? (
                 <img
                   src={loc.image_urls[0]}
                   alt={loc.name}
-                  className="w-16 h-16 rounded-xl object-cover border border-gray-100 shrink-0"
+                  className="w-20 h-20 rounded-xl object-cover border border-gray-100 shrink-0"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-xl bg-gray-50 border border-gray-100 shrink-0 flex items-center justify-center text-gray-400 text-xs">
+                <div className="w-20 h-20 rounded-xl bg-gray-50 border border-gray-100 shrink-0 flex items-center justify-center text-gray-400 text-xs">
                   No Image
                 </div>
               )}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-semibold text-gray-900">{loc.name}</h2>
-                  <Badge variant={loc.is_active ? "success" : "secondary"}>
+                  <h2 className="font-extrabold text-gray-900 text-lg md:text-xl">{loc.name}</h2>
+                  <Badge variant={loc.is_active ? "success" : "secondary"} className="font-bold text-xs">
                     {loc.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </div>
-                <p className="text-sm text-gray-500">{loc.address}</p>
+                <p className="text-base text-gray-700 font-bold">{loc.address}</p>
                 {loc.phone && (
-                  <p className="text-sm text-gray-500">{loc.phone}</p>
+                  <p className="text-base text-gray-700 font-bold">{loc.phone}</p>
                 )}
-                <p className="text-xs text-gray-400">
+                <p className="text-sm text-gray-500 font-bold">
                   /{loc.slug} · {loc.opening_time} – {loc.closing_time}
                 </p>
               </div>
@@ -403,28 +403,31 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
               {!loc.is_active && (
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="default"
+                  className="h-11 px-4 font-black"
                   onClick={() => reactivateMutation.mutate(loc.id)}
                 >
                   Reactivate
                 </Button>
               )}
-              <Button variant="outline" size="icon" onClick={() => openEdit(loc)}>
-                <Pencil className="h-4 w-4" />
+              <Button variant="outline" size="icon" className="h-11 w-11" onClick={() => openEdit(loc)}>
+                <Pencil className="h-4.5 w-4.5" />
               </Button>
               {loc.is_active ? (
                 <Button
                   variant="outline"
                   size="icon"
+                  className="h-11 w-11"
                   onClick={() => setDeleteConfirm(loc)}
                   title="Deactivate"
                 >
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <Trash2 className="h-4.5 w-4.5 text-destructive" />
                 </Button>
               ) : (
                 <Button
                   variant="destructive"
-                  size="sm"
+                  size="default"
+                  className="h-11 px-4 font-black"
                   onClick={() => setPermanentDeleteConfirm(loc)}
                   title="Permanently delete"
                 >

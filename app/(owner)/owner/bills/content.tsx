@@ -165,18 +165,18 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
           <table className="w-full text-base">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-4 py-3.5 text-left font-black text-muted-foreground uppercase text-xs tracking-wide">When</th>
+                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">When</th>
                 {selectedLocation === "all" && (
-                  <th className="px-4 py-3.5 text-left font-black text-muted-foreground uppercase text-xs tracking-wide">Location</th>
+                  <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Location</th>
                 )}
-                <th className="px-4 py-3.5 text-left font-black text-muted-foreground uppercase text-xs tracking-wide">Customer</th>
-                <th className="px-4 py-3.5 text-left font-black text-muted-foreground uppercase text-xs tracking-wide">Tables</th>
-                <th className="px-4 py-3.5 text-left font-black text-muted-foreground uppercase text-xs tracking-wide">Payment</th>
-                <th className="px-4 py-3.5 text-right font-black text-muted-foreground uppercase text-xs tracking-wide">Paid</th>
-                <th className="px-4 py-3.5 text-right font-black text-muted-foreground uppercase text-xs tracking-wide">Send Bill</th>
+                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Customer</th>
+                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Tables</th>
+                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Payment</th>
+                <th className="px-4 py-4 text-right font-black text-muted-foreground uppercase text-sm tracking-wide">Paid</th>
+                <th className="px-4 py-4 text-right font-black text-muted-foreground uppercase text-sm tracking-wide">Send Bill</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-gray-100 dark:divide-[#222]">
               {bills.map((b) => {
                 const tablesList = b.items
                   .map((i) => tableNameOf(i.table))
@@ -195,53 +195,53 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
                     onClick={() => setSelected(b)}
                     className="hover:bg-muted/50 cursor-pointer transition-colors"
                   >
-                    <td className="px-4 py-4 font-mono text-sm font-semibold">{fmtDateTime(b.finalized_at)}</td>
+                    <td className="px-4 py-5 font-mono text-base font-bold">{fmtDateTime(b.finalized_at)}</td>
                     {selectedLocation === "all" && (
-                      <td className="px-4 py-4">
-                        <span className="inline-flex items-center gap-1.5 text-sm font-bold px-2.5 py-1 rounded-md bg-muted text-foreground">
-                          <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                      <td className="px-4 py-5">
+                        <span className="inline-flex items-center gap-1.5 text-base font-extrabold px-3 py-1.5 rounded-md bg-muted text-foreground">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
                           {locName}
                         </span>
                       </td>
                     )}
-                    <td className="px-4 py-4">
-                      <p className="font-extrabold text-foreground text-base md:text-lg">{b.customer_name ?? "—"}</p>
-                      {b.customer_phone && <p className="text-sm text-muted-foreground font-semibold mt-0.5">{b.customer_phone}</p>}
+                    <td className="px-4 py-5">
+                      <p className="font-black text-foreground text-lg md:text-xl">{b.customer_name ?? "—"}</p>
+                      {b.customer_phone && <p className="text-base text-muted-foreground font-bold mt-1">{b.customer_phone}</p>}
                     </td>
-                    <td className="px-4 py-4 text-foreground font-bold">{tablesList || "—"}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex gap-1.5">
+                    <td className="px-4 py-5 text-foreground font-extrabold text-lg">{tablesList || "—"}</td>
+                    <td className="px-4 py-5">
+                      <div className="flex gap-2">
                         {methods.length === 0 ? "—" : methods.map((m) => (
                           <span
                             key={m}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-black uppercase tracking-wide"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-black uppercase tracking-wider"
                             style={
                               m === "cash"
                                 ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
                                 : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
                             }
                           >
-                            {m === "cash" ? <Banknote className="h-3 w-3" /> : <Smartphone className="h-3 w-3" />}
+                            {m === "cash" ? <Banknote className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
                             {m}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-right font-black tabular-nums text-foreground text-base md:text-lg">{formatCurrency(total)}</td>
-                    <td className="px-4 py-4 text-right">
+                    <td className="px-4 py-5 text-right font-black tabular-nums text-foreground text-lg md:text-xl">{formatCurrency(total)}</td>
+                    <td className="px-4 py-5 text-right">
                       {b.customer_phone ? (
                         <button
                           type="button"
                           disabled={sendingId === b.id}
                           onClick={(e) => handleSendWhatsApp(e, b)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
+                          className="inline-flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-base font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
                           title="Send Bill link via WhatsApp"
                         >
                           <MessageSquare className="h-4 w-4" />
                           {sendingId === b.id ? "…" : "WhatsApp"}
                         </button>
                       ) : (
-                        <span className="text-sm text-muted-foreground italic font-semibold">No phone</span>
+                        <span className="text-base text-muted-foreground italic font-bold">No phone</span>
                       )}
                     </td>
                   </tr>

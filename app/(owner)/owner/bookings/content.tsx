@@ -395,42 +395,42 @@ export function BookingsContent({
                 <table className="w-full text-base">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-[#222] text-left">
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Time Slot</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Customer</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Advance Paid</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Status & Actions</th>
+                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Time Slot</th>
+                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Customer</th>
+                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Advance Paid</th>
+                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Status & Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-[#222]">
                     {tableBookings.map((b) => (
                       <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-[#1f1f1f]/50 transition-colors">
                         {/* Time Slot */}
-                        <td className="px-4 py-4 font-semibold text-gray-900 dark:text-white align-middle">
-                          <span className="inline-flex items-center justify-center font-mono text-[13px] md:text-sm font-semibold px-3 py-1 rounded-md bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300">
+                        <td className="px-4 py-5 font-semibold text-gray-900 dark:text-white align-middle">
+                          <span className="inline-flex items-center justify-center font-mono text-base md:text-lg font-black px-4 py-2 rounded-xl bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#333]">
                             {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
                           </span>
                         </td>
 
                         {/* Customer */}
-                        <td className="px-4 py-4 align-middle">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-gray-900 dark:text-white text-base md:text-lg">{b.order?.customer_name ?? "—"}</span>
+                        <td className="px-4 py-5 align-middle">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-extrabold text-gray-900 dark:text-white text-lg md:text-xl">{b.order?.customer_name ?? "—"}</span>
                             {b.order?.customer_phone && (
-                              <span className="text-sm text-gray-500 dark:text-gray-400 font-semibold mt-0.5">{b.order.customer_phone}</span>
+                              <span className="text-base text-gray-500 dark:text-gray-400 font-bold">{b.order.customer_phone}</span>
                             )}
                           </div>
                         </td>
 
                         {/* Advance Paid */}
-                        <td className="px-4 py-4 text-gray-950 dark:text-gray-100 font-black tabular-nums text-base md:text-lg align-middle">
+                        <td className="px-4 py-5 text-gray-950 dark:text-gray-100 font-black tabular-nums text-lg md:text-xl align-middle">
                           {b.order?.advance_paid && b.order.advance_paid > 0 ? `₹${Math.round(b.order.advance_paid)}` : "—"}
                         </td>
 
                         {/* Status & Actions */}
-                        <td className="px-4 py-4 align-middle">
+                        <td className="px-4 py-5 align-middle">
                           <div className="flex items-center justify-between gap-4">
                             <Badge
-                              className="px-2.5 py-1 text-xs md:text-sm font-extrabold shrink-0"
+                              className="px-3.5 py-1.5 text-sm md:text-base font-black shrink-0"
                               variant={
                                 b.status === "confirmed"  ? "success"     :
                                 b.status === "checked_in" ? "outline"     :
@@ -442,15 +442,15 @@ export function BookingsContent({
                             </Badge>
                             <div className="flex items-center gap-2">
                               {(b.status === "no_show" || b.status === "cancelled") && (
-                                <Button variant="outline" size="sm" className="h-9 text-xs px-3 font-bold" onClick={() => setRefund(b)}>
+                                <Button variant="outline" size="default" className="h-11 text-sm px-4.5 font-black" onClick={() => setRefund(b)}>
                                   Refund
                                 </Button>
                               )}
                               {mode === "staff" && b.status === "confirmed" && (
                                 <div className="flex items-center gap-2">
                                   <Button
-                                    size="sm"
-                                    className="h-9 text-xs px-3 font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
+                                    size="default"
+                                    className="h-11 text-sm px-4.5 font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
                                     onClick={() => doCheckIn(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Check in this slot"}
@@ -459,8 +459,8 @@ export function BookingsContent({
                                   </Button>
                                   <Button
                                     variant="outline"
-                                    size="sm"
-                                    className="h-9 text-xs px-3 font-bold"
+                                    size="default"
+                                    className="h-11 text-sm px-4.5 font-black text-gray-500 hover:text-red-500 hover:border-red-200"
                                     onClick={() => doNoShow(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}

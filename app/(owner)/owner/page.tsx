@@ -504,9 +504,9 @@ export default async function OwnerDashboard({
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-900">Live Now</p>
-            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+          <div className="px-6 py-4.5 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-base font-black text-gray-900">Live Now</p>
+            <span className="flex items-center gap-1.5 text-xs font-black text-emerald-500">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {liveCount} active
             </span>
@@ -518,26 +518,26 @@ export default async function OwnerDashboard({
               <p className="text-sm font-medium text-gray-400">All tables idle</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50 overflow-y-auto" style={{ maxHeight: 240 }}>
+            <div className="divide-y divide-gray-50 overflow-y-auto" style={{ maxHeight: 300 }}>
               {filteredLiveDetail.map((session) => {
                 const order = session.order as { customer_name: string } | null;
                 const table = session.table as { name: string; type: string; location_id: string } | null;
                 return (
-                  <div key={session.id} className="px-5 py-3 flex items-center gap-3">
-                    <span className="text-lg shrink-0">{tableIcon(table?.type ?? "")}</span>
+                  <div key={session.id} className="px-6 py-4.5 flex items-center gap-4">
+                    <span className="text-xl shrink-0">{tableIcon(table?.type ?? "")}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
+                      <p className="text-base font-black text-gray-900 leading-tight truncate">
                         {table?.name ?? "—"}
                       </p>
-                      <p className="text-xs text-gray-400 truncate mt-0.5">
+                      <p className="text-sm text-gray-500 font-bold truncate mt-1">
                         {order?.customer_name ?? "—"}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-xs font-mono font-bold tabular-nums" style={{ color: "#D4541A" }}>
+                      <p className="text-sm font-mono font-black tabular-nums" style={{ color: "#D4541A" }}>
                         {session.actual_start ? elapsed(session.actual_start) : "—"}
                       </p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">₹{session.rate_per_hour}/hr</p>
+                      <p className="text-xs font-bold text-gray-400 mt-1">₹{session.rate_per_hour}/hr</p>
                     </div>
                   </div>
                 );
@@ -620,10 +620,10 @@ export default async function OwnerDashboard({
 
         {/* Most-profitable tables — vertical list on the right of the hour chart */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-            <Crown className="h-4 w-4 text-amber-500" />
-            <p className="text-sm font-bold text-gray-900">Most profitable</p>
-            <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-gray-400">
+          <div className="px-6 py-4.5 border-b border-gray-100 flex items-center gap-2">
+            <Crown className="h-5 w-5 text-amber-500" />
+            <p className="text-base font-black text-gray-900">Most profitable</p>
+            <span className="ml-auto text-xs font-black uppercase tracking-widest text-gray-400">
               30 days
             </span>
           </div>
@@ -634,9 +634,9 @@ export default async function OwnerDashboard({
           ) : (
             <div className="divide-y divide-gray-50">
               {topTables.map((t, i) => (
-                <div key={t.name + i} className="px-5 py-3 flex items-center gap-3">
+                <div key={t.name + i} className="px-6 py-4 flex items-center gap-4">
                   <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0"
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0"
                     style={{
                       background: i === 0 ? "rgba(245,158,11,0.15)" : "rgba(0,0,0,0.04)",
                       color:      i === 0 ? "#f59e0b" : "#6b7280",
@@ -644,14 +644,14 @@ export default async function OwnerDashboard({
                   >
                     {i + 1}
                   </span>
-                  <span className="text-lg shrink-0">{tableIcon(t.type)}</span>
+                  <span className="text-xl shrink-0">{tableIcon(t.type)}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
-                    <p className="text-[11px] text-gray-400 tabular-nums">
+                    <p className="text-base font-black text-gray-900 truncate">{t.name}</p>
+                    <p className="text-xs font-extrabold text-gray-500 tabular-nums">
                       {t.sessions} session{t.sessions === 1 ? "" : "s"}
                     </p>
                   </div>
-                  <p className="text-sm font-bold tabular-nums text-gray-900 shrink-0">
+                  <p className="text-base font-black tabular-nums text-gray-900 shrink-0">
                     {formatCurrency(t.revenue)}
                   </p>
                 </div>
@@ -663,10 +663,10 @@ export default async function OwnerDashboard({
 
       {/* ── Best selling items ── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <Package className="h-4 w-4 text-emerald-600" />
-          <p className="text-sm font-bold text-gray-900">Best-selling items</p>
-          <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-gray-400">
+        <div className="px-6 py-4.5 border-b border-gray-100 flex items-center gap-2">
+          <Package className="h-5 w-5 text-emerald-600" />
+          <p className="text-base font-black text-gray-900">Best-selling items</p>
+          <span className="ml-auto text-xs font-black uppercase tracking-widest text-gray-400">
             By revenue · 30 days
           </span>
         </div>
@@ -680,10 +680,10 @@ export default async function OwnerDashboard({
               const maxRev = topSellers[0].revenue;
               const pct    = (s.revenue / maxRev) * 100;
               return (
-                <div key={s.name + i} className="px-6 py-3">
-                  <div className="flex items-center gap-3">
+                <div key={s.name + i} className="px-6 py-4">
+                  <div className="flex items-center gap-4">
                     <span
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0"
                       style={{
                         background: i === 0 ? "rgba(16,185,129,0.12)" : "rgba(0,0,0,0.04)",
                         color:      i === 0 ? "#10b981" : "#6b7280",
@@ -693,19 +693,19 @@ export default async function OwnerDashboard({
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
-                        <p className="text-sm font-bold tabular-nums text-gray-900 shrink-0">
+                        <p className="text-base font-black text-gray-900 truncate">{s.name}</p>
+                        <p className="text-base font-black tabular-nums text-gray-900 shrink-0">
                           {formatCurrency(s.revenue)}
                         </p>
                       </div>
-                      <div className="flex items-center justify-between gap-3 mt-1">
-                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 mt-1.5">
+                        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                           <div
                             className="h-full rounded-full"
                             style={{ width: `${pct}%`, background: "#10b981" }}
                           />
                         </div>
-                        <p className="text-[11px] text-gray-400 tabular-nums shrink-0 w-16 text-right">
+                        <p className="text-xs font-extrabold text-gray-500 tabular-nums shrink-0 w-20 text-right">
                           {s.units} sold
                         </p>
                       </div>
@@ -720,9 +720,9 @@ export default async function OwnerDashboard({
 
       {/* ── Recent orders ── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <p className="text-sm font-bold text-gray-900">Recent Orders</p>
-          <span className="text-xs text-gray-400">Last 8 finalized</span>
+        <div className="px-6 py-4.5 border-b border-gray-100 flex items-center justify-between">
+          <p className="text-base font-black text-gray-900">Recent Orders</p>
+          <span className="text-sm font-black text-gray-400">Last 8 finalized</span>
         </div>
 
         {filteredRecent.length === 0 ? (
@@ -742,25 +742,25 @@ export default async function OwnerDashboard({
               return (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between px-6 py-3.5 hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-between px-6 py-5 hover:bg-gray-50 transition-colors gap-4"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3.5 min-w-0">
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                      className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-black text-white shrink-0"
                       style={{ background: order.type === "online" ? "#6366f1" : "#D4541A" }}
                     >
                       {(order.customer_name ?? "?")[0].toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{order.customer_name}</p>
-                      <p className="text-xs text-gray-400 truncate">
+                      <p className="text-base font-black text-gray-900 truncate">{order.customer_name}</p>
+                      <p className="text-sm text-gray-500 font-bold truncate mt-0.5">
                         {locName} · {order.type === "online" ? "Online" : "Walk-in"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-6 shrink-0">
-                    <p className="text-xs text-gray-400 tabular-nums">{day} {when}</p>
-                    <p className="text-sm font-bold text-gray-900 tabular-nums w-20 text-right">
+                    <p className="text-sm font-bold text-gray-500 tabular-nums">{day} {when}</p>
+                    <p className="text-base font-black text-gray-900 tabular-nums w-24 text-right">
                       {formatCurrency((order.amount_due ?? 0) + (order.advance_paid ?? 0))}
                     </p>
                   </div>
