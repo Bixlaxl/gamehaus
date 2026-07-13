@@ -279,6 +279,11 @@ export async function POST(
         membership_id: order.membership_id ?? primaryMembership?.id ?? null,
       })
       .eq("id", orderId),
+    admin
+      .from("order_items")
+      .update({ status: "scheduled" })
+      .eq("order_id", orderId)
+      .eq("status", "cancelled"),
     bookingsPromise,
     paymentUpdatePromise,
     loyaltyProfilePromise,

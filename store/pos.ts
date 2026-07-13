@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { Table, Order, OrderItem, OrderExtra, Booking } from "@/lib/supabase/types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -227,6 +228,31 @@ export const usePOSStore = create<POSStore>((set, get) => ({
       if (!orderId) return {};
       const hasOrder = state.openOrders.some((o) => o.id === orderId);
       if (!hasOrder) return {};
+
+      const targetOrder = state.openOrders.find((o) => o.id === orderId);
+
+      // Detect tablet-initiated session extensions (where rawNew.extended_mins > oldItem.extended_mins)
+      if (eventType === "UPDATE" && newRow && oldRow && targetOrder) {
+        const rawNew = newRow as OrderItem;
+        const oldItem = targetOrder.items.find((i) => i.id === rawNew.id);
+
+        if (oldItem && rawNew.extended_mins > oldItem.extended_mins) {
+          // Verify it did not originate from the POS local edit state (expected_end values differ)
+          if (oldItem.expected_end !== rawNew.expected_end) {
+            const diffMs = new Date(rawNew.expected_end!).getTime() - new Date(oldItem.expected_end!).getTime();
+            const diffMins = Math.round(diffMs / 60000);
+            if (diffMins > 0) {
+              const table = state.tables.find((t) => t.id === rawNew.table_id);
+              const displayTable = table ? table.name : "A table";
+              const customerName = targetOrder.customer_name ? ` (${targetOrder.customer_name})` : "";
+              toast.success(`${displayTable}${customerName} extended their session by ${diffMins} mins!`, {
+                position: "top-right",
+                duration: 6000,
+              });
+            }
+          }
+        }
+      }
 
       const orders = state.openOrders.map((order) => {
         let items = order.items;

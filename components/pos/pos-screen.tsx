@@ -184,11 +184,32 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
         qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
       },
       onExtrasChange: (payload) => {
-        const { eventType, new: newRow, old: oldRow } = payload as { eventType: string; new: { order_id: string }; old: { order_id: string } };
+        const { eventType, new: newRow, old: oldRow } = payload as {
+          eventType: string;
+          new: { id: string; name: string; quantity: number; order_id: string };
+          old: { id: string; order_id: string }
+        };
         const orderId = eventType === "DELETE" ? oldRow?.order_id : newRow?.order_id;
         if (!orderId) return;
-        const hasOrder = usePOSStore.getState().openOrders.some((o) => o.id === orderId);
-        if (hasOrder) {
+
+        const openOrders = usePOSStore.getState().openOrders;
+        const targetOrder = openOrders.find((o) => o.id === orderId);
+
+        if (targetOrder) {
+          if (eventType === "INSERT") {
+            const alreadyExists = targetOrder.extras.some(
+              (e) => e.id === newRow.id || (e.name === newRow.name && e.quantity === newRow.quantity)
+            );
+            if (!alreadyExists) {
+              const tableNames = targetOrder.items.map((i) => i.table?.name).filter(Boolean).join(", ");
+              const displayTable = tableNames ? `Table ${tableNames}` : "A table";
+              const customerName = targetOrder.customer_name ? ` (${targetOrder.customer_name})` : "";
+              toast.success(`${displayTable}${customerName} ordered ${newRow.quantity}x ${newRow.name}!`, {
+                position: "top-right",
+                duration: 6000,
+              });
+            }
+          }
           qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
         }
       },
