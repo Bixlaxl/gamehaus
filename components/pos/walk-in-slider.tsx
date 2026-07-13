@@ -209,7 +209,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
         />
       )}
       <div className="flex-1 bg-black/50 dark:bg-black/60" onClick={close} />
-      <div className="w-96 flex flex-col bg-white dark:bg-[#111] border-l border-gray-200 dark:border-[#1F1F1F]">
+      <div className="w-[480px] flex flex-col bg-white dark:bg-[#111] border-l border-gray-200 dark:border-[#1F1F1F]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#1F1F1F]">
