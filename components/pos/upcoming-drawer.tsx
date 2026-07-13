@@ -209,15 +209,15 @@ function Row({
         className="flex items-center gap-3 flex-1 min-w-0 text-left disabled:opacity-40"
       >
         {/* Time block — full slot range */}
-        <div className="shrink-0 w-[68px]">
-          <p className="font-mono text-sm font-bold tabular-nums text-gray-900 dark:text-white leading-tight">
+        <div className="shrink-0 w-[84px]">
+          <p className="font-mono text-base font-black tabular-nums text-gray-900 dark:text-white leading-tight">
             {fmtTime(booking.scheduled_start)}
           </p>
-          <p className="font-mono text-[11px] tabular-nums text-gray-500 dark:text-[#888] leading-tight">
+          <p className="font-mono text-sm font-extrabold tabular-nums text-gray-500 dark:text-[#888] leading-tight mt-0.5">
             → {fmtTime(booking.scheduled_end)}
           </p>
           <p
-            className="text-[10px] font-bold mt-0.5 tabular-nums"
+            className="text-xs font-black mt-1 tabular-nums"
             style={{ color: urgent ? "#f59e0b" : "#9ca3af" }}
           >
             {minsFromNow(booking.scheduled_start)}
@@ -226,12 +226,12 @@ function Row({
 
         {/* Customer + table */}
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
+          <p className="font-black text-base text-gray-900 dark:text-white truncate">
             {customer}
           </p>
           {table && (
             <span
-              className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+              className="inline-block mt-1 text-xs font-black px-2.5 py-0.5 rounded-md uppercase tracking-wide"
               style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
             >
               {table.name}
@@ -249,13 +249,13 @@ function Row({
               () => toast.error("Copy failed"),
             );
           }}
-          className="shrink-0 self-center flex items-center gap-1.5 px-3 py-2 rounded-lg
+          className="shrink-0 self-center flex items-center gap-1.5 px-3 py-2.5 rounded-lg
             bg-gray-100 dark:bg-[#1f1f1f] hover:bg-[#f59e0b]/15 dark:hover:bg-[#f59e0b]/15 transition-colors
-            text-gray-700 dark:text-[#ddd] hover:text-[#f59e0b] dark:hover:text-[#f59e0b]"
+            text-gray-700 dark:text-[#ddd] hover:text-[#f59e0b] dark:hover:text-[#f59e0b] border border-gray-200 dark:border-[#333]"
           title="Click to copy number"
         >
-          <Phone className="h-3.5 w-3.5" />
-          <span className="text-[11px] font-mono font-semibold tabular-nums leading-none whitespace-nowrap">
+          <Phone className="h-4 w-4 shrink-0" />
+          <span className="text-sm font-mono font-black tabular-nums leading-none whitespace-nowrap">
             {phone}
           </span>
         </button>

@@ -406,17 +406,17 @@ export function BookingsContent({
                       <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-[#1f1f1f]/50 transition-colors">
                         {/* Time Slot */}
                         <td className="px-4 py-5 font-semibold text-gray-900 dark:text-white align-middle">
-                          <span className="inline-flex items-center justify-center font-mono text-base md:text-lg font-black px-4 py-2 rounded-xl bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#333]">
+                          <span className="inline-flex items-center justify-center font-mono text-xl md:text-2xl font-black px-6 py-3.5 rounded-2xl bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300 border-2 border-gray-250 dark:border-[#444] shadow-sm">
                             {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
                           </span>
                         </td>
 
                         {/* Customer */}
                         <td className="px-4 py-5 align-middle">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-extrabold text-gray-900 dark:text-white text-lg md:text-xl">{b.order?.customer_name ?? "—"}</span>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="font-black text-gray-900 dark:text-white text-2xl md:text-3xl">{b.order?.customer_name ?? "—"}</span>
                             {b.order?.customer_phone && (
-                              <span className="text-base text-gray-500 dark:text-gray-400 font-bold">{b.order.customer_phone}</span>
+                              <span className="text-xl text-gray-600 dark:text-[#bbb] font-black mt-1">{b.order.customer_phone}</span>
                             )}
                           </div>
                         </td>
