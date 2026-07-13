@@ -302,29 +302,6 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
           </div>
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => setCheckinOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-extrabold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
-            >
-              <QrCode className="h-4 w-4" />
-              Check-in
-            </button>
-            <button
-              onClick={() => setUpcomingDrawerOpen(true)}
-              className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-extrabold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
-              title="Today's upcoming bookings"
-            >
-              <CalendarClock className="h-4 w-4" />
-              {upcomingTotal > 0 ? `${upcomingTotal} upcoming` : "Upcoming"}
-              {soonCount > 0 && (
-                <span
-                  className="ml-1 px-2 py-0.5 rounded-full text-xs font-black tabular-nums"
-                  style={{ background: "#f59e0b", color: "#000" }}
-                >
-                  {soonCount} soon
-                </span>
-              )}
-            </button>
-            <button
               onClick={() => {
                 // Compute on click — no per-second subscription needed in the
                 // header. Worst case the button looks enabled for one minute
@@ -361,11 +338,11 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
           <div
             className="shrink-0 border-l border-gray-200 dark:border-[#1f1f1f] overflow-hidden flex flex-col bg-white dark:bg-[#111]"
             style={{
-              width:      showContextPanel ? 380 : 0,
+              width:      showContextPanel ? 460 : 0,
               transition: "width 0.25s ease",
             }}
           >
-            <div style={{ width: 380, height: "100%" }}>
+            <div style={{ width: 460, height: "100%" }}>
               {showContextPanel && <ContextPanel locationId={locationId} closingTime={closingTime} />}
             </div>
           </div>

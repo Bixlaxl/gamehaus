@@ -81,26 +81,26 @@ export function POSAlerts() {
   if (alerts.length === 0) return null;
 
   return (
-    <div className="px-2.5 py-2 space-y-1 border-t border-gray-200 dark:border-[#1F1F1F]">
+    <div className="px-6 py-3 space-y-2 border-t border-gray-200 dark:border-[#1F1F1F]">
       {alerts.slice(0, 3).map((alert) => (
         <div
           key={alert.id}
           title={alert.full}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs leading-tight"
+          className="flex items-center gap-3 px-4.5 py-3 rounded-xl text-base font-black leading-tight border-2"
           style={{
             background: alert.type === "urgent"
-              ? "rgba(239,68,68,0.07)"
-              : "rgba(245,158,11,0.07)",
-            border: `1px solid ${alert.type === "urgent" ? "rgba(239,68,68,0.18)" : "rgba(245,158,11,0.18)"}`,
-            color: alert.type === "urgent" ? "#f87171" : "#fbbf24",
+              ? "rgba(239,68,68,0.08)"
+              : "rgba(245,158,11,0.08)",
+            borderColor: alert.type === "urgent" ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)",
+            color: alert.type === "urgent" ? "#ef4444" : "#f59e0b",
           }}
         >
-          <span className="shrink-0 text-[10px]">{alert.type === "urgent" ? "⚠" : "⏱"}</span>
+          <span className="shrink-0 text-lg">{alert.type === "urgent" ? "⚠" : "⏱"}</span>
           <span className="truncate">{alert.short}</span>
         </div>
       ))}
       {alerts.length > 3 && (
-        <p className="text-center text-[10px] text-gray-300 dark:text-[#444]">
+        <p className="text-center text-sm font-black text-gray-400 dark:text-[#666]">
           +{alerts.length - 3} more alerts
         </p>
       )}

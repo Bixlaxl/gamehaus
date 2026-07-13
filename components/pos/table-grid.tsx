@@ -831,21 +831,21 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
   if (upcoming.length === 0) return null;
 
   return (
-    <div className="shrink-0 border-t border-gray-200 dark:border-[#1f1f1f] bg-white dark:bg-[#111]">
-      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-        <CalendarClock className="h-4 w-4 text-gray-500 dark:text-[#aaa]" />
-        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
+    <div className="shrink-0 border-t border-gray-200 dark:border-[#1f1f1f] bg-white dark:bg-[#111] py-1">
+      <div className="flex items-center gap-2 px-6 pt-4 pb-2.5">
+        <CalendarClock className="h-5 w-5 text-gray-500 dark:text-[#aaa]" />
+        <span className="text-sm font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
           Upcoming Today
         </span>
         <span
-          className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+          className="text-xs font-bold px-2.5 py-1 rounded-full"
           style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
         >
           {upcoming.length}
         </span>
       </div>
 
-      <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
+      <div className="flex gap-4 px-6 pb-4 overflow-x-auto">
         {upcoming.map((booking) => {
           const oi         = booking.order_item as Pick<OrderItem, "table_id" | "status" | "selected_mode_name"> | null;
           const table      = tables.find((t) => t.id === oi?.table_id);
@@ -858,7 +858,7 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
           return (
             <div
               key={booking.id}
-              className="shrink-0 rounded-xl border px-3 py-2.5 min-w-[150px] bg-gray-50 dark:bg-[#0d0d0d]"
+              className="shrink-0 rounded-2xl border-2 px-4.5 py-3.5 min-w-[200px] bg-gray-50 dark:bg-[#0d0d0d] flex flex-col gap-1.5"
               style={{
                 borderColor: isOverdue
                   ? "rgba(239,68,68,0.25)"
@@ -869,20 +869,20 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
             >
               {table && (
                 <span
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide mb-1 inline-block"
+                  className="text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-wide w-fit"
                   style={{ background: "rgba(212,84,26,0.08)", color: "#D4541A" }}
                 >
                   {table.name}{oi?.selected_mode_name ? ` (${oi.selected_mode_name.replace(/ Mode$/i, "")})` : ""}
                 </span>
               )}
-              <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+              <p className="text-base font-black text-gray-900 dark:text-white truncate">
                 {booking.order?.customer_name}
               </p>
-              <p className="font-mono text-xs font-bold tabular-nums mt-0.5" style={{ color: "#f59e0b" }}>
+              <p className="font-mono text-sm font-black tabular-nums" style={{ color: "#f59e0b" }}>
                 {fmtTime(booking.scheduled_start)} – {fmtTime(booking.scheduled_end)}
               </p>
               <p
-                className="text-[10px] font-semibold mt-0.5"
+                className="text-xs font-black"
                 style={{ color: isOverdue ? "#ef4444" : isImminent ? "#f59e0b" : "#9ca3af" }}
               >
                 {isOverdue
