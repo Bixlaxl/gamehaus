@@ -1174,29 +1174,29 @@ function PanelSession({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-gray-200 dark:border-[#1f1f1f]">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="shrink-0 flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-[#1f1f1f]">
+        <div className="flex items-center gap-4 min-w-0">
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+            className="w-14 h-14 rounded-full flex items-center justify-center text-base font-black text-white shrink-0 shadow-sm"
             style={{ background: "#D4541A" }}
           >
             {initials(order.customer_name)}
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight truncate">
+            <p className="font-black text-gray-900 dark:text-white text-xl leading-tight truncate">
               {order.customer_name}
             </p>
             {order.customer_phone && (
-              <div className="flex flex-col gap-0.5 mt-0.5">
-                <p className="text-xs text-gray-500 dark:text-[#666] truncate font-medium">
+              <div className="flex flex-col gap-1.5 mt-1">
+                <p className="text-sm text-gray-600 dark:text-[#999] truncate font-extrabold">
                   {order.customer_phone}
                 </p>
                 {customerInfo && customerInfo.active_memberships && customerInfo.active_memberships.length > 0 && (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 w-fit">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-black px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 w-fit">
                       Member ID: {customerInfo.active_memberships[0].short_id || "Active"}
                     </span>
-                    <span className="text-[9px] text-purple-600 dark:text-purple-400 font-semibold">
+                    <span className="text-xs text-purple-600 dark:text-purple-400 font-bold">
                       Plans: {customerInfo.active_memberships.map((m: any) => m.plan?.name).join(", ")}
                     </span>
                   </div>
@@ -1205,7 +1205,7 @@ function PanelSession({
             )}
           </div>
           <span
-            className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ml-1"
+            className="shrink-0 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider ml-1"
             style={
               order.type === "walk_in"
                 ? { background: "rgba(212,84,26,0.1)", color: "#D4541A" }
@@ -1217,9 +1217,9 @@ function PanelSession({
         </div>
         <button
           onClick={() => setSelectedTableId(null)}
-          className="shrink-0 ml-3 p-1.5 rounded-lg text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
+          className="shrink-0 ml-3 p-2 rounded-lg text-gray-400 dark:text-[#555] hover:text-gray-900 dark:hover:text-white transition-colors"
         >
-          <X className="h-4 w-4" />
+          <X className="h-6 w-6" />
         </button>
       </div>
 
@@ -1284,28 +1284,28 @@ function PanelSession({
             >
               {/* Top row */}
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white text-lg">{tableName}</p>
+                <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                  <p className="font-extrabold text-gray-900 dark:text-white text-xl md:text-2xl">{tableName}</p>
                   {isRunning && (
                     <span
-                      className="text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide"
+                      className="text-sm font-black px-3.5 py-1.5 rounded-xl uppercase tracking-wider"
                       style={
                         isOvertime
-                          ? { background: "rgba(239,68,68,0.15)", color: "#ef4444" }
-                          : { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                           ? { background: "rgba(239,68,68,0.15)", color: "#ef4444" }
+                           : { background: "rgba(16,185,129,0.15)", color: "#10b981" }
                       }
                     >
                       {isOvertime ? "Over time" : "Live"}
                     </span>
                   )}
                   {item.status === "finished" && (
-                    <span className="text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide bg-gray-200 dark:bg-[#222] text-gray-600 dark:text-[#aaa]">
+                    <span className="text-sm font-black px-3.5 py-1.5 rounded-xl uppercase tracking-wider bg-gray-200 dark:bg-[#222] text-gray-600 dark:text-[#aaa]">
                       Finished
                     </span>
                   )}
                   {item.status === "scheduled" && (
                     <span
-                      className="text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide"
+                      className="text-sm font-black px-3.5 py-1.5 rounded-xl uppercase tracking-wider"
                       style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
                     >
                       Scheduled
@@ -1314,12 +1314,12 @@ function PanelSession({
                 </div>
                 <div className="text-right shrink-0">
                   <p
-                    className="font-bold text-xl tabular-nums"
+                    className="font-black text-2xl md:text-3xl tabular-nums"
                     style={{ color: isRunning ? "#D4541A" : undefined }}
                   >
                     {formatCurrency(lineBill)}
                   </p>
-                  <p className="text-xs mt-0.5 text-gray-500 dark:text-[#888] font-bold">
+                  <p className="text-sm mt-0.5 text-gray-600 dark:text-[#aaa] font-extrabold">
                     ₹{item.rate_per_hour}/hr
                   </p>
                 </div>
@@ -1480,29 +1480,29 @@ function PanelSession({
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg
+                    className="flex items-center gap-3 px-4.5 py-3.5 rounded-xl
                       bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#262626]"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-base font-bold text-gray-900 dark:text-white truncate">{item.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-[#999] font-semibold">₹{item.selling_price}</p>
+                      <p className="text-lg font-black text-gray-900 dark:text-white truncate">{item.name}</p>
+                      <p className="text-base text-gray-600 dark:text-[#aaa] font-extrabold">₹{item.selling_price}</p>
                     </div>
                     {qty === 0 ? (
                       <button
                         onClick={() => incrementInventoryItem(item)}
-                        className="text-sm font-extrabold px-4.5 py-2 rounded-md text-white transition-opacity hover:opacity-85"
+                        className="text-base font-black px-5 py-2.5 rounded-xl text-white transition-opacity hover:opacity-85"
                         style={{ background: "#D4541A" }}
                       >
                         ADD
                       </button>
                     ) : (
                       <div
-                        className="flex items-center rounded-md overflow-hidden"
-                        style={{ border: "1.5px solid #D4541A" }}
+                        className="flex items-center rounded-xl overflow-hidden"
+                        style={{ border: "2px solid #D4541A" }}
                       >
                         <button
                           onClick={() => decrementInventoryItem(item.id)}
-                          className="w-9 h-9 flex items-center justify-center text-lg font-bold transition-colors
+                          className="w-11 h-11 flex items-center justify-center text-xl font-black transition-colors
                             hover:bg-orange-50 dark:hover:bg-[#2a1300]"
                           style={{ color: "#D4541A" }}
                           aria-label="Decrease quantity"
@@ -1510,14 +1510,14 @@ function PanelSession({
                           −
                         </button>
                         <span
-                          className="w-8 text-center text-base font-bold tabular-nums"
+                          className="w-10 text-center text-lg font-black tabular-nums"
                           style={{ color: "#D4541A" }}
                         >
                           {qty}
                         </span>
                         <button
                           onClick={() => incrementInventoryItem(item)}
-                          className="w-9 h-9 flex items-center justify-center text-lg font-bold transition-colors
+                          className="w-11 h-11 flex items-center justify-center text-xl font-black transition-colors
                             hover:bg-orange-50 dark:hover:bg-[#2a1300]"
                           style={{ color: "#D4541A" }}
                           aria-label="Increase quantity"
@@ -1598,10 +1598,10 @@ function PanelSession({
             const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
             return (
               <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                <span className="truncate text-lg font-extrabold text-gray-800 dark:text-[#ddd]">
+                <span className="truncate text-xl font-black text-gray-800 dark:text-[#ddd]">
                   {tn} · {line.durationMins}m
                 </span>
-                <span className="shrink-0 font-black text-gray-900 dark:text-white tabular-nums text-lg">
+                <span className="shrink-0 font-black text-gray-900 dark:text-white tabular-nums text-xl">
                   {formatCurrency(line.amount)}
                 </span>
               </div>
@@ -1609,50 +1609,50 @@ function PanelSession({
           })}
           {bill.extraLines.map((line) => (
             <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="truncate text-lg font-extrabold text-gray-800 dark:text-[#ddd]">
+              <span className="truncate text-xl font-black text-gray-800 dark:text-[#ddd]">
                 {line.name} ×{line.quantity}
               </span>
-              <span className="shrink-0 font-black text-gray-900 dark:text-white tabular-nums text-lg">
+              <span className="shrink-0 font-black text-gray-900 dark:text-white tabular-nums text-xl">
                 {formatCurrency(line.amount)}
               </span>
             </div>
           ))}
           {bill.discountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-sm font-bold" style={{ color: "#10b981" }}>Coupon Discount</span>
-              <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
+              <span className="text-base font-black" style={{ color: "#10b981" }}>Coupon Discount</span>
+              <span className="text-base font-black tabular-nums" style={{ color: "#10b981" }}>
                 −{formatCurrency(bill.discountAmount)}
               </span>
             </div>
           )}
           {bill.freeHoursDiscountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-sm font-bold" style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
-              <span className="text-sm font-bold tabular-nums" style={{ color: "#8b5cf6" }}>
+              <span className="text-base font-black" style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+              <span className="text-base font-black tabular-nums" style={{ color: "#8b5cf6" }}>
                 −{formatCurrency(bill.freeHoursDiscountAmount)}
               </span>
             </div>
           )}
           {bill.memberDiscountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-sm font-bold" style={{ color: "#8b5cf6" }}>Member Discount ({customerInfo?.membership_discount_pct}% Off)</span>
-              <span className="text-sm font-bold tabular-nums" style={{ color: "#8b5cf6" }}>
+              <span className="text-base font-black" style={{ color: "#8b5cf6" }}>Member Discount ({customerInfo?.membership_discount_pct}% Off)</span>
+              <span className="text-base font-black tabular-nums" style={{ color: "#8b5cf6" }}>
                 −{formatCurrency(bill.memberDiscountAmount)}
               </span>
             </div>
           )}
           {bill.advancePaid > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-sm font-bold" style={{ color: "#10b981" }}>Advance paid</span>
-              <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
+              <span className="text-base font-black" style={{ color: "#10b981" }}>Advance paid</span>
+              <span className="text-base font-black tabular-nums" style={{ color: "#10b981" }}>
                 −{formatCurrency(bill.advancePaid)}
               </span>
             </div>
           )}
           {clampedRedeem > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-sm font-bold" style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
-              <span className="text-sm font-bold tabular-nums" style={{ color: "#f59e0b" }}>
+              <span className="text-base font-black" style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
+              <span className="text-base font-black tabular-nums" style={{ color: "#f59e0b" }}>
                 −{formatCurrency(clampedRedeem * redeemRate)}
               </span>
             </div>
@@ -1688,21 +1688,21 @@ function PanelSession({
 
         <div className="px-5 pb-6 pt-4 border-t border-gray-100 dark:border-[#1a1a1a] space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-base font-extrabold uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
+            <span className="text-lg font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
               Total due
             </span>
-            <span className="text-5xl font-black tabular-nums leading-none" style={{ color: "#D4541A" }}>
+            <span className="text-6xl font-black tabular-nums leading-none" style={{ color: "#D4541A" }}>
               {formatCurrency(hasRunning ? bill.totalDue : displayTotal)}
             </span>
           </div>
 
           {/* Extend-from-bill — only when bill is ready (session finished) */}
           {!hasRunning && finishedItem && (
-            <div className="mb-2 space-y-2">
+            <div className="mb-2 space-y-2.5">
               <p className="text-xs font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
                 Add more time
               </p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 {EXTEND_PRESETS.map((mins) => {
                   const blocked = mins > maxExtendMins;
                   return (
@@ -1717,7 +1717,7 @@ function PanelSession({
                             : "Past closing time"
                           : `Resume session for ${mins} more minutes`
                       }
-                      className={`py-3.5 rounded-xl text-base font-extrabold transition-all ${
+                      className={`py-4 rounded-xl text-base font-extrabold transition-all ${
                         blocked
                           ? "bg-gray-50 dark:bg-[#0d0d0d] text-gray-300 dark:text-[#333] cursor-not-allowed line-through"
                           : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-white border border-gray-200 dark:border-[#2a2a2a] hover:border-[#D4541A] hover:text-[#D4541A] cursor-pointer"
@@ -1739,7 +1739,7 @@ function PanelSession({
           <button
             onClick={() => setFinalizeId(order.id)}
             disabled={hasRunning}
-            className={`w-full py-4.5 rounded-2xl text-lg font-black tracking-wide transition-all shadow-lg active:scale-[0.99] ${
+            className={`w-full py-5 rounded-2xl text-xl font-black tracking-wide transition-all shadow-lg active:scale-[0.99] ${
               hasRunning
                 ? "bg-gray-100 dark:bg-[#1a1a1a] text-gray-400 dark:text-[#555] cursor-not-allowed"
                 : "text-white hover:brightness-110 active:brightness-95 cursor-pointer"

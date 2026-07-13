@@ -500,27 +500,27 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
-        <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 dark:border-[#1F1F1F]">
-          <DialogTitle className="text-gray-900 dark:text-white text-base font-bold">Finalize Bill</DialogTitle>
+      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+        <DialogHeader className="px-6 pt-6 pb-4.5 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <DialogTitle className="text-gray-900 dark:text-white text-xl font-black">Finalize Bill</DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-5 max-h-[80vh] overflow-y-auto">
 
           {/* Bill breakdown */}
-          <div className="rounded-xl p-4 space-y-2 text-sm bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
+          <div className="rounded-xl p-5 space-y-3.5 text-base bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
             {fullyPrePaid ? (
               <>
-                <div className="flex justify-between text-xs" style={{ color: "#10b981" }}>
+                <div className="flex justify-between text-sm font-black" style={{ color: "#10b981" }}>
                   <span>Session pre-paid online</span><span>✓ covered</span>
                 </div>
                 {bill.tableLines.filter((l) => l.overtimeMins > 0).map((line) => {
                   const ti = activeItems.find((i) => i.id === line.id);
                   const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
                   return (
-                    <div key={line.id} className="flex justify-between">
-                      <span className="text-gray-500 dark:text-[#888]">{tn} — overtime {line.overtimeMins}m</span>
-                      <span className="text-gray-900 dark:text-white">{formatCurrency(line.overtimeAmount)}</span>
+                    <div key={line.id} className="flex justify-between text-base font-extrabold">
+                      <span className="text-gray-700 dark:text-[#ccc]">{tn} — overtime {line.overtimeMins}m</span>
+                      <span className="text-gray-900 dark:text-white font-black">{formatCurrency(line.overtimeAmount)}</span>
                     </div>
                   );
                 })}
@@ -536,49 +536,49 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                       : `player${ti.num_people === 1 ? "" : "s"}`}`
                   : "";
                 return (
-                  <div key={line.id} className="flex justify-between">
-                    <span className="text-gray-500 dark:text-[#888]">{tn} ({line.durationMins}m{peopleLabel})</span>
-                    <span className="text-gray-900 dark:text-white">{formatCurrency(line.amount)}</span>
+                  <div key={line.id} className="flex justify-between text-base font-extrabold">
+                    <span className="text-gray-700 dark:text-[#ccc]">{tn} ({line.durationMins}m{peopleLabel})</span>
+                    <span className="text-gray-900 dark:text-white font-black">{formatCurrency(line.amount)}</span>
                   </div>
                 );
               })
             )}
 
             {bill.extraLines.map((line) => (
-              <div key={line.id} className="flex justify-between">
-                <span className="text-gray-500 dark:text-[#888]">{line.name} ×{line.quantity}</span>
-                <span className="text-gray-900 dark:text-white">{formatCurrency(line.amount)}</span>
+              <div key={line.id} className="flex justify-between text-base font-extrabold">
+                <span className="text-gray-700 dark:text-[#ccc]">{line.name} ×{line.quantity}</span>
+                <span className="text-gray-900 dark:text-white font-black">{formatCurrency(line.amount)}</span>
               </div>
             ))}
 
             {!fullyPrePaid && (
-              <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-[#2A2A2A]">
-                <span className="text-gray-500 dark:text-[#666]">Subtotal</span>
-                <span className="text-gray-900 dark:text-white">{formatCurrency(bill.subtotal)}</span>
+              <div className="flex justify-between pt-2.5 border-t border-gray-200 dark:border-[#2A2A2A] text-base font-black">
+                <span className="text-gray-800 dark:text-[#ccc]">Subtotal</span>
+                <span className="text-gray-900 dark:text-white text-lg">{formatCurrency(bill.subtotal)}</span>
               </div>
             )}
 
             {bill.discountAmount > 0 && (
-              <div className="flex justify-between">
+              <div className="flex justify-between text-base font-black">
                 <span style={{ color: "#10b981" }}>Public Coupon / Discount</span>
                 <span style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
               </div>
             )}
             {!fullyPrePaid && bill.advancePaid > 0 && (
-              <div className="flex justify-between">
+              <div className="flex justify-between text-base font-black">
                 <span style={{ color: "#10b981" }}>Advance paid</span>
                 <span style={{ color: "#10b981" }}>−{formatCurrency(bill.advancePaid)}</span>
               </div>
             )}
             {totalFreeHoursDiscount > 0 && (
-              <div className="space-y-1">
+              <div className="space-y-1 text-base font-black">
                 <div className="flex justify-between">
                   <span style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
                   <span style={{ color: "#8b5cf6" }}>−{formatCurrency(totalFreeHoursDiscount)}</span>
                 </div>
                 <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#8b5cf6" }}>
                   {itemDeductions.map((d, idx) => (
-                    <p key={idx} className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                    <p key={idx} className="text-sm font-extrabold text-purple-600 dark:text-purple-400">
                       Redeemed {d.hoursRedeemed} {d.hoursRedeemed === 1 ? 'hr' : 'hrs'} for {d.tableName} ({d.remainingHours} hrs remaining)
                     </p>
                   ))}
@@ -586,22 +586,22 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               </div>
             )}
             {pctDiscount > 0 && (
-              <div className="flex justify-between">
+              <div className="flex justify-between text-base font-black">
                 <span style={{ color: "#8b5cf6" }}>Membership ({membershipPct}% off)</span>
                 <span style={{ color: "#8b5cf6" }}>−{formatCurrency(pctDiscount)}</span>
               </div>
             )}
 
             {clampedRedeem > 0 && (
-              <div className="flex justify-between">
+              <div className="flex justify-between text-base font-black">
                 <span style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
                 <span style={{ color: "#f59e0b" }}>−{formatCurrency(clampedRedeem * redeemRate)}</span>
               </div>
             )}
 
-            <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200 dark:border-[#2A2A2A]">
+            <div className="flex justify-between text-xl font-black pt-3 border-t border-gray-200 dark:border-[#2A2A2A]">
               <span className="text-gray-900 dark:text-white">Total Due</span>
-              <span style={{ color: "#D4541A" }}>{formatCurrency(finalDue)}</span>
+              <span className="text-3xl font-black" style={{ color: "#D4541A" }}>{formatCurrency(finalDue)}</span>
             </div>
           </div>
           {/* Membership validation section */}
@@ -861,7 +861,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
           <button
             onClick={confirmPayment}
             disabled={loading || lookupPending || (finalDue > 0 ? (splitMode ? !splitOk : !method) : false)}
-            className="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-30"
+            className="w-full py-4.5 rounded-2xl font-black text-lg text-white transition-opacity hover:opacity-90 disabled:opacity-30"
             style={{ background: "#D4541A" }}
           >
             {loading
