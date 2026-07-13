@@ -16,6 +16,13 @@ function parseDateParts(dateStr: string): Date {
   return new Date(y, m - 1, d);
 }
 
+function formatDateLocalStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function formatDisplayDateRange(fromStr: string, toStr: string): string {
   const f = parseDateParts(fromStr);
   const t = parseDateParts(toStr);
@@ -156,11 +163,11 @@ export function ReportsContent({
     setPreset("custom");
     const currentFrom = parseDateParts(from);
     currentFrom.setDate(currentFrom.getDate() + delta);
-    const newFromStr = currentFrom.toISOString().split("T")[0];
+    const newFromStr = formatDateLocalStr(currentFrom);
     
     const currentTo = parseDateParts(to);
     currentTo.setDate(currentTo.getDate() + delta);
-    const newToStr = currentTo.toISOString().split("T")[0];
+    const newToStr = formatDateLocalStr(currentTo);
     
     setFrom(newFromStr);
     setTo(newToStr);
