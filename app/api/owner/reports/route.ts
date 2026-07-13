@@ -49,22 +49,32 @@ export async function GET(request: Request) {
     : to;
   const toISO = new Date(toEndDate + "T" + closing + "+05:30").toISOString();
 
-  // Fetch orders in date range
-  const { data: orders, error: ordError } = await admin
-    .from("orders")
-    .select(`
-      id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, finalized_at,
-      location:locations(id, name),
-      items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
-      payments(method, amount, status),
-      extras:order_extras(price, cost_price, quantity, is_deleted)
-    `)
-    .eq("status", "finalized")
-    .gte("finalized_at", fromISO)
-    .lte("finalized_at", toISO)
-    .limit(50000);
+  // Fetch orders in date range with pagination
+  const orders: any[] = [];
+  let ordersPage = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error: ordError } = await admin
+      .from("orders")
+      .select(`
+        id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, finalized_at,
+        location:locations(id, name),
+        items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
+        payments(method, amount, status),
+        extras:order_extras(price, cost_price, quantity, is_deleted)
+      `)
+      .eq("status", "finalized")
+      .gte("finalized_at", fromISO)
+      .lte("finalized_at", toISO)
+      .order("finalized_at", { ascending: true })
+      .range(ordersPage * pageSize, (ordersPage + 1) * pageSize - 1);
 
-  if (ordError) return NextResponse.json(err(ordError.message, "DB_ERROR"), { status: 500 });
+    if (ordError) return NextResponse.json(err(ordError.message, "DB_ERROR"), { status: 500 });
+    if (!data || data.length === 0) break;
+    orders.push(...data);
+    if (data.length < pageSize) break;
+    ordersPage++;
+  }
 
   // Fetch 6 months history
   const today = new Date();
@@ -75,18 +85,26 @@ export async function GET(request: Request) {
 
   const histFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + opening + "+05:30").toISOString();
 
-  const { data: history, error: histError } = await admin
-    .from("orders")
-    .select(`
-      id, amount_due, advance_paid, finalized_at, location_id,
-      location:locations(id, name)
-    `)
-    .eq("status", "finalized")
-    .gte("finalized_at", histFromISO)
-    .order("finalized_at", { ascending: true })
-    .limit(50000);
+  const history: any[] = [];
+  let histPage = 0;
+  while (true) {
+    const { data, error: histError } = await admin
+      .from("orders")
+      .select(`
+        id, amount_due, advance_paid, finalized_at, location_id,
+        location:locations(id, name)
+      `)
+      .eq("status", "finalized")
+      .gte("finalized_at", histFromISO)
+      .order("finalized_at", { ascending: true })
+      .range(histPage * pageSize, (histPage + 1) * pageSize - 1);
 
-  if (histError) return NextResponse.json(err(histError.message, "DB_ERROR"), { status: 500 });
+    if (histError) return NextResponse.json(err(histError.message, "DB_ERROR"), { status: 500 });
+    if (!data || data.length === 0) break;
+    history.push(...data);
+    if (data.length < pageSize) break;
+    histPage++;
+  }
 
   // Fetch customer memberships assigned in the last 6 months (matching the history range)
   // Use full-day IST boundaries (midnight start, end-of-day end) so that
@@ -94,17 +112,26 @@ export async function GET(request: Request) {
   const membHistFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T00:00:00+05:30").toISOString();
   const membToISO   = new Date(to   + "T23:59:59+05:30").toISOString();
 
-  const { data: memberships, error: membError } = await admin
-    .from("customer_memberships")
-    .select(`
-      id, customer_phone, starts_at, created_at,
-      plan:membership_plans(id, name, price)
-    `)
-    .gte("created_at", membHistFromISO)
-    .lte("created_at", membToISO)
-    .limit(50000);
+  const memberships: any[] = [];
+  let membPage = 0;
+  while (true) {
+    const { data, error: membError } = await admin
+      .from("customer_memberships")
+      .select(`
+        id, customer_phone, starts_at, created_at,
+        plan:membership_plans(id, name, price)
+      `)
+      .gte("created_at", membHistFromISO)
+      .lte("created_at", membToISO)
+      .order("created_at", { ascending: true })
+      .range(membPage * pageSize, (membPage + 1) * pageSize - 1);
 
-  if (membError) return NextResponse.json(err(membError.message, "DB_ERROR"), { status: 500 });
+    if (membError) return NextResponse.json(err(membError.message, "DB_ERROR"), { status: 500 });
+    if (!data || data.length === 0) break;
+    memberships.push(...data);
+    if (data.length < pageSize) break;
+    membPage++;
+  }
 
   return NextResponse.json(ok({
     locations: locations ?? [],

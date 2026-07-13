@@ -26,13 +26,26 @@ export default async function ReportsPage() {
     : toDate;
   const toISO = new Date(toEndDate + "T" + closing + "+05:30").toISOString();
 
-  const { data: orders } = await admin
-    .from("orders")
-    .select(`id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, finalized_at, location:locations(id, name), items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem), payments(method, amount, status), extras:order_extras(price, cost_price, quantity, is_deleted)`)
-    .eq("status", "finalized")
-    .gte("finalized_at", fromISO)
-    .lte("finalized_at", toISO)
-    .limit(50000);
+  // Paginate fetching of orders
+  const orders: any[] = [];
+  let ordersPage = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await admin
+      .from("orders")
+      .select(`id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, finalized_at, location:locations(id, name), items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem), payments(method, amount, status), extras:order_extras(price, cost_price, quantity, is_deleted)`)
+      .eq("status", "finalized")
+      .gte("finalized_at", fromISO)
+      .lte("finalized_at", toISO)
+      .order("finalized_at", { ascending: true })
+      .range(ordersPage * pageSize, (ordersPage + 1) * pageSize - 1);
+    
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    orders.push(...data);
+    if (data.length < pageSize) break;
+    ordersPage++;
+  }
 
   // Fetch 6 months history for SSR hydration
   const sixMonthsAgo = new Date();
@@ -41,25 +54,46 @@ export default async function ReportsPage() {
   sixMonthsAgo.setHours(0, 0, 0, 0);
   const histFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + opening + "+05:30").toISOString();
 
-  const { data: history } = await admin
-    .from("orders")
-    .select(`id, amount_due, advance_paid, finalized_at, location_id, location:locations(id, name)`)
-    .eq("status", "finalized")
-    .gte("finalized_at", histFromISO)
-    .order("finalized_at", { ascending: true })
-    .limit(50000);
+  const history: any[] = [];
+  let histPage = 0;
+  while (true) {
+    const { data, error } = await admin
+      .from("orders")
+      .select(`id, amount_due, advance_paid, finalized_at, location_id, location:locations(id, name)`)
+      .eq("status", "finalized")
+      .gte("finalized_at", histFromISO)
+      .order("finalized_at", { ascending: true })
+      .range(histPage * pageSize, (histPage + 1) * pageSize - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    history.push(...data);
+    if (data.length < pageSize) break;
+    histPage++;
+  }
 
   // Fetch customer memberships assigned in the last 6 months (matching the history range)
   // Use full-day IST boundaries so created_at (UTC) is captured regardless of business hours
   const membHistFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T00:00:00+05:30").toISOString();
   const membToISO   = new Date(toDate   + "T23:59:59+05:30").toISOString();
 
-  const { data: memberships } = await admin
-    .from("customer_memberships")
-    .select(`id, customer_phone, starts_at, created_at, plan:membership_plans(id, name, price)`)
-    .gte("created_at", membHistFromISO)
-    .lte("created_at", membToISO)
-    .limit(50000);
+  const memberships: any[] = [];
+  let membPage = 0;
+  while (true) {
+    const { data, error } = await admin
+      .from("customer_memberships")
+      .select(`id, customer_phone, starts_at, created_at, plan:membership_plans(id, name, price)`)
+      .gte("created_at", membHistFromISO)
+      .lte("created_at", membToISO)
+      .order("created_at", { ascending: true })
+      .range(membPage * pageSize, (membPage + 1) * pageSize - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    memberships.push(...data);
+    if (data.length < pageSize) break;
+    membPage++;
+  }
 
   return (
     <ReportsContent

@@ -4,12 +4,28 @@ import { useState, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
-import { BarChart2, Users } from "lucide-react";
+import { BarChart2, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 const supabase = createClient();
+
+function parseDateParts(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatDisplayDateRange(fromStr: string, toStr: string): string {
+  const f = parseDateParts(fromStr);
+  const t = parseDateParts(toStr);
+  const opt: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+  
+  if (fromStr === toStr) {
+    return f.toLocaleDateString("en-IN", opt);
+  }
+  return `${f.toLocaleDateString("en-IN", opt)} - ${t.toLocaleDateString("en-IN", opt)}`;
+}
 
 type Preset = "7d" | "30d" | "thisMonth" | "lastMonth" | "custom";
 
@@ -113,6 +129,20 @@ export function ReportsContent({
       setFrom(f);
       setTo(t);
     }
+  }
+
+  function shiftDate(delta: number) {
+    setPreset("custom");
+    const currentFrom = parseDateParts(from);
+    currentFrom.setDate(currentFrom.getDate() + delta);
+    const newFromStr = currentFrom.toISOString().split("T")[0];
+    
+    const currentTo = parseDateParts(to);
+    currentTo.setDate(currentTo.getDate() + delta);
+    const newToStr = currentTo.toISOString().split("T")[0];
+    
+    setFrom(newFromStr);
+    setTo(newToStr);
   }
 
   const { data: reportData, isLoading } = useQuery<{
@@ -335,7 +365,7 @@ export function ReportsContent({
       }
 
       tableRevenue += netTables;
-      inventoryProfit += Math.max(0, netExtras - costOfExtras);
+      inventoryProfit += (netExtras - costOfExtras);
 
       // Payment methods
       const orderPayments = [...o.payments];
@@ -441,6 +471,28 @@ export function ReportsContent({
             </div>
           </div>
         )}
+
+        <div className="flex items-center gap-3 pt-4 border-t border-gray-100 flex-wrap">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 rounded-lg bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#1a1a1a] dark:border-[#333]"
+            onClick={() => shiftDate(-1)}
+          >
+            <ChevronLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          </Button>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 min-w-[200px] text-center">
+            {formatDisplayDateRange(from, to)}
+          </span>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 rounded-lg bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#1a1a1a] dark:border-[#333]"
+            onClick={() => shiftDate(1)}
+          >
+            <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          </Button>
+        </div>
       </div>
 
       {/* Location tabs */}
