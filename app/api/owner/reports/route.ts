@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     const { data, error: ordError } = await admin
       .from("orders")
       .select(`
-        id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, finalized_at,
+        id, customer_name, customer_phone, amount_due, advance_paid, subtotal, discount_amount, public_discount_amount, total_amount, points_redeemed, type, created_by, finalized_at,
         location:locations(id, name),
         items:order_items(status, rate_per_hour, actual_start, expected_end, final_amount, free_hours_to_redeem),
         payments(method, amount, status),

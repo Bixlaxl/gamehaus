@@ -76,6 +76,7 @@ type ReportOrder = {
   total_amount?: number | null;
   points_redeemed?: number | null;
   type: string;
+  created_by: string | null;
   finalized_at: string | null;
   location: { id: string; name: string } | null;
   items: Array<{ status: string; rate_per_hour: number; actual_start: string | null; expected_end: string | null; final_amount?: number | null; free_hours_to_redeem?: number | null }>;
@@ -117,10 +118,30 @@ export function ReportsContent({
   initialFrom: string;
   initialTo: string;
 }) {
+  const [reportMode, setReportMode]           = useState<"daily" | "range">("daily");
   const [preset, setPreset]                 = useState<Preset>("30d");
   const [from, setFrom]                     = useState(initialFrom);
   const [to, setTo]                         = useState(initialTo);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+
+  const getTodayLocalStr = () => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const d = String(today.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  function handleModeChange(mode: "daily" | "range") {
+    setReportMode(mode);
+    if (mode === "daily") {
+      const todayStr = getTodayLocalStr();
+      setFrom(todayStr);
+      setTo(todayStr);
+    } else {
+      applyPreset("30d");
+    }
+  }
 
   function applyPreset(p: Preset) {
     setPreset(p);
@@ -264,6 +285,13 @@ export function ReportsContent({
     let totalFreeHours    = 0;
     let totalCostOfExtras = 0;
 
+    let walkinRevenue   = 0;
+    let walkinCount     = 0;
+    let manualRevenue   = 0;
+    let manualCount     = 0;
+    let onlineRevenue   = 0;
+    let onlineCount     = 0;
+
     // Sum up upfront membership sales
     let totalMembershipSales = 0;
     for (const m of filteredMemberships) {
@@ -273,6 +301,20 @@ export function ReportsContent({
     for (const o of filteredOrders) {
       const orderRev = (o.amount_due ?? 0) + (o.advance_paid ?? 0);
       totalRevenue += orderRev;
+
+      // Booking source categorization
+      if (o.type === "walk_in") {
+        walkinRevenue += orderRev;
+        walkinCount   += 1;
+      } else if (o.type === "online") {
+        if (o.created_by !== null && o.created_by !== undefined) {
+          manualRevenue += orderRev;
+          manualCount   += 1;
+        } else {
+          onlineRevenue += orderRev;
+          onlineCount   += 1;
+        }
+      }
 
       // Seed location map from order data if the location wasn't in the initial locations list
       if (o.location?.id && !revByLoc.has(o.location.id)) {
@@ -425,6 +467,12 @@ export function ReportsContent({
       totalFreeHours,
       totalCostOfExtras,
       totalMembershipSales,
+      walkinRevenue,
+      walkinCount,
+      manualRevenue,
+      manualCount,
+      onlineRevenue,
+      onlineCount,
     };
   }, [filteredOrders, filteredMemberships, locations]);
 
@@ -445,54 +493,86 @@ export function ReportsContent({
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Reports</h1>
 
-      {/* Preset + date range */}
+      {/* Report mode tabs + Date Controls */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <Button
-              key={p.value}
-              size="sm"
-              variant={preset === p.value ? "default" : "outline"}
-              onClick={() => applyPreset(p.value)}
-            >
-              {p.label}
-            </Button>
-          ))}
+        {/* Mode Toggle */}
+        <div className="flex border-b border-gray-100 pb-3 gap-4">
+          <button
+            onClick={() => handleModeChange("daily")}
+            className="pb-2 text-sm font-bold transition-all relative"
+            style={{
+              color: reportMode === "daily" ? "#D4541A" : "#9ca3af",
+            }}
+          >
+            Daily Shift
+            {reportMode === "daily" && (
+              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-[#D4541A] rounded-full" />
+            )}
+          </button>
+          <button
+            onClick={() => handleModeChange("range")}
+            className="pb-2 text-sm font-bold transition-all relative"
+            style={{
+              color: reportMode === "range" ? "#D4541A" : "#9ca3af",
+            }}
+          >
+            Date Range
+            {reportMode === "range" && (
+              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-[#D4541A] rounded-full" />
+            )}
+          </button>
         </div>
-        {preset === "custom" && (
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-gray-500 whitespace-nowrap">From</Label>
-              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-36" />
+
+        {reportMode === "range" ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((p) => (
+                <Button
+                  key={p.value}
+                  size="sm"
+                  variant={preset === p.value ? "default" : "outline"}
+                  onClick={() => applyPreset(p.value)}
+                >
+                  {p.label}
+                </Button>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-gray-500 whitespace-nowrap">To</Label>
-              <Input type="date" value={to}   onChange={(e) => setTo(e.target.value)}   className="w-36" />
-            </div>
+            {preset === "custom" && (
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-gray-500 whitespace-nowrap">From</Label>
+                  <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-36" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-gray-500 whitespace-nowrap">To</Label>
+                  <Input type="date" value={to}   onChange={(e) => setTo(e.target.value)}   className="w-36" />
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-8 w-8 rounded-lg bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#1a1a1a] dark:border-[#333]"
+              onClick={() => shiftDate(-1)}
+            >
+              <ChevronLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            </Button>
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 min-w-[200px] text-center">
+              {formatDisplayDateRange(from, to)}
+            </span>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-8 w-8 rounded-lg bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#1a1a1a] dark:border-[#333]"
+              onClick={() => shiftDate(1)}
+            >
+              <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            </Button>
           </div>
         )}
-
-        <div className="flex items-center gap-3 pt-4 border-t border-gray-100 flex-wrap">
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-8 w-8 rounded-lg bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#1a1a1a] dark:border-[#333]"
-            onClick={() => shiftDate(-1)}
-          >
-            <ChevronLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-          </Button>
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 min-w-[200px] text-center">
-            {formatDisplayDateRange(from, to)}
-          </span>
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-8 w-8 rounded-lg bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#1a1a1a] dark:border-[#333]"
-            onClick={() => shiftDate(1)}
-          >
-            <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-          </Button>
-        </div>
       </div>
 
       {/* Location tabs */}
@@ -551,8 +631,8 @@ export function ReportsContent({
         </div>
       </div>
 
-      {/* Two-column: by location + payment breakdown */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      {/* Three-column: by location + payment breakdown + booking sources */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* By location */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -622,6 +702,53 @@ export function ReportsContent({
                   </div>
                 );
               })
+            )}
+          </div>
+        </div>
+
+        {/* Booking sources breakdown */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Booking Sources</h2>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {totalRevenue === 0 ? (
+              <p className="px-5 py-6 text-xs text-gray-400 text-center">No booking data</p>
+            ) : (
+              (() => {
+                const totalBookingRev = (stats.walkinRevenue || 0) + (stats.manualRevenue || 0) + (stats.onlineRevenue || 0);
+                const sources = [
+                  { label: "Walk-ins", revenue: stats.walkinRevenue || 0, count: stats.walkinCount || 0 },
+                  { label: "Manual (Staff POS)", revenue: stats.manualRevenue || 0, count: stats.manualCount || 0 },
+                  { label: "Online Bookings", revenue: stats.onlineRevenue || 0, count: stats.onlineCount || 0 },
+                ].sort((a, b) => b.revenue - a.revenue);
+
+                return sources.map(({ label, revenue, count }) => {
+                  const pct = totalBookingRev > 0 ? Math.round((revenue / totalBookingRev) * 100) : 0;
+                  return (
+                    <div key={label} className="px-5 py-3 flex items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900 block">{label}</span>
+                            <span className="text-[11px] text-gray-400 block">{count} orders</span>
+                          </div>
+                          <span className="text-sm font-bold text-gray-900 tabular-nums">
+                            {formatCurrency(revenue)}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${pct}%`, background: "#D4541A" }}
+                          />
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">{pct}%</span>
+                    </div>
+                  );
+                });
+              })()
             )}
           </div>
         </div>
