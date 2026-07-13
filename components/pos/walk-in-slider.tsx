@@ -60,7 +60,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
   const [nameMismatch,     setNameMismatch]     = useState<{ existing: string; entered: string } | null>(null);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const idleTables = tables.filter((t) => !t.activeOrderItem);
+  const idleTables = tables.filter((t) => !t.activeOrderItem || t.activeOrderItem.status === "finished");
 
   function bookingConflict(tableId: string): string | null {
     const table = idleTables.find((t) => t.id === tableId);

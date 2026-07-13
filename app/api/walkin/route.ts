@@ -165,26 +165,48 @@ export async function POST(request: Request) {
   }
 
 
-  const { data: order, error: orderError } = await admin
-    .from("orders")
-    .insert({
-      location_id,
-      type:           "walk_in",
-      customer_name,
-      customer_phone: customer_phone ?? null,
-      created_by:     session.user.id,
-    })
-    .select("id")
-    .single();
+  let orderId = "";
+  let isNewOrder = false;
 
-  if (orderError || !order) {
-    return NextResponse.json(err(orderError?.message ?? "Failed to create order", "DB_ERROR"), { status: 500 });
+  if (customer_phone) {
+    const { data: existingOpenOrder } = await admin
+      .from("orders")
+      .select("id")
+      .eq("location_id", location_id)
+      .eq("customer_phone", customer_phone)
+      .eq("status", "open")
+      .eq("type", "walk_in")
+      .maybeSingle();
+
+    if (existingOpenOrder) {
+      orderId = existingOpenOrder.id;
+    }
+  }
+
+  if (!orderId) {
+    const { data: order, error: orderError } = await admin
+      .from("orders")
+      .insert({
+        location_id,
+        type:           "walk_in",
+        customer_name,
+        customer_phone: customer_phone ?? null,
+        created_by:     session.user.id,
+      })
+      .select("id")
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json(err(orderError?.message ?? "Failed to create order", "DB_ERROR"), { status: 500 });
+    }
+    orderId = order.id;
+    isNewOrder = true;
   }
 
   // Insert items directly in running state — combines order creation + session start into one round trip
   const itemsPromise = admin.from("order_items").insert(
     items.map((item) => ({
-      order_id:                order.id,
+      order_id:                orderId,
       table_id:                item.table_id,
       rate_per_hour:           item.rate_per_hour,
       num_people:              item.num_people ?? null,
@@ -206,9 +228,11 @@ export async function POST(request: Request) {
   const [{ error: itemsError }] = await Promise.all([itemsPromise, profilePromise]);
 
   if (itemsError) {
-    await admin.from("orders").update({ status: "cancelled" }).eq("id", order.id);
+    if (isNewOrder) {
+      await admin.from("orders").update({ status: "cancelled" }).eq("id", orderId);
+    }
     return NextResponse.json(err(itemsError.message, "DB_ERROR"), { status: 500 });
   }
 
-  return NextResponse.json(ok({ order_id: order.id }));
+  return NextResponse.json(ok({ order_id: orderId }));
 }
