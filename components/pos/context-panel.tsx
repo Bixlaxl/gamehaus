@@ -407,12 +407,6 @@ function PanelWalkIn({
       }],
     };
     usePOSStore.setState((s) => ({ openOrders: [...s.openOrders, optimisticOrder] }));
-    // selectedTableId already points at this table; ContextPanel will see the
-    // running item in openOrders + flip to PanelSession on the very next render.
-
-    // Reconcile in the background — Realtime usually catches this in <1s but
-    // the explicit invalidate guarantees the table grid + bill numbers swap
-    // from optimistic to authoritative server state regardless.
     qc.invalidateQueries({ queryKey: ["pos-orders",  locationId] });
     qc.invalidateQueries({ queryKey: ["pos-tables",  locationId] });
     setLoading(false);
@@ -427,18 +421,12 @@ function PanelWalkIn({
           phone={customerPhone}
           onCancel={() => setNameMismatch(null)}
           onUseExisting={() => {
-            // Replace the typed name with the existing one and submit.
-            // The upsert in /api/walkin will write the same name back —
-            // effectively a no-op on the profile.
             setCustomerName(nameMismatch.existing);
             const chosen = nameMismatch.existing;
             setNameMismatch(null);
             void submitWalkIn(chosen);
           }}
           onUpdateName={() => {
-            // Keep the typed name and submit. The upsert overwrites
-            // customer_profiles.name so the owner panel will reflect
-            // the new name on the next refresh.
             const chosen = nameMismatch.entered;
             setNameMismatch(null);
             void submitWalkIn(chosen);
@@ -459,7 +447,7 @@ function PanelWalkIn({
 
         {/* Customer */}
         <div className="space-y-3">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
+          <p className="text-xs font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
             Customer
           </p>
           <div className="relative">
@@ -468,14 +456,12 @@ function PanelWalkIn({
               onChange={(e) => handleNameChange(e.target.value)}
               onFocus={() => { if (nameSuggestions.length > 0) setShowNameSuggestions(true); }}
               onBlur={() => {
-                // Delay so a click on a suggestion (which is a mousedown) registers
-                // before the dropdown disappears.
                 setTimeout(() => setShowNameSuggestions(false), 150);
               }}
               placeholder="Customer name *"
               autoFocus
               autoComplete="off"
-              className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
+              className="w-full px-4 py-3 rounded-lg text-base font-semibold outline-none transition-colors
                 bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
                 focus:border-[#D4541A]"
@@ -492,12 +478,12 @@ function PanelWalkIn({
                       hover:bg-gray-100 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                      <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                         {s.name ?? "(no name)"}
                       </p>
                       <p className="text-xs font-mono text-gray-600 dark:text-[#aaa]">{s.phone}</p>
                     </div>
-                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                    <span className="shrink-0 text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
                       style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}
                     >
                       {s.visit_count}× · {s.points_balance} pts
@@ -517,12 +503,11 @@ function PanelWalkIn({
               onChange={(e) => handlePhoneChange(e.target.value)}
               onFocus={() => { if (phoneSuggestions.length > 0) setShowPhoneSuggestions(true); }}
               onBlur={() => {
-                // Delay so a click on a suggestion (mousedown) registers before close
                 setTimeout(() => setShowPhoneSuggestions(false), 150);
               }}
               placeholder="10-digit phone (optional)"
               autoComplete="off"
-              className="w-full px-3 py-2.5 rounded-lg text-sm font-medium outline-none transition-colors
+              className="w-full px-4 py-3 rounded-lg text-base font-semibold outline-none transition-colors
                 bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#666]
                 focus:border-[#D4541A]"
@@ -561,11 +546,11 @@ function PanelWalkIn({
           )}
           {!lookingUp && customer && (
             <div
-              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg"
               style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)" }}
             >
-              <Star className="h-3.5 w-3.5 shrink-0" style={{ color: "#f59e0b" }} />
-              <span className="text-sm font-semibold" style={{ color: "#fbbf24" }}>
+              <Star className="h-4 w-4 shrink-0" style={{ color: "#f59e0b" }} />
+              <span className="text-base font-bold" style={{ color: "#fbbf24" }}>
                 {customer.points_balance} pts · {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
               </span>
             </div>
@@ -579,10 +564,10 @@ function PanelWalkIn({
         {tableModes.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-baseline justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
+              <p className="text-xs font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
                 Pricing Mode
               </p>
-              <p className="text-[11px] font-semibold text-gray-500 dark:text-[#888]">
+              <p className="text-xs font-black text-gray-700 dark:text-[#aaa]">
                 ₹{effectiveRate}/hr
               </p>
             </div>
@@ -593,7 +578,7 @@ function PanelWalkIn({
                   <button
                     key={m.id}
                     onClick={() => { setSelectedModeId(m.id); setNumPeople(null); }}
-                    className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+                    className={`px-4 py-2.5 rounded-lg text-base font-black transition-all ${
                       active
                         ? "text-white"
                         : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
@@ -612,10 +597,10 @@ function PanelWalkIn({
         {peopleOptions.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-baseline justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
+              <p className="text-xs font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
                 {peopleLabel}s
               </p>
-              <p className="text-[11px] font-semibold text-gray-500 dark:text-[#888]">
+              <p className="text-xs font-black text-gray-700 dark:text-[#aaa]">
                 ₹{effectiveRate}/hr
               </p>
             </div>
@@ -626,7 +611,7 @@ function PanelWalkIn({
                   <button
                     key={n}
                     onClick={() => setNumPeople(selected ? null : n)}
-                    className={`px-3 py-2 rounded-lg text-sm font-bold transition-all min-w-[60px] ${
+                    className={`px-4 py-2.5 rounded-lg text-base font-black transition-all min-w-[60px] ${
                       selected
                         ? "text-white"
                         : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
@@ -638,7 +623,7 @@ function PanelWalkIn({
                 );
               })}
             </div>
-            <p className="text-[11px] text-gray-500 dark:text-[#888]">
+            <p className="text-xs text-gray-500 dark:text-[#888] font-bold">
               {numPeople
                 ? `${numPeople} ${peopleLabel}${Number(numPeople) > 1 ? "s" : ""} · tier rate applied`
                 : `Defaulting to flat ₹${table.hourly_rate}/hr — pick a count to apply tier pricing`}
@@ -648,7 +633,7 @@ function PanelWalkIn({
 
         {/* Duration */}
         <div className="space-y-3">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600 dark:text-[#bbb]">
+          <p className="text-xs font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
             Duration
           </p>
           <div className="flex gap-2">
@@ -656,7 +641,7 @@ function PanelWalkIn({
               <button
                 key={p.mins}
                 onClick={() => { setDuration(p.mins); setDurationInput(String(p.mins)); }}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                className={`flex-1 py-3 rounded-lg text-base font-black transition-all ${
                   duration === p.mins
                     ? "text-white"
                     : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
@@ -694,13 +679,13 @@ function PanelWalkIn({
                   setDurationInput(String(clamped));
                 }
               }}
-              className="w-20 text-sm font-semibold rounded-lg px-2.5 py-1.5 outline-none transition-colors
+              className="w-24 text-base font-bold rounded-lg px-3 py-2 outline-none transition-colors
                 bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                 text-gray-900 dark:text-white focus:border-[#D4541A]"
             />
-            <span className="text-xs font-semibold text-gray-500 dark:text-[#999]">mins</span>
+            <span className="text-sm font-bold text-gray-500 dark:text-[#999]">mins</span>
             {table.upcomingBooking && (
-              <span className="text-xs text-gray-500 dark:text-[#999]">(max {maxMins}m)</span>
+              <span className="text-sm font-bold text-gray-500 dark:text-[#999]">(max {maxMins}m)</span>
             )}
           </div>
         </div>
@@ -1300,10 +1285,10 @@ function PanelSession({
               {/* Top row */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white text-base">{tableName}</p>
+                  <p className="font-bold text-gray-900 dark:text-white text-lg">{tableName}</p>
                   {isRunning && (
                     <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                      className="text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide"
                       style={
                         isOvertime
                           ? { background: "rgba(239,68,68,0.15)", color: "#ef4444" }
@@ -1314,13 +1299,13 @@ function PanelSession({
                     </span>
                   )}
                   {item.status === "finished" && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide bg-gray-200 dark:bg-[#222] text-gray-600 dark:text-[#aaa]">
+                    <span className="text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide bg-gray-200 dark:bg-[#222] text-gray-600 dark:text-[#aaa]">
                       Finished
                     </span>
                   )}
                   {item.status === "scheduled" && (
                     <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                      className="text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide"
                       style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
                     >
                       Scheduled
@@ -1329,12 +1314,12 @@ function PanelSession({
                 </div>
                 <div className="text-right shrink-0">
                   <p
-                    className="font-bold text-lg tabular-nums"
+                    className="font-bold text-xl tabular-nums"
                     style={{ color: isRunning ? "#D4541A" : undefined }}
                   >
                     {formatCurrency(lineBill)}
                   </p>
-                  <p className="text-[11px] mt-0.5 text-gray-500 dark:text-[#888]">
+                  <p className="text-xs mt-0.5 text-gray-500 dark:text-[#888] font-bold">
                     ₹{item.rate_per_hour}/hr
                   </p>
                 </div>
@@ -1418,19 +1403,19 @@ function PanelSession({
                 <div className="flex gap-2">
                   <button
                     onClick={() => setStopConfirmItem(item)}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold transition-colors hover:bg-red-500"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-white text-sm font-extrabold transition-colors hover:bg-red-500"
                     style={{ background: "#ef4444" }}
                   >
-                    <Square className="h-3 w-3 fill-current" /> Stop
+                    <Square className="h-3.5 w-3.5 fill-current" /> Stop
                   </button>
                   {canExtend && (
                     <button
                       onClick={() => setExtendModal(item)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-extrabold transition-colors
                         bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A]
                         text-gray-600 dark:text-[#888] hover:text-gray-900 dark:hover:text-white hover:border-gray-400"
                     >
-                      <Timer className="h-3 w-3" /> Extend
+                      <Timer className="h-3.5 w-3.5" /> Extend
                     </button>
                   )}
                 </div>
@@ -1438,7 +1423,7 @@ function PanelSession({
 
               {item.status === "scheduled" && (
                 <button
-                  className="w-full py-2 rounded-lg text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors hover:bg-emerald-400"
+                  className="w-full py-2.5 rounded-lg text-white text-sm font-extrabold flex items-center justify-center gap-1.5 transition-colors hover:bg-emerald-400"
                   style={{ background: "#10b981" }}
                   onClick={async () => {
                     const startTime = new Date().toISOString();
@@ -1466,17 +1451,17 @@ function PanelSession({
 
         {/* Extras — catalogue & custom both behind toggles. Default closed. */}
         <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-[#222] shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#222]">
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200 dark:border-[#222]">
+            <p className="text-sm font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
               Extras
             </p>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setCatalogueOpen((v) => !v)}
-                className="flex items-center gap-1 text-xs font-semibold transition-colors hover:brightness-75"
+                className="flex items-center gap-1.5 text-sm font-extrabold transition-colors hover:brightness-75"
                 style={{ color: "#D4541A" }}
               >
-                <Plus className="h-3.5 w-3.5" /> {catalogueOpen ? "Hide items" : "Extra items"}
+                <Plus className="h-4 w-4" /> {catalogueOpen ? "Hide items" : "Extra items"}
               </button>
             </div>
           </div>
@@ -1495,17 +1480,17 @@ function PanelSession({
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg
                       bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#262626]"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-[#999]">₹{item.selling_price}</p>
+                      <p className="text-base font-bold text-gray-900 dark:text-white truncate">{item.name}</p>
+                      <p className="text-sm text-gray-500 dark:text-[#999] font-semibold">₹{item.selling_price}</p>
                     </div>
                     {qty === 0 ? (
                       <button
                         onClick={() => incrementInventoryItem(item)}
-                        className="text-xs font-bold px-3.5 py-1.5 rounded-md text-white transition-opacity hover:opacity-85"
+                        className="text-sm font-extrabold px-4.5 py-2 rounded-md text-white transition-opacity hover:opacity-85"
                         style={{ background: "#D4541A" }}
                       >
                         ADD
@@ -1517,7 +1502,7 @@ function PanelSession({
                       >
                         <button
                           onClick={() => decrementInventoryItem(item.id)}
-                          className="w-8 h-8 flex items-center justify-center text-base font-bold transition-colors
+                          className="w-9 h-9 flex items-center justify-center text-lg font-bold transition-colors
                             hover:bg-orange-50 dark:hover:bg-[#2a1300]"
                           style={{ color: "#D4541A" }}
                           aria-label="Decrease quantity"
@@ -1525,14 +1510,14 @@ function PanelSession({
                           −
                         </button>
                         <span
-                          className="w-7 text-center text-sm font-bold tabular-nums"
+                          className="w-8 text-center text-base font-bold tabular-nums"
                           style={{ color: "#D4541A" }}
                         >
                           {qty}
                         </span>
                         <button
                           onClick={() => incrementInventoryItem(item)}
-                          className="w-8 h-8 flex items-center justify-center text-base font-bold transition-colors
+                          className="w-9 h-9 flex items-center justify-center text-lg font-bold transition-colors
                             hover:bg-orange-50 dark:hover:bg-[#2a1300]"
                           style={{ color: "#D4541A" }}
                           aria-label="Increase quantity"
@@ -1604,8 +1589,8 @@ function PanelSession({
 
       {/* Pinned bill footer */}
       <div className="shrink-0 bg-white dark:bg-[#111] border-t border-gray-200 dark:border-[#222]">
-        <div className="px-5 pt-3 pb-1 max-h-36 overflow-y-auto space-y-1">
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-gray-600 dark:text-[#aaa] mb-2">
+        <div className="px-5 pt-4 pb-2 max-h-36 overflow-y-auto space-y-1">
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-gray-700 dark:text-[#ccc] mb-2.5">
             Receipt
           </p>
           {bill.tableLines.map((line) => {
@@ -1613,10 +1598,10 @@ function PanelSession({
             const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
             return (
               <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-                <span className="truncate text-sm font-medium text-gray-800 dark:text-[#ddd]">
+                <span className="truncate text-base font-semibold text-gray-800 dark:text-[#ddd]">
                   {tn} · {line.durationMins}m
                 </span>
-                <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-sm">
+                <span className="shrink-0 font-extrabold text-gray-900 dark:text-white tabular-nums text-base">
                   {formatCurrency(line.amount)}
                 </span>
               </div>
@@ -1624,50 +1609,50 @@ function PanelSession({
           })}
           {bill.extraLines.map((line) => (
             <div key={line.id} className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="truncate text-sm font-medium text-gray-800 dark:text-[#ddd]">
+              <span className="truncate text-base font-semibold text-gray-800 dark:text-[#ddd]">
                 {line.name} ×{line.quantity}
               </span>
-              <span className="shrink-0 font-bold text-gray-900 dark:text-white tabular-nums text-sm">
+              <span className="shrink-0 font-extrabold text-gray-900 dark:text-white tabular-nums text-base">
                 {formatCurrency(line.amount)}
               </span>
             </div>
           ))}
           {bill.discountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Coupon Discount</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>
+              <span className="text-sm font-bold" style={{ color: "#10b981" }}>Coupon Discount</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
                 −{formatCurrency(bill.discountAmount)}
               </span>
             </div>
           )}
           {bill.freeHoursDiscountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-semibold" style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#8b5cf6" }}>
+              <span className="text-sm font-bold" style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#8b5cf6" }}>
                 −{formatCurrency(bill.freeHoursDiscountAmount)}
               </span>
             </div>
           )}
           {bill.memberDiscountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-semibold" style={{ color: "#8b5cf6" }}>Member Discount ({customerInfo?.membership_discount_pct}% Off)</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#8b5cf6" }}>
+              <span className="text-sm font-bold" style={{ color: "#8b5cf6" }}>Member Discount ({customerInfo?.membership_discount_pct}% Off)</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#8b5cf6" }}>
                 −{formatCurrency(bill.memberDiscountAmount)}
               </span>
             </div>
           )}
           {bill.advancePaid > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-semibold" style={{ color: "#10b981" }}>Advance paid</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#10b981" }}>
+              <span className="text-sm font-bold" style={{ color: "#10b981" }}>Advance paid</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#10b981" }}>
                 −{formatCurrency(bill.advancePaid)}
               </span>
             </div>
           )}
           {clampedRedeem > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-xs font-semibold" style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
-              <span className="text-xs font-semibold tabular-nums" style={{ color: "#f59e0b" }}>
+              <span className="text-sm font-bold" style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#f59e0b" }}>
                 −{formatCurrency(clampedRedeem * redeemRate)}
               </span>
             </div>
@@ -1703,10 +1688,10 @@ function PanelSession({
 
         <div className="px-5 pb-5 pt-3 border-t border-gray-100 dark:border-[#1a1a1a]">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-[#bbb]">
+            <span className="text-sm font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb]">
               Total due
             </span>
-            <span className="text-3xl font-extrabold tabular-nums leading-none" style={{ color: "#D4541A" }}>
+            <span className="text-4xl font-extrabold tabular-nums leading-none" style={{ color: "#D4541A" }}>
               {formatCurrency(hasRunning ? bill.totalDue : displayTotal)}
             </span>
           </div>
@@ -1714,10 +1699,10 @@ function PanelSession({
           {/* Extend-from-bill — only when bill is ready (session finished) */}
           {!hasRunning && finishedItem && (
             <div className="mb-3">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-600 dark:text-[#bbb] mb-1.5">
+              <p className="text-xs font-black uppercase tracking-wide text-gray-700 dark:text-[#bbb] mb-1.5">
                 Add more time
               </p>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 {EXTEND_PRESETS.map((mins) => {
                   const blocked = mins > maxExtendMins;
                   return (
@@ -1732,7 +1717,7 @@ function PanelSession({
                             : "Past closing time"
                           : `Resume session for ${mins} more minutes`
                       }
-                      className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                      className={`py-3 rounded-lg text-sm font-extrabold transition-all ${
                         blocked
                           ? "bg-gray-50 dark:bg-[#0d0d0d] text-gray-300 dark:text-[#333] cursor-not-allowed line-through"
                           : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-white border border-gray-200 dark:border-[#2a2a2a] hover:border-[#D4541A] hover:text-[#D4541A] cursor-pointer"

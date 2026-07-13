@@ -488,24 +488,24 @@ export function TablesContent({
                   <ImageIcon className="h-8 w-8 text-gray-300" />
                 )}
               </div>
-              <div className="p-4 space-y-2">
+              <div className="p-5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span>{typeIcon[table.type] ?? "🎯"}</span>
-                    <h3 className="font-semibold text-gray-900">{table.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{typeIcon[table.type] ?? "🎯"}</span>
+                    <h3 className="font-extrabold text-gray-900 text-lg md:text-xl">{table.name}</h3>
                   </div>
-                  <Badge variant={table.is_active ? "success" : "secondary"}>
+                  <Badge variant={table.is_active ? "success" : "secondary"} className="font-extrabold text-xs">
                     {table.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </div>
-                <p className="text-sm text-gray-500">{loc?.name ?? "—"}</p>
+                <p className="text-sm text-gray-500 font-bold">{loc?.name ?? "—"}</p>
 
                 {hasModes ? (
-                  <div className="space-y-1 pt-1 border-t">
-                    <p className="text-xs font-bold text-purple-700 uppercase tracking-wide">Multi-Game Modes:</p>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="space-y-1.5 pt-1.5 border-t">
+                    <p className="text-xs font-black text-purple-700 uppercase tracking-wide">Multi-Game Modes:</p>
+                    <div className="flex flex-wrap gap-1.5">
                       {table.modes!.map((m) => (
-                        <span key={m.id} className="text-[11px] px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-medium border border-purple-100 flex items-center gap-1">
+                        <span key={m.id} className="text-xs px-2.5 py-1 rounded-md bg-purple-50 text-purple-700 font-bold border border-purple-100 flex items-center gap-1">
                           <span>{m.icon || "🎯"}</span>
                           <span>{m.name}: ₹{m.hourly_rate}/hr</span>
                         </span>
@@ -514,13 +514,13 @@ export function TablesContent({
                   </div>
                 ) : (
                   <>
-                    <p className="text-sm font-medium">
+                    <p className="text-base font-black text-orange-600">
                       {formatCurrency(table.hourly_rate)}/hr
                     </p>
                     {table.people_pricing && Object.keys(table.people_pricing).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-0.5">
+                      <div className="flex flex-wrap gap-1.5 mt-1">
                         {Object.entries(table.people_pricing).sort(([a], [b]) => Number(a) - Number(b)).map(([k, v]) => (
-                          <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">
+                          <span key={k} className="text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 font-bold">
                             {table.type === "ps5" ? `${k}ctrl` : `${k}p`} ₹{v}/hr
                           </span>
                         ))}
@@ -535,6 +535,7 @@ export function TablesContent({
                       <Button
                         variant="outline"
                         size="sm"
+                        className="font-bold h-9 px-3"
                         onClick={() => reactivateMutation.mutate(table.id)}
                       >
                         Reactivate
@@ -542,6 +543,7 @@ export function TablesContent({
                       <Button
                         variant="destructive"
                         size="sm"
+                        className="font-bold h-9 px-3"
                         onClick={() => setPermanentDeleteConfirm(table)}
                       >
                         Delete
@@ -551,17 +553,19 @@ export function TablesContent({
                   <Button
                     variant="outline"
                     size="icon"
+                    className="h-9 w-9"
                     onClick={() => openEdit(table)}
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="h-4.5 w-4.5" />
                   </Button>
                   {table.is_active && (
                     <Button
                       variant="outline"
                       size="icon"
+                      className="h-9 w-9"
                       onClick={() => setDeleteConfirm(table)}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <Trash2 className="h-4.5 w-4.5 text-destructive" />
                     </Button>
                   )}
                 </div>

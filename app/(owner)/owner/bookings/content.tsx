@@ -20,7 +20,7 @@ import type { Booking, Order, Location } from "@/lib/supabase/types";
 
 const supabase = createClient();
 
-type TableRef = { name: string; type: string; location: { name: string; id: string } };
+type TableRef = { id: string; name: string; type: string; location: { name: string; id: string } };
 type BookingRow = Booking & {
   order: {
     customer_name: string;
@@ -247,51 +247,49 @@ export function BookingsContent({
     return true;
   }), [bookings, locationFilter, typeFilter, statusFilter]);
 
-  const groupedBookings = useMemo(() => {
-    const groups: Record<string, BookingRow[]> = {};
+  const bookingsByTable = useMemo(() => {
+    const groups: Record<string, { table: TableRef; bookings: BookingRow[] }> = {};
     for (const b of filtered) {
-      const key = b.order_id || b.id;
-      if (!groups[key]) {
-        groups[key] = [];
+      const table = b.order_item?.table as TableRef | null;
+      if (!table) continue;
+      const tableId = table.id;
+      if (!groups[tableId]) {
+        groups[tableId] = {
+          table,
+          bookings: [],
+        };
       }
-      groups[key].push(b);
+      groups[tableId].bookings.push(b);
     }
-    return Object.values(groups).map((groupList) => {
-      groupList.sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
-      const first = groupList[0];
-      return {
-        id: first.order_id || first.id,
-        customer_name: first.order?.customer_name ?? "—",
-        customer_phone: first.order?.customer_phone ?? null,
-        advance_paid: first.order?.advance_paid ?? 0,
-        location_name: first.order_item?.table?.location?.name ?? "—",
-        bookings: groupList,
-      };
-    });
+    return Object.values(groups)
+      .map((g) => {
+        g.bookings.sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
+        return g;
+      })
+      .sort((a, b) => a.table.name.localeCompare(b.table.name));
   }, [filtered]);
 
   return (
     <div className="space-y-6">
-      {/* Header — only the List view is kept; Schedule was the same data minus
-          the Location column, so it was redundant for multi-location owners. */}
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Bookings</h1>
+        <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">Bookings</h1>
         {mode === "staff" && staffLocationId && (
           <button
             onClick={() => setManualOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-base font-extrabold text-white bg-[#D4541A] hover:opacity-90 transition-opacity shadow-sm"
           >
-            <CalendarPlus className="h-4 w-4" />
+            <CalendarPlus className="h-5 w-5" />
             Manual booking
           </button>
         )}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => shiftDate(-1)}>
-            <ChevronLeft className="h-4 w-4" />
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-1.5">
+          <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => shiftDate(-1)}>
+            <ChevronLeft className="h-5 w-5" />
           </Button>
           <div className="relative">
             <Input
@@ -300,47 +298,49 @@ export function BookingsContent({
               onChange={(e) => setDate(e.target.value)}
               className="w-10 opacity-0 absolute inset-0 cursor-pointer"
             />
-            <div className="flex items-center gap-1.5 px-3 h-9 rounded-md border border-input bg-background text-sm font-medium min-w-[160px] justify-center pointer-events-none">
+            <div className="flex items-center gap-2 px-4 h-11 rounded-lg border border-input bg-background text-base font-semibold min-w-[200px] justify-center pointer-events-none">
               {displayDate}
-              {isToday && <span className="text-[10px] font-bold text-orange-500 uppercase">Today</span>}
+              {isToday && <span className="text-[11px] font-extrabold text-orange-500 uppercase tracking-wide">Today</span>}
             </div>
           </div>
-          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => shiftDate(1)}>
-            <ChevronRight className="h-4 w-4" />
+          <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => shiftDate(1)}>
+            <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
 
         <Select value={locationFilter} onValueChange={setLoc}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-48 h-11 text-base font-medium">
             <SelectValue placeholder="All locations" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All locations</SelectItem>
+            <SelectItem value="all" className="text-base font-medium">All locations</SelectItem>
             {locations?.map((l) => (
-              <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+              <SelectItem key={l.id} value={l.id} className="text-base font-medium">{l.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={typeFilter} onValueChange={setType}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-44 h-11 text-base font-medium">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {tableTypes.map((t) => (
-              <SelectItem key={t} value={t}>{TYPE_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+              <SelectItem key={t} value={t} className="text-base font-medium">
+                {TYPE_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1)}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={statusFilter} onValueChange={setStatus}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-44 h-11 text-base font-medium">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="all" className="text-base font-medium">All statuses</SelectItem>
             {Object.entries(STATUS_LABELS).map(([v, l]) => (
-              <SelectItem key={v} value={v}>{l}</SelectItem>
+              <SelectItem key={v} value={v} className="text-base font-medium">{l}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -348,72 +348,89 @@ export function BookingsContent({
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="h-11 w-11 shrink-0"
           onClick={() => void refetch()}
         >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+          <RefreshCw className={cn("h-5 w-5", isLoading && "animate-spin")} />
         </Button>
-        <span className="text-xs font-semibold text-gray-700">
+        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
           {filtered.length} booking{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      {/* Outside-hours banner — only on staff mode when the shop isn't open */}
+      {/* Outside-hours banner */}
       {mode === "staff" && !actionsAllowed && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold px-3 py-2">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-400 text-sm font-bold px-4 py-3 leading-relaxed">
           {actionsBlockedReason}. Check-in and No-show are disabled until the shop is open.
         </div>
       )}
 
-      {/* Bookings list — single view (Location column included) */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-100 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Booked Slots (Table & Time)</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Location</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Advance</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 uppercase text-[11px] tracking-wide">Status & Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {groupedBookings.map((g) => {
-                return (
-                  <tr key={g.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-gray-900">
-                      <span>{g.customer_name}</span>
-                      {g.customer_phone && (
-                        <span className="text-xs text-gray-500 font-normal ml-1.5">({g.customer_phone})</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="space-y-1.5 py-1">
-                        {g.bookings.map((b) => {
-                          const table = b.order_item?.table as TableRef | null;
-                          return (
-                            <div key={b.id} className="flex items-center gap-2 h-7 text-sm">
-                              <span className="inline-flex items-center justify-center font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300">
-                                {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
-                              </span>
-                              <span className="text-gray-900 font-medium">
-                                <span className="mr-1">{TYPE_ICON[table?.type ?? ""] ?? "🎯"}</span>
-                                {table?.name ?? "—"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 font-medium vertical-middle align-middle">{g.location_name}</td>
-                    <td className="px-4 py-3 text-gray-900 font-bold tabular-nums align-middle">
-                      {g.advance_paid > 0 ? `₹${Math.round(g.advance_paid)}` : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="space-y-1.5 py-1">
-                        {g.bookings.map((b) => (
-                          <div key={b.id} className="flex items-center justify-between gap-4 h-7 min-w-[220px]">
+      {/* Bookings grouped by Table */}
+      <div className="space-y-8">
+        {bookingsByTable.map((group) => {
+          const { table, bookings: tableBookings } = group;
+          return (
+            <div
+              key={table.id}
+              className="bg-white dark:bg-[#161616] rounded-2xl border border-gray-200 dark:border-[#222] shadow-sm overflow-hidden p-4 md:p-6 space-y-4"
+            >
+              {/* Table Name Header */}
+              <div className="flex items-center justify-between border-b border-gray-200 dark:border-[#222] pb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">
+                    <span className="mr-2">{TYPE_ICON[table.type] ?? "🎱"}</span>
+                    {table.name}
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-[#222] text-gray-600 dark:text-gray-400">
+                    {table.location.name}
+                  </span>
+                </div>
+                <span className="text-sm md:text-base font-bold text-gray-500 dark:text-gray-400">
+                  {tableBookings.length} slot{tableBookings.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {/* Slots Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-base">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-[#222] text-left">
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Time Slot</th>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Customer</th>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Advance Paid</th>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-400 uppercase text-xs tracking-wider">Status & Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-[#222]">
+                    {tableBookings.map((b) => (
+                      <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-[#1f1f1f]/50 transition-colors">
+                        {/* Time Slot */}
+                        <td className="px-4 py-4 font-semibold text-gray-900 dark:text-white align-middle">
+                          <span className="inline-flex items-center justify-center font-mono text-[13px] md:text-sm font-semibold px-3 py-1 rounded-md bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300">
+                            {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
+                          </span>
+                        </td>
+
+                        {/* Customer */}
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-gray-900 dark:text-white text-base md:text-lg">{b.order?.customer_name ?? "—"}</span>
+                            {b.order?.customer_phone && (
+                              <span className="text-sm text-gray-500 dark:text-gray-400 font-semibold mt-0.5">{b.order.customer_phone}</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Advance Paid */}
+                        <td className="px-4 py-4 text-gray-950 dark:text-gray-100 font-black tabular-nums text-base md:text-lg align-middle">
+                          {b.order?.advance_paid && b.order.advance_paid > 0 ? `₹${Math.round(b.order.advance_paid)}` : "—"}
+                        </td>
+
+                        {/* Status & Actions */}
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex items-center justify-between gap-4">
                             <Badge
+                              className="px-2.5 py-1 text-xs md:text-sm font-extrabold shrink-0"
                               variant={
                                 b.status === "confirmed"  ? "success"     :
                                 b.status === "checked_in" ? "outline"     :
@@ -423,17 +440,17 @@ export function BookingsContent({
                             >
                               {STATUS_LABELS[b.status] ?? b.status}
                             </Badge>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-2">
                               {(b.status === "no_show" || b.status === "cancelled") && (
-                                <Button variant="outline" size="sm" className="h-7 text-[11px] px-2" onClick={() => setRefund(b)}>
+                                <Button variant="outline" size="sm" className="h-9 text-xs px-3 font-bold" onClick={() => setRefund(b)}>
                                   Refund
                                 </Button>
                               )}
                               {mode === "staff" && b.status === "confirmed" && (
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-2">
                                   <Button
                                     size="sm"
-                                    className="h-7 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    className="h-9 text-xs px-3 font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
                                     onClick={() => doCheckIn(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Check in this slot"}
@@ -443,7 +460,7 @@ export function BookingsContent({
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 text-[11px] px-2"
+                                    className="h-9 text-xs px-3 font-bold"
                                     onClick={() => doNoShow(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
@@ -454,30 +471,30 @@ export function BookingsContent({
                               )}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!isLoading && groupedBookings.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500 font-medium">
-                    No bookings for this date
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {!isLoading && bookingsByTable.length === 0 && (
+        <div className="bg-white dark:bg-[#161616] rounded-2xl border border-gray-200 dark:border-[#222] shadow-sm p-12 text-center text-lg text-gray-500 dark:text-gray-400 font-semibold">
+          No bookings for this date
         </div>
+      )}
 
       {/* Refund dialog */}
       <Dialog open={!!refundBooking} onOpenChange={() => setRefund(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Process Refund</DialogTitle>
+            <DialogTitle className="text-lg font-bold">Process Refund</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 text-sm text-gray-600">
+          <div className="space-y-3 text-base text-gray-600 dark:text-[#ccc]">
             <p>Customer: <strong>{refundBooking?.order?.customer_name}</strong></p>
             <p>Phone: <strong>{refundBooking?.order?.customer_phone ?? "—"}</strong></p>
             <p>
@@ -486,14 +503,14 @@ export function BookingsContent({
                 {refundBooking ? `${fmt(refundBooking.scheduled_start)} – ${fmt(refundBooking.scheduled_end)}` : "—"}
               </strong>
             </p>
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-xs leading-relaxed">
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 px-4 py-3 text-amber-800 dark:text-amber-400 text-sm leading-relaxed">
               Online bookings are prepaid via Razorpay. Process the refund in your{" "}
               <strong>Razorpay Dashboard → Payments → Refunds</strong>, then mark it resolved here.
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRefund(null)}>Close</Button>
-            <Button onClick={() => setRefund(null)}>Mark Resolved</Button>
+            <Button variant="outline" className="h-10 text-sm font-semibold" onClick={() => setRefund(null)}>Close</Button>
+            <Button className="h-10 text-sm font-bold bg-[#D4541A] hover:bg-[#D4541A]/90 text-white" onClick={() => setRefund(null)}>Mark Resolved</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

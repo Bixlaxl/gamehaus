@@ -106,6 +106,15 @@ Indian mobile numbers must be verified as exactly 10 digits starting with `6`, `
 >
 > **7. Owner-Only Finalized Bill Deletion**
 > Deletion of finalized transactions/bills is restricted strictly to owners. The endpoint `DELETE /api/pos/bills/[id]` must authenticate the user and return a `403 Forbidden` error if the role is not 'owner'. POS/Staff screens must not expose deletion controls.
+>
+> **8. Walk-in Session Merging & De-duplication**
+> To prevent customers playing sequential tables from facing blocked sessions, `POST /api/walkin` automatically appends new walk-in table items to a customer's existing open order if one is already active under their phone number.
+>
+> **9. Idle Table Release**
+> In the global walk-in table slider, tables with active items in `"finished"` status must be considered idle/available so a new customer can occupy the table even if the previous bill remains open under the merged order.
+>
+> **10. POS & Owner UI Legibility Constraints**
+> To avoid eye strain on high-resolution iMac displays, typography sizes must be scaled up (table grids use `text-lg` titles, inputs/buttons use `text-base` and height `h-11`, and main table data uses `text-base`). Avoid using `text-xs` for primary readable details.
 
 ---
 
@@ -115,3 +124,4 @@ Indian mobile numbers must be verified as exactly 10 digits starting with `6`, `
 * **Next.js Caching:** Edge API routes must declare `export const dynamic = "force-dynamic"` to bypass Vercel's URL caching.
 * **Local Time:** Always extract dates using the `getLocalDateString("Asia/Kolkata", date)` helper instead of UTC strings. Early morning bookings can shift dates if UTC is used.
 * **`finalizeOrderId` vs `selectedOrderId`:** In `finalize-bill-modal.tsx`, always look up the order using the store's `finalizeOrderId` rather than `selectedOrderId`. They are separate fields and misaligning them results in incorrect bill displays.
+* **Bookings Categorization:** Bookings list view groups bookings by physical Table rather than orders, sorted in chronological ascending order of timeslot. Ensure queries select the table `id`.

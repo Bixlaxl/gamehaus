@@ -563,16 +563,16 @@ export function MembershipsContent({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">ID</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Customer</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Phone</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Plan</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Benefit</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">Available Hours</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600 whitespace-nowrap">Expires</th>
+                  <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">ID</th>
+                  <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">Customer</th>
+                  <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">Phone</th>
+                  <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">Plan</th>
+                  <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">Benefit</th>
+                  <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">Available Hours</th>
+                  <th className="px-4 py-3.5 text-right font-black text-gray-700 whitespace-nowrap">Expires</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -585,59 +585,59 @@ export function MembershipsContent({
                       className="hover:bg-gray-50/80 cursor-pointer transition-colors"
                       onClick={() => openManagePerks(a)}
                     >
-                      <td className="px-4 py-3 font-mono text-xs font-bold text-purple-600">
+                      <td className="px-4 py-4 font-mono text-sm font-bold text-purple-600">
                         {a.short_id || "—"}
                       </td>
-                      <td className="px-4 py-3 text-gray-800 font-medium max-w-[140px] truncate">
+                      <td className="px-4 py-4 text-gray-900 font-extrabold max-w-[140px] truncate text-base md:text-lg">
                         {a.customer_name && a.customer_name !== "Unknown"
                           ? a.customer_name
-                          : <span className="text-gray-400 italic">Unknown</span>}
+                          : <span className="text-gray-400 italic font-semibold">Unknown</span>}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                      <td className="px-4 py-4 font-mono text-sm text-gray-600 font-semibold">
                         {a.customer_phone}
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
+                      <td className="px-4 py-4 font-bold text-gray-900">
                         {a.plan?.name ?? "—"}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-1.5">
                           {hasFreeHrs && (
-                            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
-                              <Clock className="h-3 w-3" />
+                            <span className="inline-flex items-center gap-1.5 text-sm font-bold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
+                              <Clock className="h-3.5 w-3.5" />
                               {a.plan!.free_hrs} hrs total
                             </span>
                           )}
                           {hasDiscount && (
-                            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
-                              <Percent className="h-3 w-3" />
+                            <span className="inline-flex items-center gap-1.5 text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-1">
+                              <Percent className="h-3.5 w-3.5" />
                               {a.plan!.discount_pct}% Off
                             </span>
                           )}
                           {!hasFreeHrs && !hasDiscount && (
-                            <span className="text-gray-400 text-xs">—</span>
+                            <span className="text-gray-400 text-sm font-semibold">—</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         {hasFreeHrs ? (() => {
                           const ledger = a.free_hours_ledger && typeof a.free_hours_ledger === "object" ? a.free_hours_ledger : {};
                           const ledgerVals = Object.values(ledger).map(v => Number(v)).filter(v => !isNaN(v));
                           const remainingHrs = ledgerVals.length > 0 ? Math.max(...ledgerVals) : (a.plan?.free_hrs ?? 0);
                           return (
-                            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                            <span className={`inline-flex items-center gap-1.5 text-sm font-extrabold px-3 py-1 rounded-full ${
                               remainingHrs > 0
                                 ? "text-purple-700 bg-purple-50 border border-purple-200"
                                 : "text-gray-500 bg-gray-100 border border-gray-200"
                             }`}>
-                              <Clock className="h-3 w-3" />
+                              <Clock className="h-3.5 w-3.5" />
                               {remainingHrs} hrs avail
                             </span>
                           );
                         })() : (
-                          <span className="text-gray-400 text-xs">—</span>
+                          <span className="text-gray-400 text-sm font-semibold">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-500 text-xs whitespace-nowrap">
+                      <td className="px-4 py-4 text-right text-gray-600 text-sm font-semibold whitespace-nowrap">
                         {fmtDate(a.expires_at)}
                       </td>
                     </tr>

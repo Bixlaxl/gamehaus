@@ -396,25 +396,25 @@ export function InventoryContent({
                       <ImageIcon className="h-7 w-7 text-gray-300" />
                     )}
                   </div>
-                  <div className="p-4 space-y-1.5">
+                  <div className="p-5 space-y-2">
                     <div className="flex items-center justify-between gap-1">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{item.name}</p>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <p className="font-black text-gray-900 text-base truncate">{item.name}</p>
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {item.show_at_checkout && (
-                          <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-200 bg-purple-50">
+                          <Badge variant="outline" className="text-xs font-bold text-purple-600 border-purple-200 bg-purple-50">
                             Online Checkout
                           </Badge>
                         )}
-                        <Badge variant={item.is_active ? "success" : "secondary"}>
+                        <Badge variant={item.is_active ? "success" : "secondary"} className="text-xs font-bold">
                           {item.is_active ? "Active" : "Off"}
                         </Badge>
                       </div>
                     </div>
-                    <p className="text-xs text-gray-400">{loc?.name ?? "—"}</p>
+                    <p className="text-sm text-gray-500 font-bold">{loc?.name ?? "—"}</p>
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-bold text-gray-900">{formatCurrency(item.selling_price)}</p>
+                      <p className="text-base font-extrabold text-gray-900">{formatCurrency(item.selling_price)}</p>
                       <span
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                        className="text-xs font-black px-2.5 py-0.5 rounded-full"
                         style={
                           m >= 50
                             ? { background: "rgba(16,185,129,0.1)", color: "#10b981" }
@@ -427,20 +427,20 @@ export function InventoryContent({
                       </span>
                     </div>
                     {item.cost_price > 0 && (
-                      <p className="text-xs text-gray-400">Cost: {formatCurrency(item.cost_price)}</p>
+                      <p className="text-sm text-gray-500 font-semibold">Cost: {formatCurrency(item.cost_price)}</p>
                     )}
                     <div className="flex items-center justify-between pt-1">
                       <StockBadge item={item} size="sm" />
                       <StockControls item={item} invalidateKeys={[["inventory", selectedLocation]]} />
                     </div>
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
-                        <Pencil className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => openEdit(item)}>
+                        <Pencil className="h-4.5 w-4.5" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 text-xs"
+                        className="h-9 text-xs font-bold"
                         onClick={() => toggleMutation.mutate({ id: item.id, is_active: !item.is_active })}
                       >
                         {item.is_active ? "Deactivate" : "Activate"}
@@ -449,11 +449,11 @@ export function InventoryContent({
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 w-8"
+                          className="h-9 w-9"
                           onClick={() => setPermanentDeleteConfirm(item)}
                           title="Permanently delete"
                         >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          <Trash2 className="h-4.5 w-4.5 text-destructive" />
                         </Button>
                       )}
                     </div>

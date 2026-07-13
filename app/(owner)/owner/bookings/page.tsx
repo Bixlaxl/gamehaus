@@ -26,7 +26,7 @@ export default async function BookingsPage() {
 
   const { data: bookings } = await admin
     .from("bookings")
-    .select(`*, order:orders(customer_name, customer_phone, advance_paid, type, status), order_item:order_items(table:tables(name, type, location:locations(name, id)))`)
+    .select(`*, order:orders(customer_name, customer_phone, advance_paid, type, status), order_item:order_items(table:tables(id, name, type, location:locations(name, id)))`)
     .gte("scheduled_start", from)
     .lte("scheduled_start", to)
     .order("scheduled_start");

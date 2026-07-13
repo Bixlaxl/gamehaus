@@ -252,8 +252,11 @@ The billing engine calculations must follow a deterministic flow to avoid discre
 
 ---
 
-## 7. Performance Optimizations
+## 7. Performance & Ergonomic Optimizations
 
+* **Walk-in Order Merging:** Upgraded `POST /api/walkin` to de-duplicate walk-in orders. If the client phone matches an existing open order, the session is appended, eliminating duplicate payments/finalizations.
+* **Idle Table Release:** Tables with finished sessions are marked as idle/available in `components/pos/walk-in-slider.tsx` filters, allowing table reuse without blocking the unpaid parent order.
 * **Throttled Clock Subscriptions:** High-level wrapper components do not listen to the Zustand 1Hz `now` clock. This limits UI updates to only the active `RunningCard` timers, keeping POS page renders fast.
 * **Lazy Overlay Mounting:** Core overlays (modals for Finalize Bill, Stop confirmation, Extend, Walk-In panels) are loaded dynamically using Next.js `next/dynamic`. They only render inside the DOM when triggered.
 * **Path-Change & Tab-Focus Prefetching:** The sidebar navigates owners using `<Link>` components that prefetch the route data. `OwnerNav` refreshes on tab focus to maintain fresh data states without polling.
+* **iMac Legibility Layout:** Standardised text sizes and line spacing (header height `h-16`, table rows using `text-base` minimum, input fields using `py-3 text-base font-semibold`) across Staff POS and Owner dashboards to optimize readability on large iMac displays.

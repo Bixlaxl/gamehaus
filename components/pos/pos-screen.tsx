@@ -291,33 +291,33 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
-        <header className="shrink-0 flex items-center justify-between px-5 h-14 bg-white dark:bg-[#111] border-b border-gray-200 dark:border-[#1f1f1f]">
+        <header className="shrink-0 flex items-center justify-between px-6 h-16 bg-white dark:bg-[#111] border-b border-gray-200 dark:border-[#1f1f1f]">
           <div className="flex items-center gap-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-extrabold text-gray-900 dark:text-white text-sm tracking-tight">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-black text-gray-900 dark:text-white text-base tracking-tight">
               {locationName}
             </span>
-            <span className="text-[#555] font-bold">·</span>
-            <span className="text-xs font-medium text-[#888]">{staffName}</span>
+            <span className="text-[#555] font-bold text-base">·</span>
+            <span className="text-sm font-semibold text-[#888]">{staffName}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={() => setCheckinOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-extrabold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
             >
-              <QrCode className="h-3.5 w-3.5" />
+              <QrCode className="h-4 w-4" />
               Check-in
             </button>
             <button
               onClick={() => setUpcomingDrawerOpen(true)}
-              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
+              className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-extrabold text-gray-700 dark:text-white transition-all border border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#555] hover:bg-gray-50 dark:hover:bg-[#1e1e1e]"
               title="Today's upcoming bookings"
             >
-              <CalendarClock className="h-3.5 w-3.5" />
+              <CalendarClock className="h-4 w-4" />
               {upcomingTotal > 0 ? `${upcomingTotal} upcoming` : "Upcoming"}
               {soonCount > 0 && (
                 <span
-                  className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold tabular-nums"
+                  className="ml-1 px-2 py-0.5 rounded-full text-xs font-black tabular-nums"
                   style={{ background: "#f59e0b", color: "#000" }}
                 >
                   {soonCount} soon
@@ -338,10 +338,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
                 }
                 setWalkInOpen(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-white text-xs font-bold transition-opacity hover:opacity-90 active:opacity-75"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-black transition-opacity hover:opacity-90 active:opacity-75 shadow-sm"
               style={{ background: "#D4541A" }}
             >
-              <UserPlus className="h-3.5 w-3.5" />
+              <UserPlus className="h-4 w-4" />
               Walk-in
             </button>
           </div>
