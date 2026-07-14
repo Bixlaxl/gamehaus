@@ -338,11 +338,11 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
           <div
             className="shrink-0 border-l border-gray-200 dark:border-[#1f1f1f] overflow-hidden flex flex-col bg-white dark:bg-[#111]"
             style={{
-              width:      showContextPanel ? 520 : 0,
+              width:      showContextPanel ? 580 : 0,
               transition: "width 0.25s ease",
             }}
           >
-            <div style={{ width: 520, height: "100%" }}>
+            <div style={{ width: 580, height: "100%" }}>
               {showContextPanel && <ContextPanel locationId={locationId} closingTime={closingTime} />}
             </div>
           </div>

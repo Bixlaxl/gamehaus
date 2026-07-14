@@ -1534,16 +1534,16 @@ function PanelSession({
 
           {/* Catalogue items already added — summary list (always visible if any) */}
           {groupedExtras.filter((e) => e.inventory_item_id).length > 0 && (
-            <div className="px-3 py-2 space-y-1 border-b border-gray-100 dark:border-[#1f1f1f]">
+            <div className="px-4 py-3 space-y-2 border-b border-gray-100 dark:border-[#1f1f1f]">
               {groupedExtras
                 .filter((e) => e.inventory_item_id)
                 .map((extra) => (
-                  <div key={extra.id} className="flex items-center justify-between py-0.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-gray-800 dark:text-[#ddd] truncate">{extra.name}</span>
-                      <span className="text-xs shrink-0 text-gray-500 dark:text-[#999]">×{extra.quantity}</span>
+                  <div key={extra.id} className="flex items-center justify-between py-1">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-lg font-black text-gray-800 dark:text-[#ddd] truncate">{extra.name}</span>
+                      <span className="text-sm shrink-0 text-gray-500 dark:text-[#999] font-extrabold">×{extra.quantity}</span>
                     </div>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
+                    <span className="text-lg font-black text-gray-900 dark:text-white tabular-nums">
                       {formatCurrency(extra.price * extra.quantity)}
                     </span>
                   </div>
@@ -1553,20 +1553,20 @@ function PanelSession({
 
           {/* Custom items list — only shown if any non-catalogue extras exist */}
           {groupedExtras.some((e) => !e.inventory_item_id) && (
-            <div className="border-b border-gray-100 dark:border-[#1f1f1f] px-3 pt-2 pb-3 space-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#888] mb-1">
+            <div className="border-b border-gray-100 dark:border-[#1f1f1f] px-4 pt-3 pb-4 space-y-2">
+              <p className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-[#888] mb-1">
                 Custom items
               </p>
               {groupedExtras
                 .filter((e) => !e.inventory_item_id)
                 .map((extra) => (
                   <div key={extra.id} className="flex items-center justify-between py-1 px-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm text-gray-900 dark:text-white truncate">{extra.name}</span>
-                      <span className="text-xs shrink-0 text-gray-500 dark:text-[#999]">×{extra.quantity}</span>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-lg font-black text-gray-900 dark:text-white truncate">{extra.name}</span>
+                      <span className="text-sm shrink-0 text-gray-500 dark:text-[#999] font-extrabold">×{extra.quantity}</span>
                     </div>
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-lg font-black text-gray-900 dark:text-white">
                         {formatCurrency(extra.price * extra.quantity)}
                       </span>
                       <button
@@ -1574,7 +1574,7 @@ function PanelSession({
                         className="text-gray-400 hover:text-red-400 transition-colors"
                         aria-label="Remove custom item"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-5 w-5" />
                       </button>
                     </div>
                   </div>

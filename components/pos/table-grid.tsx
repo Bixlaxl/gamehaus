@@ -350,7 +350,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
                 Started {startedAt}
               </span>
               {order?.customer_phone && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-sm font-black">
+                <span className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-600 dark:text-amber-400 text-base font-black shadow-sm">
                   ★ {points} pts
                 </span>
               )}
