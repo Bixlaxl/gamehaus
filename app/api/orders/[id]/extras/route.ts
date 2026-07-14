@@ -35,7 +35,7 @@ export async function POST(
     return NextResponse.json(err("Order not found or not open", "INVALID_STATE"), { status: 400 });
   }
 
-  const { name, price, cost_price, quantity, inventory_item_id } = parsed.data;
+  const { name, price, cost_price, quantity, inventory_item_id, source } = parsed.data;
 
   let finalName = name;
   let finalPrice = price;
@@ -55,6 +55,10 @@ export async function POST(
       finalCostPrice = Number(invItem.cost_price ?? 0);
       fetchedInvItem = invItem as any;
     }
+  }
+
+  if (source !== "pos") {
+    finalName = `[PENDING] ${finalName}`;
   }
 
   const { data: extra, error } = await admin

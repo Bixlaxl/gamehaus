@@ -28,6 +28,7 @@ function todayLocalDateStr(): string {
 
 export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated }: Props) {
   const qc = useQueryClient();
+  const [showConfirm, setShowConfirm] = useState(false);
   const [name,  setName]  = useState("");
   const [phone, setPhone] = useState("");
   const [tableId, setTableId] = useState("");
@@ -41,6 +42,18 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   const [isRegistered, setIsRegistered] = useState(false);
   const [lookingUpPhone, setLookingUpPhone] = useState(false);
+
+  function validateForm() {
+    if (!name.trim()) { setError("Customer name is required"); return false; }
+    if (!/^\d{10}$/.test(phone.trim())) { setError("Phone must be exactly 10 digits"); return false; }
+    if (!tableId) { setError("Pick a table"); return false; }
+    if (!chosenTable) { setError("Selected table not found"); return false; }
+    if (slotConflict) { setError("Selected time window overlaps with an existing booking"); return false; }
+    const advanceNum = parseFloat(advanceAmount);
+    const wantAdvance = !!advanceAmount && Number.isFinite(advanceNum) && advanceNum > 0;
+    if (wantAdvance && !advanceMethod) { setError("Pick cash or UPI for the advance"); return false; }
+    return true;
+  }
 
   // Customer phone lookup & autofill
   useEffect(() => {
@@ -316,9 +329,109 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       qc.invalidateQueries({ queryKey: ["pos-bookings"] });
       qc.invalidateQueries({ queryKey: ["staff-bookings"] });
       onCreated();
+      setShowConfirm(false);
+      onClose();
     },
     onError: (e) => setError((e as Error).message),
   });
+
+  if (showConfirm) {
+    const startDisplay = selectedPill ? selectedPill.label : time;
+    const dateDisplay = new Date(date).toLocaleDateString("en-IN", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
+    return (
+      <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+          <DialogHeader className="px-6 py-5 border-b border-gray-200 dark:border-[#1F1F1F]">
+            <DialogTitle className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5" style={{ color: "#D4541A" }} /> Confirm Booking Details
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            <p className="text-base text-gray-500 dark:text-gray-400 font-extrabold">
+              Please double check the booking information before sending the WhatsApp confirmation message to the customer:
+            </p>
+
+            <div className="grid grid-cols-1 gap-5 bg-gray-50 dark:bg-[#161616] p-6 rounded-2xl border border-gray-200 dark:border-[#222]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-150 dark:border-[#222] pb-3 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Customer Name</span>
+                <span className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white">{name.trim()}</span>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-150 dark:border-[#222] pb-3 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Phone Number</span>
+                <span className="text-2xl md:text-3xl font-black text-gray-950 dark:text-white font-mono">{phone.trim()}</span>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-150 dark:border-[#222] pb-3 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Selected Table</span>
+                <span className="text-2xl md:text-3xl font-black text-gray-950 dark:text-white font-black">
+                  {chosenTable?.name} {selectedMode ? `(${selectedMode.name})` : ""}
+                </span>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-150 dark:border-[#222] pb-3 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Date & Start Time</span>
+                <span className="text-2xl md:text-3xl font-black text-gray-950 dark:text-white">
+                  {dateDisplay} @ {startDisplay}
+                </span>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-150 dark:border-[#222] pb-3 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Duration</span>
+                <span className="text-2xl md:text-3xl font-black text-gray-950 dark:text-white">
+                  {duration} minutes
+                </span>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-150 dark:border-[#222] pb-3 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Advance Paid</span>
+                <span className="text-2xl md:text-3xl font-black text-gray-955 dark:text-white font-mono">
+                  {advanceAmount ? `₹${advanceAmount} via ${advanceMethod?.toUpperCase()}` : "No Advance"}
+                </span>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between pb-1 gap-2">
+                <span className="text-base font-extrabold text-gray-400">Estimated Total Cost</span>
+                <span className="text-2xl md:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono">
+                  ₹{estimatedTotal}
+                </span>
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-sm rounded-md px-3 py-2"
+                style={{ background: "rgba(239,68,68,0.07)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.2)" }}>
+                {error}
+              </p>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
+            <button
+              type="button"
+              onClick={() => { setError(null); setShowConfirm(false); }}
+              className="h-14 px-6 rounded-xl text-base font-extrabold bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
+            >
+              Back / Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (create.isPending) return;
+                setError(null);
+                create.mutate();
+              }}
+              disabled={create.isPending}
+              className="h-14 px-8 rounded-xl text-base font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {create.isPending ? "Booking..." : "Confirm & Book"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -576,14 +689,15 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           <button
             type="button"
             onClick={() => {
-              if (create.isPending) return;
               setError(null);
-              create.mutate();
+              if (validateForm()) {
+                setShowConfirm(true);
+              }
             }}
             disabled={create.isPending || slotConflict}
             className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"
           >
-            {create.isPending ? "Creating…" : "Create booking"}
+            Create booking
           </button>
         </div>
       </DialogContent>

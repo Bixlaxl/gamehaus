@@ -87,7 +87,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
   const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted) ?? [];
-  const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted) ?? [];
+  const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]")) ?? [];
 
   const allMemberships = validatedMemberships.length > 0
     ? validatedMemberships

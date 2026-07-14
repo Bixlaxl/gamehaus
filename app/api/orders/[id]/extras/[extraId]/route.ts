@@ -7,7 +7,8 @@ import { ok, err } from "@/lib/validators/schemas";
 export const runtime = 'edge';
 
 const patchSchema = z.object({
-  quantity: z.number().int().min(1),
+  quantity: z.number().int().min(1).optional(),
+  name: z.string().optional(),
 });
 
 export async function PATCH(
@@ -33,9 +34,13 @@ export async function PATCH(
     .eq("id", extraId)
     .single();
 
+  const updateFields: any = {};
+  if (parsed.data.quantity !== undefined) updateFields.quantity = parsed.data.quantity;
+  if (parsed.data.name !== undefined) updateFields.name = parsed.data.name;
+
   const { data, error } = await admin
     .from("order_extras")
-    .update({ quantity: parsed.data.quantity })
+    .update(updateFields)
     .eq("id", extraId)
     .select()
     .single();
@@ -44,7 +49,7 @@ export async function PATCH(
 
   // If quantity changed and this extra is linked to a stock item, adjust by
   // the difference (positive delta = sold more = stock down).
-  if (existing?.inventory_item_id && existing.quantity !== parsed.data.quantity) {
+  if (existing?.inventory_item_id && parsed.data.quantity !== undefined && existing.quantity !== parsed.data.quantity) {
     const delta = parsed.data.quantity - existing.quantity; // sold more = positive
     const { data: invItem } = await admin
       .from("inventory_items")

@@ -325,7 +325,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
         </header>
 
         {/* Alert strip */}
-        <POSAlerts />
+        <POSAlerts locationId={locationId} />
 
         {/* Split content */}
         <div className="flex-1 flex overflow-hidden">

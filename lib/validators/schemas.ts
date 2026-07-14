@@ -148,6 +148,7 @@ export const addExtraSchema = z.object({
   cost_price: z.number().min(0).optional().default(0),
   quantity: z.number().int().positive().default(1),
   inventory_item_id: z.string().uuid().optional(),
+  source: z.string().optional(),
 });
 
 

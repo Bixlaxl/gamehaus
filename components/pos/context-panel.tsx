@@ -911,7 +911,7 @@ function PanelSession({
   });
 
   const activeItems  = order.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
-  const activeExtras = order.extras.filter((e) => !e.is_deleted);
+  const activeExtras = order.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]"));
   const groupedExtras = Array.from(
     activeExtras.reduce((acc, current) => {
       const key = `${current.name}_${current.price}_${current.inventory_item_id || ""}`;
@@ -998,6 +998,7 @@ function PanelSession({
           cost_price:        opts.cost_price ?? 0,
           quantity:          opts.quantity,
           inventory_item_id: opts.inventory_item_id,
+          source:            "pos",
         }),
       });
       if (!res.ok) {
