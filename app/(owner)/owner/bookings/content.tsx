@@ -426,7 +426,7 @@ export function BookingsContent({
                         </td>
 
                         {/* Advance Paid */}
-                        <td className="px-4 py-5 text-gray-950 dark:text-gray-100 font-black tabular-nums text-lg md:text-xl align-middle">
+                        <td className="px-4 py-5 text-gray-950 dark:text-gray-100 font-black tabular-nums text-2xl md:text-3xl align-middle">
                           {b.order?.advance_paid && b.order.advance_paid > 0 ? `₹${Math.round(b.order.advance_paid)}` : "—"}
                         </td>
 
@@ -434,7 +434,7 @@ export function BookingsContent({
                         <td className="px-4 py-5 align-middle">
                           <div className="flex items-center justify-between gap-6">
                             <Badge
-                              className="px-4.5 py-2.5 text-base md:text-lg font-black shrink-0 rounded-xl"
+                              className="px-6 py-3.5 text-xl md:text-2xl font-black shrink-0 rounded-2xl"
                               variant={
                                 b.status === "confirmed"  ? "success"     :
                                 b.status === "checked_in" ? "outline"     :
@@ -449,7 +449,7 @@ export function BookingsContent({
                                 <div className="flex items-center gap-3">
                                   <Button
                                     size="default"
-                                    className="h-14 text-base px-6 font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm rounded-xl"
+                                    className="h-16 text-xl px-8 font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm rounded-2xl"
                                     onClick={() => doCheckIn(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Check in this slot"}
@@ -459,7 +459,7 @@ export function BookingsContent({
                                   <Button
                                     variant="outline"
                                     size="default"
-                                    className="h-14 text-base px-6 font-black text-gray-500 hover:text-red-500 hover:border-red-200 rounded-xl"
+                                    className="h-16 text-xl px-8 font-black text-gray-500 hover:text-red-500 hover:border-red-200 rounded-2xl"
                                     onClick={() => doNoShow(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
