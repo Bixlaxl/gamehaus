@@ -62,13 +62,15 @@ export default async function StaffBillsPage() {
 
   return (
     <main className="pos-bookings-dark flex-1 overflow-y-auto p-6">
-      <BillsContent
-        locationId={profile.location_id}
-        locationName={location?.name ?? ""}
-        initial={filteredInitial as unknown as BillRow[]}
-        tables={tables ?? []}
-        inventoryItems={inventory ?? []}
-      />
+      <div className="max-w-[1600px] mx-auto w-full">
+        <BillsContent
+          locationId={profile.location_id}
+          locationName={location?.name ?? ""}
+          initial={filteredInitial as unknown as BillRow[]}
+          tables={tables ?? []}
+          inventoryItems={inventory ?? []}
+        />
+      </div>
     </main>
   );
 }
