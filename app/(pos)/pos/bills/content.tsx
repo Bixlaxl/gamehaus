@@ -523,12 +523,12 @@ export function BillsContent({
                           className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-lg font-black text-gray-900 dark:text-white truncate">
+                            <p className="text-2xl font-black text-gray-900 dark:text-white truncate">
                               {s.name ?? "(no name)"}
                             </p>
-                            <p className="text-xs font-mono text-gray-600 dark:text-[#aaa]">{s.phone}</p>
+                            <p className="text-lg font-extrabold text-gray-655 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
                           </div>
-                          <span className="shrink-0 text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
+                          <span className="shrink-0 text-sm font-black uppercase tracking-wider px-3 py-2 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
                             {s.visit_count}× · {s.points_balance} pts
                           </span>
                         </button>
@@ -560,12 +560,12 @@ export function BillsContent({
                           className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-lg font-black text-gray-900 dark:text-white truncate">
+                            <p className="text-2xl font-black text-gray-900 dark:text-white truncate">
                               {s.name ?? "(no name)"}
                             </p>
-                            <p className="text-xs font-mono text-gray-600 dark:text-[#aaa]">{s.phone}</p>
+                            <p className="text-lg font-extrabold text-gray-655 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
                           </div>
-                          <span className="shrink-0 text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
+                          <span className="shrink-0 text-sm font-black uppercase tracking-wider px-3 py-2 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
                             {s.visit_count}× · {s.points_balance} pts
                           </span>
                         </button>

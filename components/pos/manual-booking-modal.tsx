@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +30,52 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   const qc = useQueryClient();
   const [showConfirm, setShowConfirm] = useState(false);
   const [name,  setName]  = useState("");
+
+  type CustomerSuggestion = { phone: string; name: string | null; visit_count: number; points_balance: number };
+  const [nameSuggestions, setNameSuggestions] = useState<CustomerSuggestion[]>([]);
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const nameSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nameSearchAbort = useRef<AbortController | null>(null);
+
+  function handleNameChange(val: string) {
+    const cleaned = val.replace(/[^a-zA-Z\s]/g, "");
+    setName(cleaned);
+
+    if (nameSearchTimer.current) clearTimeout(nameSearchTimer.current);
+    if (nameSearchAbort.current) nameSearchAbort.current.abort();
+
+    const q = cleaned.trim();
+    if (q.length < 2) {
+      setNameSuggestions([]);
+      setShowNameSuggestions(false);
+      return;
+    }
+
+    nameSearchTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      nameSearchAbort.current = controller;
+      try {
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const body = await res.json() as
+          | { success: true; data: CustomerSuggestion[] }
+          | { success: false; error: string };
+        if (body.success) {
+          setNameSuggestions(body.data);
+          setShowNameSuggestions(body.data.length > 0);
+        }
+      } catch {
+        // Aborted or network — silent
+      }
+    }, 300);
+  }
+
+  function pickSuggestion(s: CustomerSuggestion) {
+    setName(s.name || "");
+    setPhone(s.phone);
+    setIsRegistered(true);
+    setShowNameSuggestions(false);
+    setNameSuggestions([]);
+  }
   const [phone, setPhone] = useState("");
   const [tableId, setTableId] = useState("");
   const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
@@ -457,7 +503,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                 className="h-16 text-xl px-5 rounded-xl font-bold"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer name</Label>
                 {isRegistered && (
@@ -468,10 +514,37 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
               </div>
               <Input
                 value={name}
-                onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
+                onChange={(e) => handleNameChange(e.target.value)}
+                onFocus={() => { if (nameSuggestions.length > 0) setShowNameSuggestions(true); }}
+                onBlur={() => {
+                  setTimeout(() => setShowNameSuggestions(false), 150);
+                }}
+                autoComplete="off"
                 placeholder="Full name"
                 className="h-16 text-xl px-5 rounded-xl font-bold"
               />
+              {showNameSuggestions && nameSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-20 rounded-xl overflow-hidden shadow-xl bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]">
+                  {nameSuggestions.map((s) => (
+                    <button
+                      key={s.phone}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-2xl font-black text-gray-900 dark:text-white truncate">
+                          {s.name ?? "(no name)"}
+                        </p>
+                        <p className="text-lg font-extrabold text-gray-650 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-black uppercase tracking-wider px-3 py-2 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
+                        {s.visit_count}× · {s.points_balance} pts
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
