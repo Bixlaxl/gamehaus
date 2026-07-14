@@ -489,18 +489,18 @@ export function BillsContent({
 
       {manualOpen && (
         <Dialog open onOpenChange={(o) => !o && setManualOpen(false)}>
-          <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border dark:border-[#222] text-gray-900 dark:text-gray-100">
-            <DialogHeader className="px-8 py-6 border-b border-gray-200 dark:border-[#1F1F1F]">
-              <DialogTitle className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2.5">
+          <DialogContent className="max-w-7xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border dark:border-[#222] text-gray-900 dark:text-gray-100">
+            <DialogHeader className="px-10 py-8 border-b border-gray-200 dark:border-[#1F1F1F]">
+              <DialogTitle className="text-3xl font-black text-gray-900 dark:text-white flex items-center gap-3">
                 New Manual Bill
               </DialogTitle>
             </DialogHeader>
 
-            <form onSubmit={handleCreateManualBill} className="max-h-[80vh] overflow-y-auto px-8 py-6 space-y-6">
+            <form onSubmit={handleCreateManualBill} className="max-h-[80vh] overflow-y-auto px-10 py-8 space-y-8">
               {/* Customer details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2 relative">
-                  <label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer Name</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-3 relative">
+                  <label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer Name</label>
                   <Input
                     required
                     placeholder="Enter name"
@@ -511,7 +511,7 @@ export function BillsContent({
                       setTimeout(() => setShowNameSuggestions(false), 150);
                     }}
                     autoComplete="off"
-                    className="h-16 text-xl px-5 rounded-xl font-bold"
+                    className="h-20 text-3xl px-6 rounded-2xl font-bold"
                   />
                   {showNameSuggestions && nameSuggestions.length > 0 && (
                     <div className="absolute left-0 right-0 top-full mt-1.5 z-20 rounded-xl overflow-hidden shadow-xl bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]">
@@ -520,13 +520,13 @@ export function BillsContent({
                           key={s.phone}
                           type="button"
                           onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
-                          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-2xl font-black text-gray-900 dark:text-white truncate">
+                            <p className="text-3xl font-black text-gray-900 dark:text-white truncate">
                               {s.name ?? "(no name)"}
                             </p>
-                            <p className="text-lg font-extrabold text-gray-655 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
+                            <p className="text-xl font-extrabold text-gray-655 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
                           </div>
                           <span className="shrink-0 text-sm font-black uppercase tracking-wider px-3 py-2 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
                             {s.visit_count}× · {s.points_balance} pts
@@ -536,8 +536,8 @@ export function BillsContent({
                     </div>
                   )}
                 </div>
-                <div className="space-y-2 relative">
-                  <label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer Phone (Optional)</label>
+                <div className="space-y-3 relative">
+                  <label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer Phone (Optional)</label>
                   <Input
                     type="tel"
                     placeholder="Enter phone"
@@ -548,7 +548,7 @@ export function BillsContent({
                       setTimeout(() => setShowPhoneSuggestions(false), 150);
                     }}
                     autoComplete="off"
-                    className="h-16 text-xl px-5 rounded-xl font-bold"
+                    className="h-20 text-3xl px-6 rounded-2xl font-bold"
                   />
                   {showPhoneSuggestions && phoneSuggestions.length > 0 && (
                     <div className="absolute left-0 right-0 top-full mt-1.5 z-20 rounded-xl overflow-hidden shadow-xl bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]">
@@ -557,7 +557,7 @@ export function BillsContent({
                           key={s.phone}
                           type="button"
                           onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
-                          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
                         >
                           <div className="min-w-0 flex-1">
                             <p className="text-2xl font-black text-gray-900 dark:text-white truncate">
@@ -576,22 +576,22 @@ export function BillsContent({
               </div>
 
               {/* Table Sessions */}
-              <div className="space-y-3.5 border-t border-gray-200 dark:border-[#222] pt-6">
+              <div className="space-y-4 border-t border-gray-200 dark:border-[#222] pt-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base font-black text-gray-800 dark:text-white flex items-center gap-1.5">Table Sessions</h3>
+                  <h3 className="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-1.5">Table Sessions</h3>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => setManualSessions([...manualSessions, { id: crypto.randomUUID(), tableId: tables[0]?.id ?? "", hours: 1 }])}
-                    className="h-12 px-5 text-sm rounded-xl font-black border-gray-300 dark:border-gray-700"
+                    className="h-16 px-8 text-base rounded-2xl font-black border-gray-300 dark:border-gray-700"
                     disabled={tables.length === 0}
                   >
-                    <Plus className="h-4 w-4" /> Add Session
+                    <Plus className="h-5 w-5" /> Add Session
                   </Button>
                 </div>
 
                 {manualSessions.map((s, idx) => (
-                  <div key={s.id} className="flex items-center gap-3 border border-gray-200 dark:border-[#222] p-3 rounded-2xl bg-gray-50/50 dark:bg-[#161616]">
+                  <div key={s.id} className="flex items-center gap-4 border border-gray-200 dark:border-[#222] p-4 rounded-2xl bg-gray-50/50 dark:bg-[#161616]">
                     <div className="flex-1">
                       <Select
                         value={s.tableId}
@@ -601,12 +601,12 @@ export function BillsContent({
                           setManualSessions(updated);
                         }}
                       >
-                        <SelectTrigger className="h-16 text-xl px-5 rounded-xl font-bold bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
+                        <SelectTrigger className="h-20 text-2xl px-6 rounded-2xl font-bold bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
                           <SelectValue placeholder="Select Table" />
                         </SelectTrigger>
                         <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
                           {tables.map((t) => (
-                            <SelectItem key={t.id} value={t.id} className="text-base">
+                            <SelectItem key={t.id} value={t.id} className="text-xl">
                               {t.name} (₹{t.hourly_rate}/hr)
                             </SelectItem>
                           ))}
@@ -614,7 +614,7 @@ export function BillsContent({
                       </Select>
                     </div>
 
-                    <div className="w-36">
+                    <div className="w-44">
                       <Input
                         type="number"
                         step="0.1"
@@ -626,7 +626,7 @@ export function BillsContent({
                           updated[idx].hours = parseFloat(e.target.value) || 0;
                           setManualSessions(updated);
                         }}
-                        className="h-16 text-xl px-5 rounded-xl font-bold text-center"
+                        className="h-20 text-2xl px-6 rounded-2xl font-bold text-center"
                       />
                     </div>
 
@@ -634,31 +634,31 @@ export function BillsContent({
                       type="button"
                       variant="ghost"
                       onClick={() => setManualSessions(manualSessions.filter((x) => x.id !== s.id))}
-                      className="h-16 w-16 p-0 text-red-500 hover:text-red-700 bg-gray-50 dark:bg-[#1f1f1f] rounded-xl border border-gray-200 dark:border-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20"
+                      className="h-20 w-20 p-0 text-red-500 hover:text-red-700 bg-gray-50 dark:bg-[#1f1f1f] rounded-2xl border border-gray-200 dark:border-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20"
                     >
-                      <Trash className="h-5 w-5" />
+                      <Trash className="h-6 w-6" />
                     </Button>
                   </div>
                 ))}
               </div>
 
               {/* Extras / Inventory */}
-              <div className="space-y-3.5 border-t border-gray-200 dark:border-[#222] pt-6">
+              <div className="space-y-4 border-t border-gray-200 dark:border-[#222] pt-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base font-black text-gray-800 dark:text-white flex items-center gap-1.5">Items / Beverages</h3>
+                  <h3 className="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-1.5">Items / Beverages</h3>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => setManualExtras([...manualExtras, { id: crypto.randomUUID(), itemId: inventoryItems[0]?.id ?? "", quantity: 1 }])}
-                    className="h-12 px-5 text-sm rounded-xl font-black border-gray-300 dark:border-gray-700"
+                    className="h-16 px-8 text-base rounded-2xl font-black border-gray-300 dark:border-gray-700"
                     disabled={inventoryItems.length === 0}
                   >
-                    <Plus className="h-4 w-4" /> Add Item
+                    <Plus className="h-5 w-5" /> Add Item
                   </Button>
                 </div>
 
                 {manualExtras.map((e, idx) => (
-                  <div key={e.id} className="flex items-center gap-3 border border-gray-200 dark:border-[#222] p-3 rounded-2xl bg-gray-50/50 dark:bg-[#161616]">
+                  <div key={e.id} className="flex items-center gap-4 border border-gray-200 dark:border-[#222] p-4 rounded-2xl bg-gray-50/50 dark:bg-[#161616]">
                     <div className="flex-1">
                       <Select
                         value={e.itemId}
@@ -668,12 +668,12 @@ export function BillsContent({
                           setManualExtras(updated);
                         }}
                       >
-                        <SelectTrigger className="h-16 text-xl px-5 rounded-xl font-bold bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
+                        <SelectTrigger className="h-20 text-2xl px-6 rounded-2xl font-bold bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
                           <SelectValue placeholder="Select Item" />
                         </SelectTrigger>
                         <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
                           {inventoryItems.map((item) => (
-                            <SelectItem key={item.id} value={item.id} className="text-base">
+                            <SelectItem key={item.id} value={item.id} className="text-xl">
                               {item.name} (₹{item.selling_price})
                             </SelectItem>
                           ))}
@@ -681,7 +681,7 @@ export function BillsContent({
                       </Select>
                     </div>
 
-                    <div className="w-36">
+                    <div className="w-44">
                       <Input
                         type="number"
                         min="1"
@@ -692,7 +692,7 @@ export function BillsContent({
                           updated[idx].quantity = parseInt(e.target.value) || 0;
                           setManualExtras(updated);
                         }}
-                        className="h-16 text-xl px-5 rounded-xl font-bold text-center"
+                        className="h-20 text-2xl px-6 rounded-2xl font-bold text-center"
                       />
                     </div>
 
@@ -700,61 +700,61 @@ export function BillsContent({
                       type="button"
                       variant="ghost"
                       onClick={() => setManualExtras(manualExtras.filter((x) => x.id !== e.id))}
-                      className="h-16 w-16 p-0 text-red-500 hover:text-red-700 bg-gray-50 dark:bg-[#1f1f1f] rounded-xl border border-gray-200 dark:border-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20"
+                      className="h-20 w-20 p-0 text-red-500 hover:text-red-700 bg-gray-50 dark:bg-[#1f1f1f] rounded-2xl border border-gray-200 dark:border-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20"
                     >
-                      <Trash className="h-5 w-5" />
+                      <Trash className="h-6 w-6" />
                     </Button>
                   </div>
                 ))}
               </div>
 
               {/* Payment Method */}
-              <div className="space-y-2 border-t border-gray-200 dark:border-[#222] pt-6">
-                <label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</label>
+              <div className="space-y-3 border-t border-gray-200 dark:border-[#222] pt-6">
+                <label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</label>
                 <div className="flex items-center gap-4">
                   <button
                     type="button"
                     onClick={() => setManualPaymentMethod("cash")}
-                    className={`flex-1 h-16 rounded-xl text-base font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                    className={`flex-1 h-20 rounded-2xl text-xl font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
                       manualPaymentMethod === "cash"
                         ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 ring-2 ring-emerald-300"
                         : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
                     }`}
                   >
-                    <Banknote className="h-5 w-5" /> Cash
+                    <Banknote className="h-6 w-6" /> Cash
                   </button>
                   <button
                     type="button"
                     onClick={() => setManualPaymentMethod("upi")}
-                    className={`flex-1 h-16 rounded-xl text-base font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                    className={`flex-1 h-20 rounded-2xl text-xl font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
                       manualPaymentMethod === "upi"
                         ? "bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-400 ring-2 ring-indigo-300"
                         : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
                     }`}
                   >
-                    <Smartphone className="h-5 w-5" /> UPI
+                    <Smartphone className="h-6 w-6" /> UPI
                   </button>
                 </div>
               </div>
 
               {/* Live Preview */}
               <div className="border-t border-gray-200 dark:border-[#222] pt-6 flex items-center justify-between">
-                <span className="text-xl font-extrabold text-gray-450 dark:text-gray-400">Total Billed:</span>
-                <span className="text-3xl font-black text-[#D4541A]">{formatCurrency(manualTotalPreview)}</span>
+                <span className="text-2xl font-extrabold text-gray-450 dark:text-gray-400">Total Billed:</span>
+                <span className="text-4xl font-black text-[#D4541A]">{formatCurrency(manualTotalPreview)}</span>
               </div>
 
               <div className="pt-4 flex items-center gap-4">
                 <Button
                   type="button"
                   onClick={() => setManualOpen(false)}
-                  className="flex-1 h-16 rounded-xl text-lg font-black bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
+                  className="flex-1 h-20 rounded-2xl text-xl font-black bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 bg-[#D4541A] hover:bg-[#c04b16] text-white rounded-xl h-16 text-lg font-black"
+                  className="flex-1 bg-[#D4541A] hover:bg-[#c04b16] text-white rounded-2xl h-20 text-xl font-black"
                 >
                   {isSubmitting ? "Saving..." : "Create & Finalize Bill"}
                 </Button>

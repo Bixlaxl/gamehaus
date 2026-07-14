@@ -481,34 +481,34 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
-        <DialogHeader className="px-8 py-6 border-b border-gray-200 dark:border-[#1F1F1F]">
-          <DialogTitle className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2.5">
-            <CalendarPlus className="h-6 w-6" style={{ color: "#D4541A" }} /> Manual booking
+      <DialogContent className="max-w-7xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+        <DialogHeader className="px-10 py-8 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <DialogTitle className="text-3xl font-black text-gray-900 dark:text-white flex items-center gap-3">
+            <CalendarPlus className="h-8 w-8" style={{ color: "#D4541A" }} /> Manual booking
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-8 py-6 space-y-6 max-h-[80vh] overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
+        <div className="px-10 py-8 space-y-8 max-h-[80vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone (10 digits)</Label>
-                {lookingUpPhone && <span className="text-xs text-gray-400">Looking up…</span>}
+                <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone (10 digits)</Label>
+                {lookingUpPhone && <span className="text-sm text-gray-400">Looking up…</span>}
               </div>
               <Input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder="9XXXXXXXXX"
-                className="h-16 text-xl px-5 rounded-xl font-bold"
+                className="h-20 text-3xl px-6 rounded-2xl font-bold"
               />
             </div>
-            <div className="space-y-2 relative">
+            <div className="space-y-3 relative">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer name</Label>
+                <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer name</Label>
                 {isRegistered && (
-                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <CheckCircle className="h-4 w-4" /> Registered
+                  <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-1 rounded-lg">
+                    <CheckCircle className="h-5 w-5" /> Registered
                   </span>
                 )}
               </div>
@@ -521,7 +521,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                 }}
                 autoComplete="off"
                 placeholder="Full name"
-                className="h-16 text-xl px-5 rounded-xl font-bold"
+                className="h-20 text-3xl px-6 rounded-2xl font-bold"
               />
               {showNameSuggestions && nameSuggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1.5 z-20 rounded-xl overflow-hidden shadow-xl bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]">
@@ -530,15 +530,15 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                       key={s.phone}
                       type="button"
                       onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                      className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-150 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-2xl font-black text-gray-900 dark:text-white truncate">
+                        <p className="text-3xl font-black text-gray-900 dark:text-white truncate">
                           {s.name ?? "(no name)"}
                         </p>
-                        <p className="text-lg font-extrabold text-gray-650 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
+                        <p className="text-xl font-extrabold text-gray-650 dark:text-[#ccc] font-mono mt-0.5">{s.phone}</p>
                       </div>
-                      <span className="shrink-0 text-sm font-black uppercase tracking-wider px-3 py-2 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
+                      <span className="shrink-0 text-sm font-black uppercase tracking-wider px-3.5 py-2 rounded bg-amber-100 text-amber-850 dark:bg-amber-955/40 dark:text-amber-400">
                         {s.visit_count}× · {s.points_balance} pts
                       </span>
                     </button>
@@ -548,12 +548,12 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Table</Label>
+          <div className="space-y-3">
+            <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Table</Label>
             <select
               value={tableId}
               onChange={(e) => setTableId(e.target.value)}
-              className="flex h-16 w-full rounded-xl border border-input bg-background px-5 py-3 text-xl font-bold outline-none focus:border-[#D4541A]"
+              className="flex h-20 w-full rounded-2xl border border-input bg-background px-6 py-4 text-3xl font-bold outline-none focus:border-[#D4541A]"
             >
               {tables.length === 0 && <option value="">Loading…</option>}
               {tables.map((t) => (
@@ -566,9 +566,9 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
           {/* Game Mode Selector for multi-mode tables */}
           {tableModes.length > 0 && (
-            <div className="space-y-2.5 p-5 rounded-2xl bg-orange-50/50 border border-orange-200/60 dark:bg-orange-950/10 dark:border-orange-900/30">
-              <Label className="text-sm font-extrabold text-orange-900 dark:text-orange-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Gamepad2 className="h-4 w-4" /> Select Game Mode
+            <div className="space-y-4 p-6 rounded-2xl bg-orange-50/50 border border-orange-200/60 dark:bg-orange-950/10 dark:border-orange-900/30">
+              <Label className="text-lg font-extrabold text-orange-900 dark:text-orange-300 uppercase tracking-wider flex items-center gap-2">
+                <Gamepad2 className="h-5 w-5" /> Select Game Mode
               </Label>
               <div className="grid grid-cols-2 gap-4">
                 {tableModes.map((m) => {
@@ -578,14 +578,14 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                       key={m.id}
                       type="button"
                       onClick={() => setSelectedModeId(m.id)}
-                      className={`p-4 rounded-xl text-left transition-all ${
+                      className={`p-5 rounded-2xl text-left transition-all ${
                         active
                           ? "bg-[#D4541A] text-white shadow-sm font-black border-2 border-[#D4541A]"
                           : "bg-white dark:bg-[#1f1f1f] text-gray-700 dark:text-[#ccc] border border-gray-200 dark:border-gray-800 hover:border-orange-300"
                       }`}
                     >
-                      <p className="text-base font-black leading-tight">{m.name}</p>
-                      <p className={`text-xs mt-1 font-extrabold ${active ? "text-orange-100" : "text-gray-500 dark:text-[#888]"}`}>
+                      <p className="text-2xl font-black leading-tight">{m.name}</p>
+                      <p className={`text-sm mt-1 font-extrabold ${active ? "text-orange-100" : "text-gray-500 dark:text-[#888]"}`}>
                         ₹{m.hourly_rate}/hr
                       </p>
                     </button>
@@ -596,13 +596,13 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           )}
 
           {peopleOptions.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div className="space-y-3">
+              <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 {selectedMode?.pricing_basis === "controller" || chosenTable?.type === "ps5"
                   ? "Controllers"
                   : "Players"}
               </Label>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-4">
                 {peopleOptions.map((n, idx) => {
                   const num = Number(n);
                   let active = numPeople === n;
@@ -621,7 +621,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                       key={n}
                       type="button"
                       onClick={() => setNumPeople(n)}
-                      className={`px-5 py-3 rounded-xl text-base font-black transition-colors ${
+                      className={`px-8 py-5 rounded-2xl text-xl font-black transition-colors ${
                         active
                           ? "bg-[#D4541A] text-white"
                           : "bg-gray-150 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
@@ -635,28 +635,28 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-16 text-xl px-5 rounded-xl font-bold" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3">
+              <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-20 text-3xl px-6 rounded-2xl font-bold" />
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Start time</Label>
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={900} className="h-16 text-xl px-5 rounded-xl font-bold" />
+            <div className="space-y-3">
+              <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Start time</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={900} className="h-20 text-3xl px-6 rounded-2xl font-bold" />
             </div>
           </div>
 
           {/* Interactive Available Slots Visual Grid */}
-          <div className="space-y-3.5 p-5 rounded-2xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-gray-800">
+          <div className="space-y-4 p-6 rounded-2xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-black flex items-center gap-1.5 text-gray-900 dark:text-white">
-                <Clock className="h-5 w-5 text-[#D4541A]" /> Table Slots Grid
+              <Label className="text-xl font-black flex items-center gap-2 text-gray-900 dark:text-white">
+                <Clock className="h-6 w-6 text-[#D4541A]" /> Table Slots Grid
               </Label>
-              <span className="text-xs font-extrabold text-gray-400">
+              <span className="text-sm font-extrabold text-gray-400">
                 {slotsLoading ? "Checking slots…" : `${slotPills.filter(s => !s.isBlocked).length} available`}
               </span>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-48 overflow-y-auto pr-1">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 max-h-60 overflow-y-auto pr-1">
               {slotPills.map((s) => {
                 const isSelected = time === s.timeStr;
                 return (
@@ -665,7 +665,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                     type="button"
                     disabled={s.isBlocked}
                     onClick={() => setTime(s.timeStr)}
-                    className={`py-3.5 px-2 rounded-xl text-base font-mono font-black transition-all text-center ${
+                    className={`py-5 px-3 rounded-2xl text-xl font-mono font-black transition-all text-center ${
                       isSelected
                         ? "bg-[#D4541A] text-white shadow-md border-2 border-[#D4541A]"
                         : s.isBlocked
@@ -682,21 +682,21 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
           {/* Conflict Warning */}
           {slotConflict && (
-            <div className="rounded-xl p-4.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-2.5 text-red-700 dark:text-red-400 text-sm font-semibold">
-              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+            <div className="rounded-2xl p-5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-3 text-red-700 dark:text-red-400 text-base font-semibold">
+              <AlertTriangle className="h-6 w-6 shrink-0 mt-0.5" />
               <span>This table already has an active session or booking during this selected time window. Please pick a different slot.</span>
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</Label>
-            <div className="flex flex-wrap gap-2">
+          <div className="space-y-3">
+            <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</Label>
+            <div className="flex flex-wrap gap-3">
               {durationPresets.map((p) => (
                 <button
                   key={p.mins}
                   type="button"
                   onClick={() => setDuration(p.mins)}
-                  className={`px-5 py-3 rounded-xl text-base font-black transition-colors ${
+                  className={`px-8 py-5 rounded-2xl text-xl font-black transition-colors ${
                     duration === p.mins
                       ? "bg-[#D4541A] text-white font-black"
                       : "bg-gray-150 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
@@ -709,38 +709,38 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           </div>
 
           {/* Optional advance */}
-          <div className="rounded-2xl border border-dashed border-gray-300 dark:border-[#333] p-5 space-y-4">
-            <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center justify-between">
+          <div className="rounded-2xl border border-dashed border-gray-300 dark:border-[#333] p-6 space-y-5">
+            <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center justify-between">
               <span>Advance taken now (optional)</span>
-              <span className="font-extrabold text-gray-400 text-base">Estimated total ₹{estimatedTotal}</span>
+              <span className="font-extrabold text-gray-400 text-lg">Estimated total ₹{estimatedTotal}</span>
             </Label>
-            <div className="flex gap-3 items-center">
-              <span className="text-xl font-black text-gray-400">₹</span>
+            <div className="flex gap-4 items-center">
+              <span className="text-2xl font-black text-gray-400">₹</span>
               <Input
                 type="number"
                 min={0}
                 value={advanceAmount}
                 onChange={(e) => setAdvanceAmount(e.target.value)}
                 placeholder="0"
-                className="flex-1 h-16 text-xl px-5 rounded-xl font-bold"
+                className="flex-1 h-20 text-3xl px-6 rounded-2xl font-bold"
               />
               <button
                 type="button"
                 onClick={() => setAdvanceMethod((m) => m === "cash" ? null : "cash")}
-                className={`h-16 px-6 rounded-xl text-base font-black flex items-center gap-1.5 transition-all ${
+                className={`h-20 px-8 rounded-xl text-lg font-black flex items-center gap-2 transition-all ${
                   advanceMethod === "cash" ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
-                <Banknote className="h-5 w-5" /> Cash
+                <Banknote className="h-6 w-6" /> Cash
               </button>
               <button
                 type="button"
                 onClick={() => setAdvanceMethod((m) => m === "upi" ? null : "upi")}
-                className={`h-16 px-6 rounded-xl text-base font-black flex items-center gap-1.5 transition-all ${
+                className={`h-20 px-8 rounded-xl text-lg font-black flex items-center gap-2 transition-all ${
                   advanceMethod === "upi" ? "bg-indigo-100 text-indigo-700 ring-2 ring-indigo-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
-                <Smartphone className="h-5 w-5" /> UPI
+                <Smartphone className="h-6 w-6" /> UPI
               </button>
             </div>
           </div>
@@ -753,11 +753,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           )}
         </div>
 
-        <div className="px-8 py-5 border-t flex justify-end gap-3 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
+        <div className="px-10 py-6 border-t flex justify-end gap-4 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
           <button
             type="button"
             onClick={onClose}
-            className="h-16 px-8 rounded-xl text-lg font-black bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
+            className="h-20 px-10 rounded-2xl text-xl font-black bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
           >
             Cancel
           </button>
@@ -770,7 +770,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
               }
             }}
             disabled={create.isPending || slotConflict}
-            className="h-16 px-8 rounded-xl text-lg font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity"
+            className="h-20 px-10 rounded-2xl text-xl font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
             Create booking
           </button>
