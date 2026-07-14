@@ -161,7 +161,18 @@ export function getActualSlotDate(baseDate: string, timeStr: string, opening: st
     return addOneDay(baseDate);
   }
   return baseDate;
+}export function cleanErrorMessage(msg: string): string {
+  if (!msg) return "An unexpected error occurred.";
+  const trimmed = msg.trim();
+  if (
+    trimmed.startsWith("<!DOCTYPE") ||
+    trimmed.startsWith("<html") ||
+    msg.includes("cf-error-details") ||
+    msg.includes("Connection timed out") ||
+    msg.includes("Failed to fetch") ||
+    msg.includes("Unexpected token <")
+  ) {
+    return "Database connection timeout. The database is recovering from a temporary sleep. Please try again in a few seconds.";
+  }
+  return msg;
 }
-
-
-

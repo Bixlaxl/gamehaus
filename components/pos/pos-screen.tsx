@@ -107,6 +107,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     queryKey: ["pos-location", locationId],
     queryFn: async () => {
       const res = await fetch("/api/locations", { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch location config");
       const body = await res.json();
       const list = body.success ? body.data : [];
       const found = list.find((l: any) => l.id === locationId);
@@ -128,8 +129,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     queryKey: ["pos-tables", locationId],
     queryFn: async () => {
       const res  = await fetch(`/api/pos/tables?locationId=${locationId}`);
+      if (!res.ok) throw new Error("Failed to fetch POS tables");
       const body = await res.json() as { success: boolean; data: Table[] };
-      return body.success ? body.data : [];
+      if (!body.success) throw new Error("Failed to fetch POS tables");
+      return body.data;
     },
     // Realtime keeps data current; this is a safety-net poll, not the primary mechanism.
     // 60s was producing ~60 unnecessary requests/hour per staff session.
@@ -140,8 +143,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     queryKey: ["pos-orders", locationId],
     queryFn: async () => {
       const res  = await fetch(`/api/pos/orders?locationId=${locationId}`);
+      if (!res.ok) throw new Error("Failed to fetch POS orders");
       const body = await res.json() as { success: boolean; data: POSOrder[] };
-      return body.success ? body.data : [];
+      if (!body.success) throw new Error("Failed to fetch POS orders");
+      return body.data;
     },
     // Realtime keeps data current; this is a safety-net poll, not the primary mechanism.
     // 60s was producing ~60 unnecessary requests/hour per staff session.
@@ -152,6 +157,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
     queryKey: ["pos-bookings", locationId],
     queryFn: async () => {
       const res  = await fetch(`/api/pos/bookings?locationId=${locationId}`);
+      if (!res.ok) throw new Error("Failed to fetch POS bookings");
       const body = await res.json() as {
         success: boolean;
         data: (Booking & {
@@ -159,7 +165,8 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
           order_item: Pick<OrderItem, "table_id" | "status">;
         })[];
       };
-      return body.success ? body.data : [];
+      if (!body.success) throw new Error("Failed to fetch POS bookings");
+      return body.data;
     },
     // Bookings have a tighter SLA than tables/orders because a customer
     // expects their booking to appear on the staff side as soon as payment

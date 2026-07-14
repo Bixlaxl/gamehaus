@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { calculateBill } from "@/lib/billing/engine";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cleanErrorMessage } from "@/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
@@ -306,7 +306,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       });
       const body = await res.json() as { success: boolean; error?: string };
       if (!body.success) {
-        setError(body.error ?? "Failed to cancel order");
+        setError(cleanErrorMessage(body.error ?? "Failed to cancel order"));
         setLoading(false);
         return;
       }
@@ -317,7 +317,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       selectOrder_fn(null);
       close();
     } catch (e: any) {
-      setError(e.message ?? "Unexpected error during cancellation");
+      setError(cleanErrorMessage(e.message ?? "Unexpected error during cancellation"));
     } finally {
       setLoading(false);
     }
@@ -368,7 +368,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
         | { success: false; error: string };
 
       if (!body.success) {
-        setError(body.error);
+        setError(cleanErrorMessage(body.error));
         setLoading(false);
         submittingRef.current = false;
         return;
@@ -399,7 +399,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
         close();
       }
     } catch (err: any) {
-      setError(err.message || "A network error occurred. Please try again.");
+      setError(cleanErrorMessage(err.message || "A network error occurred. Please try again."));
       setLoading(false);
       submittingRef.current = false;
     }
