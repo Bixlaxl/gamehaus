@@ -831,21 +831,21 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
   if (upcoming.length === 0) return null;
 
   return (
-    <div className="shrink-0 border-t border-gray-200 dark:border-[#1f1f1f] bg-white dark:bg-[#111] py-1">
-      <div className="flex items-center gap-2 px-6 pt-4 pb-2.5">
-        <CalendarClock className="h-5 w-5 text-gray-500 dark:text-[#aaa]" />
-        <span className="text-sm font-black uppercase tracking-widest text-gray-700 dark:text-[#ccc]">
+    <div className="shrink-0 border-t-2 border-gray-200 dark:border-[#1f1f1f] bg-white dark:bg-[#111] py-4">
+      <div className="flex items-center gap-3.5 px-8 pt-5 pb-4">
+        <CalendarClock className="h-9 w-9 text-gray-500 dark:text-[#aaa]" />
+        <span className="text-2xl font-black uppercase tracking-widest text-gray-900 dark:text-white">
           Upcoming Today
         </span>
         <span
-          className="text-xs font-bold px-2.5 py-1 rounded-full"
+          className="text-lg font-black px-4 py-1.5 rounded-full"
           style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
         >
           {upcoming.length}
         </span>
       </div>
 
-      <div className="flex gap-4 px-6 pb-4 overflow-x-auto">
+      <div className="flex gap-6 px-8 pb-6 overflow-x-auto">
         {upcoming.map((booking) => {
           const oi         = booking.order_item as Pick<OrderItem, "table_id" | "status" | "selected_mode_name"> | null;
           const table      = tables.find((t) => t.id === oi?.table_id);
@@ -858,31 +858,31 @@ function UpcomingStrip({ locationId }: { locationId: string }) {
           return (
             <div
               key={booking.id}
-              className="shrink-0 rounded-2xl border-2 px-4.5 py-3.5 min-w-[200px] bg-gray-50 dark:bg-[#0d0d0d] flex flex-col gap-1.5"
+              className="shrink-0 rounded-3xl border-4 px-8 py-6 min-w-[550px] bg-gray-50 dark:bg-[#0d0d0d] flex flex-col gap-3.5 shadow-sm"
               style={{
                 borderColor: isOverdue
-                  ? "rgba(239,68,68,0.25)"
+                  ? "rgba(239,68,68,0.4)"
                   : isImminent
-                  ? "rgba(245,158,11,0.25)"
-                  : "rgba(0,0,0,0.06)",
+                  ? "rgba(245,158,11,0.4)"
+                  : "rgba(0,0,0,0.1)",
               }}
             >
               {table && (
                 <span
-                  className="text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-wide w-fit"
-                  style={{ background: "rgba(212,84,26,0.08)", color: "#D4541A" }}
+                  className="text-lg font-black px-4 py-1.5 rounded-xl uppercase tracking-wider w-fit"
+                  style={{ background: "rgba(212,84,26,0.1)", color: "#D4541A" }}
                 >
                   {table.name}{oi?.selected_mode_name ? ` (${oi.selected_mode_name.replace(/ Mode$/i, "")})` : ""}
                 </span>
               )}
-              <p className="text-base font-black text-gray-900 dark:text-white truncate">
+              <p className="text-4xl font-black text-gray-900 dark:text-white truncate">
                 {booking.order?.customer_name}
               </p>
-              <p className="font-mono text-sm font-black tabular-nums" style={{ color: "#f59e0b" }}>
+              <p className="font-mono text-3xl font-black tabular-nums" style={{ color: "#f59e0b" }}>
                 {fmtTime(booking.scheduled_start)} – {fmtTime(booking.scheduled_end)}
               </p>
               <p
-                className="text-xs font-black"
+                className="text-2xl font-black"
                 style={{ color: isOverdue ? "#ef4444" : isImminent ? "#f59e0b" : "#9ca3af" }}
               >
                 {isOverdue
