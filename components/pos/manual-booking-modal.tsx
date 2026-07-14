@@ -82,6 +82,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
   const [date,    setDate]    = useState(defaultDate ?? todayLocalDateStr());
   const [time,    setTime]    = useState("18:00");
   const [duration, setDuration] = useState(60);
+  const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<"cash" | "upi" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -191,18 +192,15 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   const isSimulator = chosenTable ? isSimulatorActive(chosenTable, selectedMode) : false;
   const durationPresets = useMemo(() => {
-    const base = [
+    return [
+      { mins: 15,  label: "15m" },
       { mins: 30,  label: "30m" },
       { mins: 60,  label: "1h"  },
       { mins: 90,  label: "1.5h" },
       { mins: 120, label: "2h"  },
       { mins: 180, label: "3h"  },
     ];
-    if (isSimulator) {
-      return [{ mins: 15, label: "15m" }, ...base];
-    }
-    return base;
-  }, [isSimulator]);
+  }, []);
 
   // Default-pick num_people to the table/mode's smallest tier
   const peopleOptions = useMemo(() => {
@@ -266,8 +264,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     let closeMins = ch * 60 + cm;
     if (closeMins <= openMins) closeMins += 24 * 60;
 
-    const isSim = isSimulatorActive(chosenTable, selectedMode);
-    const stepMins = isSim ? 15 : 30;
+    const stepMins = 15;
 
     const isToday = date === todayLocalDateStr();
     const nowMs = Date.now();
@@ -690,14 +687,17 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
           <div className="space-y-3">
             <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</Label>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 items-center">
               {durationPresets.map((p) => (
                 <button
                   key={p.mins}
                   type="button"
-                  onClick={() => setDuration(p.mins)}
+                  onClick={() => {
+                    setDuration(p.mins);
+                    setIsCustomDuration(false);
+                  }}
                   className={`px-8 py-5 rounded-2xl text-xl font-black transition-colors ${
-                    duration === p.mins
+                    duration === p.mins && !isCustomDuration
                       ? "bg-[#D4541A] text-white font-black"
                       : "bg-gray-150 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
                   }`}
@@ -705,6 +705,31 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                   {p.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setIsCustomDuration(true)}
+                className={`px-8 py-5 rounded-2xl text-xl font-black transition-colors ${
+                  isCustomDuration
+                    ? "bg-[#D4541A] text-white font-black"
+                    : "bg-gray-150 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
+                }`}
+              >
+                Custom
+              </button>
+
+              {isCustomDuration && (
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+                    className="w-40 h-20 text-3xl px-6 rounded-2xl font-bold text-center"
+                    placeholder="Mins"
+                  />
+                  <span className="text-xl font-black text-gray-500 dark:text-gray-400">mins</span>
+                </div>
+              )}
             </div>
           </div>
 
