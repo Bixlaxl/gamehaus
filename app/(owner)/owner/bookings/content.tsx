@@ -419,9 +419,9 @@ export function BookingsContent({
                         {/* Phone Number */}
                         <td className="px-4 py-5 align-middle">
                           {b.order?.customer_phone ? (
-                            <span className="text-xl text-gray-700 dark:text-[#ccc] font-black">{b.order.customer_phone}</span>
+                            <span className="text-2xl md:text-3xl text-gray-900 dark:text-white font-black">{b.order.customer_phone}</span>
                           ) : (
-                            <span className="text-xl text-gray-400 dark:text-gray-600 font-bold">—</span>
+                            <span className="text-2xl md:text-3xl text-gray-450 dark:text-gray-500 font-bold">—</span>
                           )}
                         </td>
 
