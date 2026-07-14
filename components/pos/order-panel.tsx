@@ -105,7 +105,12 @@ function OrderPanelInner({ locationId }: OrderPanelProps) {
       const res = await fetch(`/api/orders/${orderId}/extras`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ name: optimistic.name, price: optimistic.price, quantity: optimistic.quantity }),
+        body:    JSON.stringify({
+          name:     optimistic.name,
+          price:    optimistic.price,
+          quantity: optimistic.quantity,
+          source:   "pos",
+        }),
       });
       if (!res.ok) {
         store.removeOrderExtra(orderId, tempId);
