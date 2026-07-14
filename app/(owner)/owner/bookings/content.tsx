@@ -432,9 +432,9 @@ export function BookingsContent({
 
                         {/* Status & Actions */}
                         <td className="px-4 py-5 align-middle">
-                          <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center justify-between gap-6">
                             <Badge
-                              className="px-3.5 py-1.5 text-sm md:text-base font-black shrink-0"
+                              className="px-4.5 py-2.5 text-base md:text-lg font-black shrink-0 rounded-xl"
                               variant={
                                 b.status === "confirmed"  ? "success"     :
                                 b.status === "checked_in" ? "outline"     :
@@ -446,10 +446,10 @@ export function BookingsContent({
                             </Badge>
                             <div className="flex items-center gap-2">
                               {mode === "staff" && b.status === "confirmed" && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
                                   <Button
                                     size="default"
-                                    className="h-11 text-sm px-4.5 font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
+                                    className="h-14 text-base px-6 font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm rounded-xl"
                                     onClick={() => doCheckIn(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Check in this slot"}
@@ -459,7 +459,7 @@ export function BookingsContent({
                                   <Button
                                     variant="outline"
                                     size="default"
-                                    className="h-11 text-sm px-4.5 font-black text-gray-500 hover:text-red-500 hover:border-red-200"
+                                    className="h-14 text-base px-6 font-black text-gray-500 hover:text-red-500 hover:border-red-200 rounded-xl"
                                     onClick={() => doNoShow(b)}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}

@@ -500,7 +500,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+      <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
         <DialogHeader className="px-6 pt-6 pb-4.5 border-b border-gray-200 dark:border-[#1F1F1F]">
           <DialogTitle className="text-gray-900 dark:text-white text-xl font-black">Finalize Bill</DialogTitle>
         </DialogHeader>
@@ -689,10 +689,10 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
           )}
 
           {/* Loyalty points */}
-          <div className="rounded-xl p-4 space-y-2.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
+          <div className="rounded-xl p-5 space-y-3.5 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F]">
             <div className="flex items-center gap-2">
-              <Star className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">Loyalty Points</span>
+              <Star className="h-5 w-5" style={{ color: "#f59e0b" }} />
+              <span className="text-base font-black text-gray-900 dark:text-white">Loyalty Points</span>
             </div>
 
             {/* Phone entry when walk-in had no phone */}
@@ -709,7 +709,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                   setManualPhone(cleaned);
                   setCustomerInfo(null);
                 }}
-                className="w-full text-sm rounded-lg px-3 py-1.5 outline-none transition-colors
+                className="w-full text-base rounded-xl px-4.5 py-3 outline-none transition-colors
                   bg-gray-100 dark:bg-[#1A1A1A]
                   border border-gray-200 dark:border-[#2A2A2A]
                   text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#444]
@@ -719,40 +719,40 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
             {phoneForLookup && (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400 dark:text-[#555]">Balance</span>
-                <span className="text-xs font-semibold" style={{ color: "#f59e0b" }}>
+                <span className="text-sm font-extrabold text-gray-500 dark:text-[#888]">Balance</span>
+                <span className="text-base font-black" style={{ color: "#f59e0b" }}>
                   {customerInfo ? `${customerInfo.points_balance} pts` : "Looking up…"}
                 </span>
               </div>
             )}
 
             {customerInfo && customerInfo.points_balance >= minPointsToRedeem && (
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs shrink-0 text-gray-500 dark:text-[#666]">Redeem</span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-sm font-extrabold text-gray-500 dark:text-[#888] shrink-0">Redeem</span>
                   <input
                     type="number"
                     min="0"
                     max={maxRedeem}
                     value={redeemInput}
                     onChange={(e) => handleRedeemChange(e.target.value)}
-                    className="w-20 text-sm rounded-lg px-2 py-1 outline-none transition-colors
+                    className="w-24 text-base font-black rounded-xl px-3 py-2 outline-none transition-colors
                       bg-gray-100 dark:bg-[#1A1A1A]
                       border border-gray-200 dark:border-[#2A2A2A]
                       text-gray-900 dark:text-white
                       focus:border-[#f59e0b]"
                   />
-                  <span className="text-xs text-gray-400 dark:text-[#555]">/ {maxRedeem} max</span>
+                  <span className="text-sm font-extrabold text-gray-500 dark:text-[#888]">/ {maxRedeem} max</span>
                 </div>
-                <p className="text-[10px] text-gray-400 dark:text-[#555]">
+                <p className="text-xs font-bold text-gray-500 dark:text-[#777]">
                   Requires min. balance of {minPointsToRedeem} pts to redeem.
                 </p>
               </div>
             )}
 
-            <p className="text-xs text-gray-400 dark:text-[#555]">
+            <p className="text-sm font-black text-gray-600 dark:text-[#ccc]">
               Will earn{" "}
-              <span className="font-semibold" style={{ color: "#f59e0b" }}>{pointsToEarn} pts</span>{" "}
+              <span className="font-black" style={{ color: "#f59e0b" }}>{pointsToEarn} pts</span>{" "}
               from this visit
             </p>
           </div>
