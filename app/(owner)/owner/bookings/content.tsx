@@ -90,7 +90,6 @@ export function BookingsContent({
   const [locationFilter, setLoc]  = useState("all");
   const [typeFilter, setType]     = useState("all");
   const [statusFilter, setStatus] = useState("all");
-  const [refundBooking, setRefund] = useState<BookingRow | null>(null);
   const [manualOpen,    setManualOpen] = useState(false);
 
   function shiftDate(days: number) {
@@ -396,7 +395,8 @@ export function BookingsContent({
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-[#222] text-left">
                       <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Time Slot</th>
-                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Customer</th>
+                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Customer Name</th>
+                      <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Phone Number</th>
                       <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Advance Paid</th>
                       <th className="px-4 py-4.5 font-black text-gray-600 dark:text-gray-400 uppercase text-sm tracking-wider">Status & Actions</th>
                     </tr>
@@ -411,14 +411,18 @@ export function BookingsContent({
                           </span>
                         </td>
 
-                        {/* Customer */}
+                        {/* Customer Name */}
                         <td className="px-4 py-5 align-middle">
-                          <div className="flex flex-col gap-1.5">
-                            <span className="font-black text-gray-900 dark:text-white text-2xl md:text-3xl">{b.order?.customer_name ?? "—"}</span>
-                            {b.order?.customer_phone && (
-                              <span className="text-xl text-gray-600 dark:text-[#bbb] font-black mt-1">{b.order.customer_phone}</span>
-                            )}
-                          </div>
+                          <span className="font-black text-gray-900 dark:text-white text-2xl md:text-3xl">{b.order?.customer_name ?? "—"}</span>
+                        </td>
+
+                        {/* Phone Number */}
+                        <td className="px-4 py-5 align-middle">
+                          {b.order?.customer_phone ? (
+                            <span className="text-xl text-gray-700 dark:text-[#ccc] font-black">{b.order.customer_phone}</span>
+                          ) : (
+                            <span className="text-xl text-gray-400 dark:text-gray-600 font-bold">—</span>
+                          )}
                         </td>
 
                         {/* Advance Paid */}
@@ -441,11 +445,6 @@ export function BookingsContent({
                               {STATUS_LABELS[b.status] ?? b.status}
                             </Badge>
                             <div className="flex items-center gap-2">
-                              {(b.status === "no_show" || b.status === "cancelled") && (
-                                <Button variant="outline" size="default" className="h-11 text-sm px-4.5 font-black" onClick={() => setRefund(b)}>
-                                  Refund
-                                </Button>
-                              )}
                               {mode === "staff" && b.status === "confirmed" && (
                                 <div className="flex items-center gap-2">
                                   <Button
@@ -488,32 +487,7 @@ export function BookingsContent({
         </div>
       )}
 
-      {/* Refund dialog */}
-      <Dialog open={!!refundBooking} onOpenChange={() => setRefund(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold">Process Refund</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 text-base text-gray-600 dark:text-[#ccc]">
-            <p>Customer: <strong>{refundBooking?.order?.customer_name}</strong></p>
-            <p>Phone: <strong>{refundBooking?.order?.customer_phone ?? "—"}</strong></p>
-            <p>
-              Booking:{" "}
-              <strong>
-                {refundBooking ? `${fmt(refundBooking.scheduled_start)} – ${fmt(refundBooking.scheduled_end)}` : "—"}
-              </strong>
-            </p>
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 px-4 py-3 text-amber-800 dark:text-amber-400 text-sm leading-relaxed">
-              Online bookings are prepaid via Razorpay. Process the refund in your{" "}
-              <strong>Razorpay Dashboard → Payments → Refunds</strong>, then mark it resolved here.
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" className="h-10 text-sm font-semibold" onClick={() => setRefund(null)}>Close</Button>
-            <Button className="h-10 text-sm font-bold bg-[#D4541A] hover:bg-[#D4541A]/90 text-white" onClick={() => setRefund(null)}>Mark Resolved</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {manualOpen && staffLocationId && (
         <ManualBookingModal
