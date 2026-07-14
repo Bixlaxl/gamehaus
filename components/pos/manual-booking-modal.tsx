@@ -435,33 +435,34 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-5 py-4 border-b">
-          <DialogTitle className="text-base font-bold flex items-center gap-2">
-            <CalendarPlus className="h-4 w-4" /> Manual booking
+      <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+        <DialogHeader className="px-8 py-6 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <DialogTitle className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2.5">
+            <CalendarPlus className="h-6 w-6" style={{ color: "#D4541A" }} /> Manual booking
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 py-4 space-y-4 max-h-[75vh] overflow-y-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+        <div className="px-8 py-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">Phone (10 digits)</Label>
-                {lookingUpPhone && <span className="text-[10px] text-gray-400">Looking up…</span>}
+                <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone (10 digits)</Label>
+                {lookingUpPhone && <span className="text-xs text-gray-400">Looking up…</span>}
               </div>
               <Input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder="9XXXXXXXXX"
+                className="h-16 text-xl px-5 rounded-xl font-bold"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">Customer name</Label>
+                <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer name</Label>
                 {isRegistered && (
-                  <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
-                    <CheckCircle className="h-2.5 w-2.5" /> Registered
+                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4" /> Registered
                   </span>
                 )}
               </div>
@@ -469,16 +470,17 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                 value={name}
                 onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
                 placeholder="Full name"
+                className="h-16 text-xl px-5 rounded-xl font-bold"
               />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Table</Label>
+          <div className="space-y-2">
+            <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Table</Label>
             <select
               value={tableId}
               onChange={(e) => setTableId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-medium"
+              className="flex h-16 w-full rounded-xl border border-input bg-background px-5 py-3 text-xl font-bold outline-none focus:border-[#D4541A]"
             >
               {tables.length === 0 && <option value="">Loading…</option>}
               {tables.map((t) => (
@@ -491,11 +493,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
           {/* Game Mode Selector for multi-mode tables */}
           {tableModes.length > 0 && (
-            <div className="space-y-1.5 p-3 rounded-xl bg-orange-50/50 border border-orange-200/60 dark:bg-orange-950/10 dark:border-orange-900/30">
-              <Label className="text-xs font-bold text-orange-900 dark:text-orange-300 flex items-center gap-1.5">
-                <Gamepad2 className="h-3.5 w-3.5" /> Select Game Mode
+            <div className="space-y-2.5 p-5 rounded-2xl bg-orange-50/50 border border-orange-200/60 dark:bg-orange-950/10 dark:border-orange-900/30">
+              <Label className="text-sm font-extrabold text-orange-900 dark:text-orange-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Gamepad2 className="h-4 w-4" /> Select Game Mode
               </Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-4">
                 {tableModes.map((m) => {
                   const active = selectedModeId === m.id;
                   return (
@@ -503,14 +505,14 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                       key={m.id}
                       type="button"
                       onClick={() => setSelectedModeId(m.id)}
-                      className={`p-2.5 rounded-lg text-left transition-all ${
+                      className={`p-4 rounded-xl text-left transition-all ${
                         active
-                          ? "bg-[#D4541A] text-white shadow-sm"
+                          ? "bg-[#D4541A] text-white shadow-sm font-black border-2 border-[#D4541A]"
                           : "bg-white dark:bg-[#1f1f1f] text-gray-700 dark:text-[#ccc] border border-gray-200 dark:border-gray-800 hover:border-orange-300"
                       }`}
                     >
-                      <p className="text-xs font-bold leading-tight">{m.name}</p>
-                      <p className={`text-[10px] mt-0.5 ${active ? "text-orange-100" : "text-gray-500 dark:text-[#888]"}`}>
+                      <p className="text-base font-black leading-tight">{m.name}</p>
+                      <p className={`text-xs mt-1 font-extrabold ${active ? "text-orange-100" : "text-gray-500 dark:text-[#888]"}`}>
                         ₹{m.hourly_rate}/hr
                       </p>
                     </button>
@@ -521,13 +523,13 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           )}
 
           {peopleOptions.length > 0 && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">
+            <div className="space-y-2">
+              <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 {selectedMode?.pricing_basis === "controller" || chosenTable?.type === "ps5"
                   ? "Controllers"
                   : "Players"}
               </Label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-3">
                 {peopleOptions.map((n, idx) => {
                   const num = Number(n);
                   let active = numPeople === n;
@@ -546,10 +548,10 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                       key={n}
                       type="button"
                       onClick={() => setNumPeople(n)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                      className={`px-5 py-3 rounded-xl text-base font-black transition-colors ${
                         active
                           ? "bg-[#D4541A] text-white"
-                          : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
+                          : "bg-gray-150 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
                       }`}
                     >
                       {labelText} · ₹{rate}/hr
@@ -560,28 +562,28 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-16 text-xl px-5 rounded-xl font-bold" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Start time</Label>
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={900} />
+            <div className="space-y-2">
+              <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Start time</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={900} className="h-16 text-xl px-5 rounded-xl font-bold" />
             </div>
           </div>
 
           {/* Interactive Available Slots Visual Grid */}
-          <div className="space-y-2 p-3 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-gray-800">
+          <div className="space-y-3.5 p-5 rounded-2xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold flex items-center gap-1.5 text-gray-900 dark:text-white">
-                <Clock className="h-3.5 w-3.5 text-[#D4541A]" /> Table Slots Grid
+              <Label className="text-base font-black flex items-center gap-1.5 text-gray-900 dark:text-white">
+                <Clock className="h-5 w-5 text-[#D4541A]" /> Table Slots Grid
               </Label>
-              <span className="text-[10px] text-gray-400">
+              <span className="text-xs font-extrabold text-gray-400">
                 {slotsLoading ? "Checking slots…" : `${slotPills.filter(s => !s.isBlocked).length} available`}
               </span>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto pr-1">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-48 overflow-y-auto pr-1">
               {slotPills.map((s) => {
                 const isSelected = time === s.timeStr;
                 return (
@@ -590,9 +592,9 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                     type="button"
                     disabled={s.isBlocked}
                     onClick={() => setTime(s.timeStr)}
-                    className={`py-2 px-1.5 rounded-lg text-[11px] font-mono font-bold transition-all text-center ${
+                    className={`py-3.5 px-2 rounded-xl text-base font-mono font-black transition-all text-center ${
                       isSelected
-                        ? "bg-[#D4541A] text-white shadow"
+                        ? "bg-[#D4541A] text-white shadow-md border-2 border-[#D4541A]"
                         : s.isBlocked
                         ? "bg-red-50 dark:bg-red-950/20 text-red-400 dark:text-red-400/60 border border-red-200/50 dark:border-red-900/30 line-through opacity-60 cursor-not-allowed"
                         : "bg-white dark:bg-[#222] text-gray-800 dark:text-[#ddd] border border-gray-200 dark:border-gray-700 hover:border-[#D4541A]"
@@ -607,24 +609,24 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
           {/* Conflict Warning */}
           {slotConflict && (
-            <div className="rounded-lg p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-2 text-red-700 dark:text-red-400 text-xs font-semibold">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="rounded-xl p-4.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-2.5 text-red-700 dark:text-red-400 text-sm font-semibold">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
               <span>This table already has an active session or booking during this selected time window. Please pick a different slot.</span>
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Duration</Label>
-            <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-2">
+            <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</Label>
+            <div className="flex flex-wrap gap-2">
               {durationPresets.map((p) => (
                 <button
                   key={p.mins}
                   type="button"
                   onClick={() => setDuration(p.mins)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                  className={`px-5 py-3 rounded-xl text-base font-black transition-colors ${
                     duration === p.mins
-                      ? "bg-[#D4541A] text-white"
-                      : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
+                      ? "bg-[#D4541A] text-white font-black"
+                      : "bg-gray-150 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc] hover:bg-gray-200"
                   }`}
                 >
                   {p.label}
@@ -634,38 +636,38 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           </div>
 
           {/* Optional advance */}
-          <div className="rounded-lg border border-dashed p-3 space-y-2">
-            <Label className="text-xs flex items-center justify-between">
+          <div className="rounded-2xl border border-dashed border-gray-300 dark:border-[#333] p-5 space-y-4">
+            <Label className="text-sm font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center justify-between">
               <span>Advance taken now (optional)</span>
-              <span className="font-normal text-gray-500">Estimated total ₹{estimatedTotal}</span>
+              <span className="font-extrabold text-gray-400 text-base">Estimated total ₹{estimatedTotal}</span>
             </Label>
-            <div className="flex gap-2 items-center">
-              <span className="text-sm text-gray-500">₹</span>
+            <div className="flex gap-3 items-center">
+              <span className="text-xl font-black text-gray-400">₹</span>
               <Input
                 type="number"
                 min={0}
                 value={advanceAmount}
                 onChange={(e) => setAdvanceAmount(e.target.value)}
                 placeholder="0"
-                className="flex-1"
+                className="flex-1 h-16 text-xl px-5 rounded-xl font-bold"
               />
               <button
                 type="button"
                 onClick={() => setAdvanceMethod((m) => m === "cash" ? null : "cash")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 ${
-                  advanceMethod === "cash" ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
+                className={`h-16 px-6 rounded-xl text-base font-black flex items-center gap-1.5 transition-all ${
+                  advanceMethod === "cash" ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
-                <Banknote className="h-3 w-3" /> Cash
+                <Banknote className="h-5 w-5" /> Cash
               </button>
               <button
                 type="button"
                 onClick={() => setAdvanceMethod((m) => m === "upi" ? null : "upi")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 ${
-                  advanceMethod === "upi" ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
+                className={`h-16 px-6 rounded-xl text-base font-black flex items-center gap-1.5 transition-all ${
+                  advanceMethod === "upi" ? "bg-indigo-100 text-indigo-700 ring-2 ring-indigo-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
-                <Smartphone className="h-3 w-3" /> UPI
+                <Smartphone className="h-5 w-5" /> UPI
               </button>
             </div>
           </div>
@@ -678,11 +680,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
           )}
         </div>
 
-        <div className="px-5 py-3 border-t flex justify-end gap-2 bg-gray-50 dark:bg-[#161616]">
+        <div className="px-8 py-5 border-t flex justify-end gap-3 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-2 rounded-md text-sm font-semibold bg-white dark:bg-[#1f1f1f] border hover:bg-gray-100"
+            className="h-16 px-8 rounded-xl text-lg font-black bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
           >
             Cancel
           </button>
@@ -695,7 +697,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
               }
             }}
             disabled={create.isPending || slotConflict}
-            className="px-4 py-2 rounded-md text-sm font-bold text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50"
+            className="h-16 px-8 rounded-xl text-lg font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
             Create booking
           </button>
