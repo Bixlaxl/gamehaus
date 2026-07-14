@@ -76,12 +76,14 @@ export default async function StaffBookingsPage() {
     // recolors all the inherited gray/white classes into a high-contrast
     // dark palette so cards + text + filters all stay readable.
     <main className="pos-bookings-dark flex-1 overflow-y-auto p-6">
-      <BookingsContent
-        mode="staff"
-        staffLocationId={profile.location_id}
-        initialLocations={location ? [location] : []}
-        initialBookings={ownLocationBookings}
-      />
+      <div className="max-w-[1600px] mx-auto">
+        <BookingsContent
+          mode="staff"
+          staffLocationId={profile.location_id}
+          initialLocations={location ? [location] : []}
+          initialBookings={ownLocationBookings}
+        />
+      </div>
     </main>
   );
 }

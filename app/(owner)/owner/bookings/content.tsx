@@ -432,7 +432,7 @@ export function BookingsContent({
 
                         {/* Status & Actions */}
                         <td className="px-4 py-5 align-middle">
-                          <div className="flex items-center justify-between gap-6">
+                          <div className="flex items-center justify-start gap-6">
                             <Badge
                               className="px-6 py-3.5 text-xl md:text-2xl font-black shrink-0 rounded-2xl"
                               variant={
