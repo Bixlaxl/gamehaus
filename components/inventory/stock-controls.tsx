@@ -172,7 +172,7 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
   const [mounted, setMounted] = useState(false);
   const [selectedItem, setSelectedItem] = useState<string>(itemId);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
-  const [selectedStaff, setSelectedStaff] = useState<string>("all");
+  const [selectedType, setSelectedType] = useState<string>("all");
 
   useEffect(() => {
     setMounted(true);
@@ -182,16 +182,6 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
     queryKey: ["locations-lite"],
     queryFn: async () => {
       const res = await fetch("/api/locations");
-      const body = await res.json();
-      return body.data ?? [];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: staffList = [] } = useQuery<any[]>({
-    queryKey: ["staff-lite"],
-    queryFn: async () => {
-      const res = await fetch("/api/staff");
       const body = await res.json();
       return body.data ?? [];
     },
@@ -209,7 +199,7 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
   });
 
   const { data: entries = [], isLoading } = useQuery<any[]>({
-    queryKey: ["stock-logs-filtered", selectedItem, selectedLocation, selectedStaff],
+    queryKey: ["stock-logs-filtered", selectedItem, selectedLocation, selectedType],
     queryFn: async () => {
       let url = `/api/inventory/stock-logs?limit=100`;
       if (selectedItem && selectedItem !== "all") {
@@ -218,8 +208,8 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
       if (selectedLocation && selectedLocation !== "all") {
         url += `&location_id=${selectedLocation}`;
       }
-      if (selectedStaff && selectedStaff !== "all") {
-        url += `&created_by=${selectedStaff}`;
+      if (selectedType && selectedType !== "all") {
+        url += `&type=${selectedType}`;
       }
       const res = await fetch(url);
       const body = await res.json();
@@ -239,7 +229,7 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
         <div className="shrink-0 flex items-center justify-between px-10 py-8 border-b border-gray-200 dark:border-[#1f1f1f]">
           <div className="min-w-0">
             <h2 className="font-black text-gray-900 dark:text-white text-3xl">Stock History Logs</h2>
-            <p className="text-lg text-gray-500 dark:text-[#888] truncate mt-1">{itemName}</p>
+            <p className="text-lg text-gray-550 dark:text-[#888] truncate mt-1">{itemName}</p>
           </div>
           <button
             onClick={onClose}
@@ -286,18 +276,17 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
               </Select>
             </div>
 
-            {/* Staff selector */}
+            {/* Staff / Customer filter */}
             <div className="space-y-2">
               <label className="text-base font-black text-gray-600 dark:text-gray-400">Staff / Customer</label>
-              <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+              <Select value={selectedType} onValueChange={setSelectedType}>
                 <SelectTrigger className="h-16 text-xl font-bold rounded-2xl border dark:border-[#222] px-5">
-                  <SelectValue placeholder="All Users" />
+                  <SelectValue placeholder="All Logs" />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
-                  <SelectItem value="all" className="text-lg font-bold p-3">All Users</SelectItem>
-                  {staffList.map((st) => (
-                    <SelectItem key={st.id} value={st.id} className="text-lg font-bold p-3">{st.name}</SelectItem>
-                  ))}
+                  <SelectItem value="all" className="text-lg font-bold p-3">All Logs</SelectItem>
+                  <SelectItem value="customer" className="text-lg font-bold p-3">Customer Sales</SelectItem>
+                  <SelectItem value="staff" className="text-lg font-bold p-3">Staff Intake</SelectItem>
                 </SelectContent>
               </Select>
             </div>

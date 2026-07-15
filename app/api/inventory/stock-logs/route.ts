@@ -34,6 +34,8 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  const type = url.searchParams.get("type");
+
   if (locationId && locationId !== "all") {
     query = query.eq("location_id", locationId);
   }
@@ -42,6 +44,11 @@ export async function GET(request: Request) {
   }
   if (itemId && itemId !== "all") {
     query = query.eq("inventory_item_id", itemId);
+  }
+  if (type === "staff") {
+    query = query.eq("reason", "adjustment").ilike("note", "%Staff consumption%");
+  } else if (type === "customer") {
+    query = query.in("reason", ["sale", "reverse"]);
   }
 
   const { data, error } = await query;

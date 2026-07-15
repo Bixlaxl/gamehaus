@@ -121,7 +121,7 @@ export function OwnerNav({ userName }: OwnerNavProps) {
         </div>
       )}
 
-      <aside className="w-80 shrink-0 flex flex-col h-screen bg-white dark:bg-[#0A0A0A] border-r border-gray-200 dark:border-[#1A1A1A]">
+      <aside className="hidden lg:flex w-80 shrink-0 flex-col h-screen bg-white dark:bg-[#0A0A0A] border-r border-gray-200 dark:border-[#1A1A1A]">
         {/* Logo + alerts bell */}
         <div
           className="px-6 py-6 border-b border-gray-200 dark:border-[#1A1A1A]"
