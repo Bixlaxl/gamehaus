@@ -115,6 +115,12 @@ Indian mobile numbers must be verified as exactly 10 digits starting with `6`, `
 >
 > **10. POS & Owner UI Legibility Constraints**
 > To avoid eye strain on high-resolution iMac displays, typography sizes must be scaled up (table grids use `text-lg` titles, inputs/buttons use `text-base` and height `h-11`, and main table data uses `text-base`). Avoid using `text-xs` for primary readable details.
+>
+> **11. Operating Shift Bounds & Grouping**
+> All daily metrics, reports, and bills listing pages must use business operating shift date grouping based on location opening times rather than UTC/local calendar day midnights. Early morning transactions before the opening time must be retroactively grouped into the previous calendar day.
+>
+> **12. Tablet Kiosk Orders Confirmation Flow**
+> Orders submitted via customer tablet kiosks are saved in `order_extras` prefixed with `"[PENDING] "`. Staff must explicitly confirm these items on the POS Alerts panel. Accepting calls `PATCH /api/orders/[id]/extras/[extraId]` to remove the prefix; declining calls `DELETE /api/orders/[id]/extras/[extraId]` to soft-delete the item and reverse stock logs.
 
 ---
 

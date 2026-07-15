@@ -155,6 +155,39 @@ sequenceDiagram
   end
 ```
 
+### F. Tablet Kiosk Orders Confirmation Flow
+Customers sitting at a snooker/pool table can order snacks or drinks via a tablet kiosk app.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Customer
+  participant Kiosk as Tablet Kiosk App
+  participant API as /api/orders/[id]/extras
+  participant DB as Supabase Database
+  actor Staff
+  participant POS as Staff POS Screen
+  participant Confirm as /api/orders/[id]/extras/[extraId]
+
+  Customer->>Kiosk: Selects beverage/extras & clicks Order
+  Kiosk->>API: POST { item_id, quantity }
+  API->>DB: Check inventory stock count & write to order_extras prefixed with '[PENDING]'
+  DB-->>POS: Supabase Realtime alerts POS of new pending extra
+  POS->>POS: Triggers audible beep notification
+  POS->>POS: Displays high-visibility "Tablet Kiosk Order" alert panel
+  alt Staff Accepts
+    Staff->>POS: Clicks Accept
+    POS->>Confirm: PATCH { name: cleanName }
+    Confirm->>DB: Strip '[PENDING] ' prefix from extra's name
+    Confirm-->>POS: OK (adds item to bill breakdown)
+  else Staff Declines
+    Staff->>POS: Clicks Decline
+    POS->>Confirm: DELETE
+    Confirm->>DB: Soft-delete extra (is_deleted = true) & reverse stock count in inventory_items
+    Confirm-->>POS: OK (reverts inventory stock log)
+  end
+```
+
 ---
 
 ## 3. Database Layer
@@ -259,4 +292,5 @@ The billing engine calculations must follow a deterministic flow to avoid discre
 * **Throttled Clock Subscriptions:** High-level wrapper components do not listen to the Zustand 1Hz `now` clock. This limits UI updates to only the active `RunningCard` timers, keeping POS page renders fast.
 * **Lazy Overlay Mounting:** Core overlays (modals for Finalize Bill, Stop confirmation, Extend, Walk-In panels) are loaded dynamically using Next.js `next/dynamic`. They only render inside the DOM when triggered.
 * **Path-Change & Tab-Focus Prefetching:** The sidebar navigates owners using `<Link>` components that prefetch the route data. `OwnerNav` refreshes on tab focus to maintain fresh data states without polling.
-* **iMac Legibility Layout:** Standardised text sizes and line spacing (header height `h-16`, table rows using `text-base` minimum, input fields using `py-3 text-base font-semibold`) across Staff POS and Owner dashboards to optimize readability on large iMac displays.
+* **iMac Legibility Layout:** Standardised text sizes and line spacing (header height `h-16`, table rows using `text-base` minimum, input fields using `py-3 text-base font-semibold`) across Staff POS and Owner dashboards to optimize readability on large iMac displays. Scales up sidebars, notifications, upcoming booking list displays, and visual table fields.
+* **Business Shift Date Grouping:** Daily metrics, reports, and bills listing pages are grouped dynamically using location opening time bounds rather than strict UTC/local calendar day midnights. Early morning transactions before the opening time are retroactively mapped to the previous calendar day's business shift, aligning POS totals, reports, and payment lists.
