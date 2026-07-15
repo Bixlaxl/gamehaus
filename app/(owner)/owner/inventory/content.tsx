@@ -58,6 +58,7 @@ export function InventoryContent({
   const [form,            setForm]            = useState<ItemForm>(defaultForm);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [searchQuery,     setSearchQuery]     = useState("");
+  const [showDeactivated, setShowDeactivated] = useState(false);
   const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<InventoryItem | null>(null);
 
   const { data: items } = useQuery<InventoryItem[]>({
@@ -78,10 +79,13 @@ export function InventoryContent({
   });
 
   const displayed = useMemo(() => {
-    const list = items ?? [];
+    let list = items ?? [];
+    if (!showDeactivated) {
+      list = list.filter((i) => i.is_active);
+    }
     const q = searchQuery.toLowerCase().trim();
     return q ? list.filter((i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q)) : list;
-  }, [items, searchQuery]);
+  }, [items, searchQuery, showDeactivated]);
 
   // Group by category
   const grouped = useMemo(() => {
@@ -345,13 +349,26 @@ export function InventoryContent({
         </div>
       </div>
 
-      <div className="relative max-w-xs">
-        <input
-          placeholder="Search items…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-4 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white outline-none focus:border-[#D4541A]"
-        />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="relative max-w-xs w-full">
+          <input
+            placeholder="Search items…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-4 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white dark:bg-[#111] dark:border-[#222] outline-none focus:border-[#D4541A]"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-bold text-gray-500 dark:text-gray-400 cursor-pointer flex items-center gap-2 select-none">
+            <input
+              type="checkbox"
+              checked={showDeactivated}
+              onChange={(e) => setShowDeactivated(e.target.checked)}
+              className="rounded border-gray-300 dark:border-[#333] text-[#D4541A] focus:ring-[#D4541A] dark:bg-[#111] h-4 w-4"
+            />
+            Show Deactivated Items
+          </label>
+        </div>
       </div>
 
       {grouped.size === 0 && (
