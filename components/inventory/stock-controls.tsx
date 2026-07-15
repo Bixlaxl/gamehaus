@@ -234,69 +234,69 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
   return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[500px] md:w-[600px] flex flex-col bg-white dark:bg-[#0e0e0e] border-l border-gray-200 dark:border-[#1f1f1f] shadow-2xl">
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[600px] md:w-[800px] flex flex-col bg-white dark:bg-[#0e0e0e] border-l border-gray-200 dark:border-[#1f1f1f] shadow-2xl">
         {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-[#1f1f1f]">
+        <div className="shrink-0 flex items-center justify-between px-10 py-8 border-b border-gray-200 dark:border-[#1f1f1f]">
           <div className="min-w-0">
-            <h2 className="font-black text-gray-900 dark:text-white text-xl">Stock History Logs</h2>
-            <p className="text-sm text-gray-500 dark:text-[#888] truncate mt-0.5">{itemName}</p>
+            <h2 className="font-black text-gray-900 dark:text-white text-3xl">Stock History Logs</h2>
+            <p className="text-lg text-gray-500 dark:text-[#888] truncate mt-1">{itemName}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-150 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-8 w-8" />
           </button>
         </div>
 
         {/* Filters */}
-        <div className="shrink-0 px-6 py-5 bg-gray-50/50 dark:bg-[#121212]/50 border-b border-gray-200 dark:border-[#1f1f1f] space-y-4">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Filter Logs</h3>
+        <div className="shrink-0 px-10 py-8 bg-gray-50/50 dark:bg-[#121212]/50 border-b border-gray-200 dark:border-[#1f1f1f] space-y-6">
+          <h3 className="text-base font-black text-gray-400 uppercase tracking-widest">Filter Logs</h3>
           
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-4">
             {/* Item selector */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500">Item</label>
+            <div className="space-y-2">
+              <label className="text-base font-black text-gray-600 dark:text-gray-400">Item</label>
               <Select value={selectedItem} onValueChange={setSelectedItem}>
-                <SelectTrigger className="h-10 text-sm font-semibold rounded-xl border dark:border-[#222]">
+                <SelectTrigger className="h-16 text-xl font-bold rounded-2xl border dark:border-[#222] px-5">
                   <SelectValue placeholder="All Items" />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
-                  <SelectItem value="all">All Items</SelectItem>
+                  <SelectItem value="all" className="text-lg font-bold p-3">All Items</SelectItem>
                   {allItems.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    <SelectItem key={item.id} value={item.id} className="text-lg font-bold p-3">{item.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             {/* Location selector */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500">Location</label>
+            <div className="space-y-2">
+              <label className="text-base font-black text-gray-600 dark:text-gray-400">Location</label>
               <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-                <SelectTrigger className="h-10 text-sm font-semibold rounded-xl border dark:border-[#222]">
+                <SelectTrigger className="h-16 text-xl font-bold rounded-2xl border dark:border-[#222] px-5">
                   <SelectValue placeholder="All Locations" />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
-                  <SelectItem value="all">All Locations</SelectItem>
+                  <SelectItem value="all" className="text-lg font-bold p-3">All Locations</SelectItem>
                   {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                    <SelectItem key={loc.id} value={loc.id} className="text-lg font-bold p-3">{loc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             {/* Staff selector */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500">Staff / Customer</label>
+            <div className="space-y-2">
+              <label className="text-base font-black text-gray-600 dark:text-gray-400">Staff / Customer</label>
               <Select value={selectedStaff} onValueChange={setSelectedStaff}>
-                <SelectTrigger className="h-10 text-sm font-semibold rounded-xl border dark:border-[#222]">
+                <SelectTrigger className="h-16 text-xl font-bold rounded-2xl border dark:border-[#222] px-5">
                   <SelectValue placeholder="All Users" />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
-                  <SelectItem value="all">All Users</SelectItem>
+                  <SelectItem value="all" className="text-lg font-bold p-3">All Users</SelectItem>
                   {staffList.map((st) => (
-                    <SelectItem key={st.id} value={st.id}>{st.name}</SelectItem>
+                    <SelectItem key={st.id} value={st.id} className="text-lg font-bold p-3">{st.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -305,38 +305,38 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
         </div>
 
         {/* Logs List */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-10 py-8">
           {isLoading ? (
-            <p className="text-sm text-gray-500 dark:text-[#888] py-12 text-center">Loading stock logs...</p>
+            <p className="text-lg text-gray-500 dark:text-[#888] py-12 text-center">Loading stock logs...</p>
           ) : entries.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-[#888] py-12 text-center">No logs found matching filters</p>
+            <p className="text-lg text-gray-500 dark:text-[#888] py-12 text-center">No logs found matching filters</p>
           ) : (
-            <ul className="space-y-3.5">
+            <ul className="space-y-5">
               {entries.map((e) => {
                 const pos = e.change > 0;
                 return (
-                  <li key={e.id} className="rounded-2xl bg-gray-50 dark:bg-[#161616] border border-gray-100 dark:border-[#222] p-4 shadow-sm hover:scale-[1.01] transition-transform">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-1">
+                  <li key={e.id} className="rounded-3xl bg-gray-50 dark:bg-[#161616] border border-gray-100 dark:border-[#222] p-6 shadow-sm hover:scale-[1.01] transition-transform">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex items-baseline justify-between flex-wrap gap-2">
-                          <p className="text-base font-black capitalize tabular-nums" style={{ color: pos ? "#10b981" : "#ef4444" }}>
+                          <p className="text-2xl font-black capitalize tabular-nums" style={{ color: pos ? "#10b981" : "#ef4444" }}>
                             {pos ? "+" : ""}{e.change} · {e.reason === 'adjustment' && e.note?.includes('Staff consumption') ? 'staff drink' : e.reason}
                           </p>
-                          <span className="text-[11px] font-bold text-gray-400 dark:text-[#555] uppercase bg-gray-200/50 dark:bg-gray-800/50 px-2 py-0.5 rounded-md">
+                          <span className="text-sm font-black text-gray-500 dark:text-[#555] uppercase bg-gray-200/50 dark:bg-gray-800/50 px-3 py-1 rounded-lg">
                             {e.item?.name ?? "Inventory Item"}
                           </span>
                         </div>
                         {e.note && (
-                          <p className="text-sm font-semibold text-gray-700 dark:text-[#ddd] mt-1">{e.note}</p>
+                          <p className="text-lg font-bold text-gray-700 dark:text-[#ddd] mt-1">{e.note}</p>
                         )}
-                        <div className="flex justify-between items-center text-xs text-gray-400 dark:text-[#666] pt-1.5 border-t border-gray-100/50 dark:border-gray-800/50 mt-1">
+                        <div className="flex justify-between items-center text-base text-gray-400 dark:text-[#666] pt-3 border-t border-gray-100/50 dark:border-gray-800/50 mt-2">
                           <span>
                             {new Date(e.created_at).toLocaleString("en-IN", {
                               day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
                             })}
                           </span>
                           {e.actor?.name && (
-                            <span className="font-extrabold text-gray-550 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 px-2 py-0.5 rounded">
+                            <span className="font-extrabold text-gray-550 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 px-3 py-1 rounded-lg">
                               👤 {e.actor.name}
                             </span>
                           )}
