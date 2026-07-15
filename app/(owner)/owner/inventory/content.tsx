@@ -362,9 +362,9 @@ export function InventoryContent({
       )}
 
       {[...grouped.entries()].map(([category, catItems]) => (
-        <div key={category} className="space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400">{category}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div key={category} className="space-y-4">
+          <h2 className="text-sm font-black uppercase tracking-widest text-gray-500">{category}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-6">
             {catItems.map((item) => {
               const loc = initialLocations.find((l) => l.id === item.location_id);
               const m   = margin(item);
@@ -380,26 +380,26 @@ export function InventoryContent({
               return (
                 <div
                   key={item.id}
-                  className="rounded-2xl border-2 shadow-sm overflow-hidden bg-white border-gray-100"
+                  className="rounded-3xl border-2 shadow-sm overflow-hidden bg-white border-gray-100 dark:border-[#222] dark:bg-[#111]"
                   style={cardStyle}
                 >
-                  <div className="relative h-32 bg-gray-100 flex items-center justify-center">
+                  <div className="relative h-64 bg-gray-100 dark:bg-gray-900 flex items-center justify-center border-b dark:border-[#222]">
                     {item.image_url ? (
                       <NextImage
                         src={item.image_url}
                         alt={item.name}
                         fill
-                        className="object-contain p-2"
-                        sizes="(max-width: 768px) 50vw, 25vw"
+                        className="object-contain p-4"
+                        sizes="(max-width: 768px) 100vw, 50vw"
                       />
                     ) : (
-                      <ImageIcon className="h-7 w-7 text-gray-300" />
+                      <ImageIcon className="h-14 w-14 text-gray-300" />
                     )}
                   </div>
-                  <div className="p-5 space-y-2">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="font-black text-gray-900 text-base truncate">{item.name}</p>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="font-black text-gray-900 dark:text-white text-2xl truncate">{item.name}</p>
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                         {item.show_at_checkout && (
                           <Badge variant="outline" className="text-xs font-bold text-purple-600 border-purple-200 bg-purple-50">
                             Online Checkout
@@ -410,11 +410,11 @@ export function InventoryContent({
                         </Badge>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-500 font-bold">{loc?.name ?? "—"}</p>
+                    <p className="text-base text-gray-500 font-bold">{loc?.name ?? "—"}</p>
                     <div className="flex items-center justify-between">
-                      <p className="text-base font-extrabold text-gray-900">{formatCurrency(item.selling_price)}</p>
+                      <p className="text-2xl font-black text-gray-950 dark:text-white">{formatCurrency(item.selling_price)}</p>
                       <span
-                        className="text-xs font-black px-2.5 py-0.5 rounded-full"
+                        className="text-sm font-black px-3.5 py-1 rounded-full"
                         style={
                           m >= 50
                             ? { background: "rgba(16,185,129,0.1)", color: "#10b981" }
@@ -427,20 +427,20 @@ export function InventoryContent({
                       </span>
                     </div>
                     {item.cost_price > 0 && (
-                      <p className="text-sm text-gray-500 font-semibold">Cost: {formatCurrency(item.cost_price)}</p>
+                      <p className="text-base text-gray-500 font-semibold">Cost: {formatCurrency(item.cost_price)}</p>
                     )}
                     <div className="flex items-center justify-between pt-1">
-                      <StockBadge item={item} size="sm" />
+                      <StockBadge item={item} size="md" />
                       <StockControls item={item} invalidateKeys={[["inventory", selectedLocation]]} />
                     </div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => openEdit(item)}>
-                        <Pencil className="h-4.5 w-4.5" />
+                    <div className="flex items-center gap-3 pt-3">
+                      <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl" onClick={() => openEdit(item)}>
+                        <Pencil className="h-5 w-5" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 text-xs font-bold"
+                        className="h-12 text-sm font-black rounded-xl px-5"
                         onClick={() => toggleMutation.mutate({ id: item.id, is_active: !item.is_active })}
                       >
                         {item.is_active ? "Deactivate" : "Activate"}

@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { usePOSStore } from "@/store/pos";
-import { LogOut, UserPlus, QrCode, CalendarClock } from "lucide-react";
+import { LogOut, UserPlus, QrCode, CalendarClock, CupSoda } from "lucide-react";
 import { toast } from "sonner";
+import { StaffConsumeModal } from "./staff-consume-modal";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
 import { getShopWindow } from "@/lib/utils";
 import { installPOSAuthGuard } from "@/lib/pos-fetch";
@@ -58,6 +59,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   const selectedTableId       = usePOSStore((s) => s.selectedTableId);
 
   const [signingOut, setSigningOut] = useState(false);
+  const [consumeOpen, setConsumeOpen] = useState(false);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -298,16 +300,24 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
-        <header className="shrink-0 flex items-center justify-between px-6 h-16 bg-white dark:bg-[#111] border-b border-gray-200 dark:border-[#1f1f1f]">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-black text-gray-900 dark:text-white text-base tracking-tight">
+        <header className="shrink-0 flex items-center justify-between px-6 h-24 bg-white dark:bg-[#111] border-b border-gray-200 dark:border-[#1f1f1f]">
+          <div className="flex items-center gap-4">
+            <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-black text-gray-900 dark:text-white text-xl tracking-tight">
               {locationName}
             </span>
-            <span className="text-[#555] font-bold text-base">·</span>
-            <span className="text-sm font-semibold text-[#888]">{staffName}</span>
+            <span className="text-[#555] font-bold text-xl">·</span>
+            <span className="text-base font-bold text-[#888]">{staffName}</span>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setConsumeOpen(true)}
+              className="flex items-center gap-3 px-8 h-16 rounded-2xl text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 text-2xl font-black transition-all active:scale-95 shadow-md"
+            >
+              <CupSoda className="h-7 w-7 shrink-0" />
+              Log Staff Drink
+            </button>
+
             <button
               onClick={() => {
                 // Compute on click — no per-second subscription needed in the
@@ -322,10 +332,10 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
                 }
                 setWalkInOpen(true);
               }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-black transition-opacity hover:opacity-90 active:opacity-75 shadow-sm"
+              className="flex items-center gap-3 px-8 h-16 rounded-2xl text-white text-2xl font-black transition-all hover:opacity-90 active:scale-95 shadow-md"
               style={{ background: "#D4541A" }}
             >
-              <UserPlus className="h-4 w-4" />
+              <UserPlus className="h-7 w-7 shrink-0" />
               Walk-in
             </button>
           </div>
@@ -364,6 +374,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       <StopConfirmModal locationId={locationId} />
       <FinalizeBillModal locationId={locationId} />
       <UpcomingDrawer locationId={locationId} />
+      <StaffConsumeModal isOpen={consumeOpen} onClose={() => setConsumeOpen(false)} locationId={locationId} />
     </>
   );
 }

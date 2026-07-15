@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Plus, Minus, History, X } from "lucide-react";
 import type { InventoryItem, InventoryStockLog } from "@/lib/supabase/types";
 
@@ -165,59 +169,178 @@ export function StockControls({ item, invalidateKeys = [], theme = "light" }: St
 }
 
 function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemName: string; onClose: () => void }) {
-  const { data: entries = [], isLoading } = useQuery<LogEntry[]>({
-    queryKey: ["stock-log", itemId],
+  const [mounted, setMounted] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<string>(itemId);
+  const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [selectedStaff, setSelectedStaff] = useState<string>("all");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const { data: locations = [] } = useQuery<any[]>({
+    queryKey: ["locations-lite"],
     queryFn: async () => {
-      const res = await fetch(`/api/inventory/${itemId}/stock?limit=100`);
-      const body = await res.json() as { success: true; data: LogEntry[] } | { success: false; error: string };
+      const res = await fetch("/api/locations");
+      const body = await res.json();
+      return body.data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: staffList = [] } = useQuery<any[]>({
+    queryKey: ["staff-lite"],
+    queryFn: async () => {
+      const res = await fetch("/api/staff");
+      const body = await res.json();
+      return body.data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: allItems = [] } = useQuery<any[]>({
+    queryKey: ["inventory-items-lite"],
+    queryFn: async () => {
+      const res = await fetch("/api/inventory");
+      const body = await res.json();
+      return body.data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: entries = [], isLoading } = useQuery<any[]>({
+    queryKey: ["stock-logs-filtered", selectedItem, selectedLocation, selectedStaff],
+    queryFn: async () => {
+      let url = `/api/inventory/stock-logs?limit=100`;
+      if (selectedItem && selectedItem !== "all") {
+        url += `&inventory_item_id=${selectedItem}`;
+      }
+      if (selectedLocation && selectedLocation !== "all") {
+        url += `&location_id=${selectedLocation}`;
+      }
+      if (selectedStaff && selectedStaff !== "all") {
+        url += `&created_by=${selectedStaff}`;
+      }
+      const res = await fetch(url);
+      const body = await res.json();
       if (!body.success) throw new Error(body.error);
       return body.data;
     },
-    staleTime: 10 * 1000,
+    staleTime: 5 * 1000,
   });
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[420px] flex flex-col bg-white dark:bg-[#0e0e0e] border-l border-gray-200 dark:border-[#1f1f1f] shadow-2xl">
-        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#1f1f1f]">
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[500px] md:w-[600px] flex flex-col bg-white dark:bg-[#0e0e0e] border-l border-gray-200 dark:border-[#1f1f1f] shadow-2xl">
+        {/* Header */}
+        <div className="shrink-0 flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-[#1f1f1f]">
           <div className="min-w-0">
-            <h2 className="font-bold text-gray-900 dark:text-white text-base">Stock history</h2>
-            <p className="text-xs text-gray-500 dark:text-[#888] truncate">{itemName}</p>
+            <h2 className="font-black text-gray-900 dark:text-white text-xl">Stock History Logs</h2>
+            <p className="text-sm text-gray-500 dark:text-[#888] truncate mt-0.5">{itemName}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="p-2 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        {/* Filters */}
+        <div className="shrink-0 px-6 py-5 bg-gray-50/50 dark:bg-[#121212]/50 border-b border-gray-200 dark:border-[#1f1f1f] space-y-4">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Filter Logs</h3>
+          
+          <div className="grid grid-cols-1 gap-3">
+            {/* Item selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">Item</label>
+              <Select value={selectedItem} onValueChange={setSelectedItem}>
+                <SelectTrigger className="h-10 text-sm font-semibold rounded-xl border dark:border-[#222]">
+                  <SelectValue placeholder="All Items" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
+                  <SelectItem value="all">All Items</SelectItem>
+                  {allItems.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Location selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">Location</label>
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger className="h-10 text-sm font-semibold rounded-xl border dark:border-[#222]">
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Staff selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">Staff / Customer</label>
+              <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+                <SelectTrigger className="h-10 text-sm font-semibold rounded-xl border dark:border-[#222]">
+                  <SelectValue placeholder="All Users" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
+                  <SelectItem value="all">All Users</SelectItem>
+                  {staffList.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>{st.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Logs List */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
           {isLoading ? (
-            <p className="text-sm text-gray-500 dark:text-[#888] py-12 text-center">Loading…</p>
+            <p className="text-sm text-gray-500 dark:text-[#888] py-12 text-center">Loading stock logs...</p>
           ) : entries.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-[#888] py-12 text-center">No history yet</p>
+            <p className="text-sm text-gray-500 dark:text-[#888] py-12 text-center">No logs found matching filters</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3.5">
               {entries.map((e) => {
                 const pos = e.change > 0;
                 return (
-                  <li key={e.id} className="rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-100 dark:border-[#222] p-3">
+                  <li key={e.id} className="rounded-2xl bg-gray-50 dark:bg-[#161616] border border-gray-100 dark:border-[#222] p-4 shadow-sm hover:scale-[1.01] transition-transform">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold capitalize" style={{ color: pos ? "#10b981" : "#ef4444" }}>
-                          {pos ? "+" : ""}{e.change} · {e.reason}
-                        </p>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-baseline justify-between flex-wrap gap-2">
+                          <p className="text-base font-black capitalize tabular-nums" style={{ color: pos ? "#10b981" : "#ef4444" }}>
+                            {pos ? "+" : ""}{e.change} · {e.reason === 'adjustment' && e.note?.includes('Staff consumption') ? 'staff drink' : e.reason}
+                          </p>
+                          <span className="text-[11px] font-bold text-gray-400 dark:text-[#555] uppercase bg-gray-200/50 dark:bg-gray-800/50 px-2 py-0.5 rounded-md">
+                            {e.item?.name ?? "Inventory Item"}
+                          </span>
+                        </div>
                         {e.note && (
-                          <p className="text-xs text-gray-600 dark:text-[#bbb] mt-0.5 truncate">{e.note}</p>
+                          <p className="text-sm font-semibold text-gray-700 dark:text-[#ddd] mt-1">{e.note}</p>
                         )}
-                        <p className="text-[11px] text-gray-400 dark:text-[#666] mt-1">
-                          {new Date(e.created_at).toLocaleString("en-IN", {
-                            day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-                          })}
-                          {e.actor?.name && <> · {e.actor.name}</>}
-                        </p>
+                        <div className="flex justify-between items-center text-xs text-gray-400 dark:text-[#666] pt-1.5 border-t border-gray-100/50 dark:border-gray-800/50 mt-1">
+                          <span>
+                            {new Date(e.created_at).toLocaleString("en-IN", {
+                              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </span>
+                          {e.actor?.name && (
+                            <span className="font-extrabold text-gray-550 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 px-2 py-0.5 rounded">
+                              👤 {e.actor.name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </li>
@@ -227,6 +350,7 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
