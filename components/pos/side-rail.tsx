@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, LayoutGrid, CalendarDays, Receipt, Sun, Moon } from "lucide-react";
+import { LogOut, LayoutGrid, CalendarDays, Receipt, Sun, Moon, CupSoda } from "lucide-react";
 import { useTheme } from "next-themes";
+import { StaffConsumeModal } from "./staff-consume-modal";
 
 // Inventory was removed from the staff side rail; owners still manage stock
 // via /owner/inventory. Bell + low-stock badge components stay in the repo
@@ -40,10 +41,29 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
   const [signingOut, setSigningOut] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [consumeOpen, setConsumeOpen] = useState(false);
+  const [locationId, setLocationId] = useState<string>("");
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    async function loadProfile() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("location_id")
+          .eq("id", session.user.id)
+          .single();
+        if (profile?.location_id) {
+          setLocationId(profile.location_id);
+        }
+      }
+    }
+    loadProfile();
+  }, [supabase]);
 
   async function handleSignOut() {
     if (signingOut) return;
@@ -93,7 +113,7 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
           })}
         </div>
 
-        {/* Footer — identity + theme-toggle + sign-out */}
+        {/* Footer — identity + theme-toggle + staff-intake + sign-out */}
         <div className="shrink-0 px-3 pb-4 border-t border-gray-200 dark:border-[#222] pt-4 space-y-2">
           {mounted && (
             <button
@@ -114,6 +134,16 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
             </button>
           )}
 
+          {mounted && locationId && (
+            <button
+              onClick={() => setConsumeOpen(true)}
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-base font-bold text-emerald-600 dark:text-emerald-400 hover:bg-gray-100 dark:hover:bg-[#1f1f1f] transition-colors"
+            >
+              <CupSoda className="h-5 w-5 shrink-0" />
+              Log Staff Drink
+            </button>
+          )}
+
           {(staffName || locationName) && (
             <div className="px-4 py-2.5 text-xs leading-tight">
               {staffName && <p className="font-semibold text-gray-700 dark:text-[#ddd] truncate">{staffName}</p>}
@@ -130,6 +160,14 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
           </button>
         </div>
       </nav>
+
+      {locationId && (
+        <StaffConsumeModal
+          isOpen={consumeOpen}
+          onClose={() => setConsumeOpen(false)}
+          locationId={locationId}
+        />
+      )}
     </>
   );
 }
