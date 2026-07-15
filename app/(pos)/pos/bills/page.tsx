@@ -25,7 +25,7 @@ export default async function StaffBillsPage() {
     { data: tables },
     { data: inventory }
   ] = await Promise.all([
-    admin.from("locations").select("name").eq("id", profile.location_id).single(),
+    admin.from("locations").select("name, opening_time").eq("id", profile.location_id).single(),
     admin
       .from("orders")
       .select(`
@@ -66,6 +66,7 @@ export default async function StaffBillsPage() {
         <BillsContent
           locationId={profile.location_id}
           locationName={location?.name ?? ""}
+          locationOpeningTime={location?.opening_time ?? "10:00"}
           initial={filteredInitial as unknown as BillRow[]}
           tables={tables ?? []}
           inventoryItems={inventory ?? []}

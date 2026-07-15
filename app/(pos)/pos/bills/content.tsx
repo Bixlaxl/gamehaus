@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getOperatingDate } from "@/lib/utils";
 
 // Subset of fields the bills feed actually uses — exported so the SSR page
 // can cast its raw query result without duplicating the type.
@@ -66,6 +66,7 @@ interface Props {
   initial: BillRow[];
   tables?: { id: string; name: string; type: string; hourly_rate: number }[];
   inventoryItems?: { id: string; name: string; category: string; selling_price: number; stock_count: number }[];
+  locationOpeningTime?: string;
 }
 
 function fmtDateTime(iso: string | null) {
@@ -87,6 +88,7 @@ export function BillsContent({
   initial,
   tables = [],
   inventoryItems = [],
+  locationOpeningTime = "10:00",
 }: Props) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -353,6 +355,23 @@ export function BillsContent({
     }
   }
 
+  const groupedBills = useMemo(() => {
+    const groups: { [dateStr: string]: BillRow[] } = {};
+    for (const b of bills) {
+      const dateKey = getOperatingDate(b.finalized_at, locationOpeningTime);
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(b);
+    }
+    const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    return sortedDates.map((d) => ({
+      dateStr: d,
+      label: new Date(d).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }),
+      items: groups[d],
+    }));
+  }, [bills, locationOpeningTime]);
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto w-full">
       <div className="flex items-baseline justify-between gap-4 flex-wrap">
@@ -388,93 +407,102 @@ export function BillsContent({
           {search ? "No matching bills" : "No finalized bills yet at this location."}
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-hidden bg-white dark:bg-[#111]">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-100 dark:bg-[#181818] border-b dark:border-[#222]">
-              <tr>
-                <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">When</th>
-                <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Customer</th>
-                <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Tables</th>
-                <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Payment</th>
-                <th className="px-6 py-4 text-right font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Paid</th>
-                <th className="px-6 py-4 text-right font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Send Bill</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y dark:divide-[#222]">
-              {bills.map((b) => {
-                const tablesList = b.items
-                  .map((i) => tableNameOf(i.table))
-                  .filter((n, idx, arr) => arr.indexOf(n) === idx)
-                  .join(", ");
-                const total = b.amount_due + b.advance_paid;
-                const methods = b.payments
-                  .filter((p) => p.status === "completed")
-                  .map((p) => p.method)
-                  .filter((m, idx, arr) => arr.indexOf(m) === idx);
-                return (
-                  <tr
-                    key={b.id}
-                    onClick={() => setSelected(b)}
-                    className="hover:bg-gray-50 dark:hover:bg-[#181818] cursor-pointer transition-colors"
-                  >
-                    <td className="px-6 py-5 font-mono text-base font-extrabold text-gray-800 dark:text-[#ddd]">
-                      {fmtDateTime(b.finalized_at)}
-                    </td>
-                    <td className="px-6 py-5">
-                      <p className="text-xl font-black text-gray-900 dark:text-white">
-                        {b.customer_name ?? "—"}
-                      </p>
-                      {b.customer_phone && (
-                        <p className="text-base font-extrabold text-gray-500 font-mono mt-0.5">
-                          {b.customer_phone}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 text-lg font-extrabold text-gray-800 dark:text-[#ddd]">
-                      {tablesList || "—"}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex gap-2">
-                        {methods.length === 0 ? "—" : methods.map((m) => (
-                          <span
-                            key={m}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider"
-                            style={
-                              m === "cash"
-                                ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
-                                : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
-                            }
-                          >
-                            {m === "cash" ? <Banknote className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-right text-xl font-black tabular-nums text-gray-950 dark:text-white">
-                      {formatCurrency(total)}
-                    </td>
-                    <td className="px-6 py-5 text-right">
-                      {b.customer_phone ? (
-                        <button
-                          type="button"
-                          disabled={sendingId === b.id}
-                          onClick={(e) => handleSendWhatsApp(e, b)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
-                          title="Send Bill link via WhatsApp"
+        <div className="space-y-8">
+          {groupedBills.map((group) => (
+            <div key={group.dateStr} className="space-y-4">
+              <h2 className="text-2xl font-black text-gray-950 dark:text-white pt-2 border-b dark:border-[#222] pb-2">
+                {group.label}
+              </h2>
+              <div className="rounded-2xl border overflow-hidden bg-white dark:bg-[#111]">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#181818] border-b dark:border-[#222]">
+                    <tr>
+                      <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">When</th>
+                      <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Customer</th>
+                      <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Tables</th>
+                      <th className="px-6 py-4 text-left font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Payment</th>
+                      <th className="px-6 py-4 text-right font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Paid</th>
+                      <th className="px-6 py-4 text-right font-extrabold text-gray-700 dark:text-[#aaa] uppercase text-xs tracking-wider">Send Bill</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y dark:divide-[#222]">
+                    {group.items.map((b) => {
+                      const tablesList = b.items
+                        .map((i) => tableNameOf(i.table))
+                        .filter((n, idx, arr) => arr.indexOf(n) === idx)
+                        .join(", ");
+                      const total = b.amount_due + b.advance_paid;
+                      const methods = b.payments
+                        .filter((p) => p.status === "completed")
+                        .map((p) => p.method)
+                        .filter((m, idx, arr) => arr.indexOf(m) === idx);
+                      return (
+                        <tr
+                          key={b.id}
+                          onClick={() => setSelected(b)}
+                          className="hover:bg-gray-50 dark:hover:bg-[#181818] cursor-pointer transition-colors"
                         >
-                          <MessageSquare className="h-4 w-4" />
-                          {sendingId === b.id ? "…" : "WhatsApp"}
-                        </button>
-                      ) : (
-                        <span className="text-sm text-gray-400 italic font-extrabold">No phone</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          <td className="px-6 py-5 font-mono text-base font-extrabold text-gray-800 dark:text-[#ddd]">
+                            {fmtDateTime(b.finalized_at)}
+                          </td>
+                          <td className="px-6 py-5">
+                            <p className="text-xl font-black text-gray-900 dark:text-white">
+                              {b.customer_name ?? "—"}
+                            </p>
+                            {b.customer_phone && (
+                              <p className="text-base font-extrabold text-gray-500 font-mono mt-0.5">
+                                {b.customer_phone}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-6 py-5 text-lg font-extrabold text-gray-800 dark:text-[#ddd]">
+                            {tablesList || "—"}
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex gap-2">
+                              {methods.length === 0 ? "—" : methods.map((m) => (
+                                <span
+                                  key={m}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider"
+                                  style={
+                                    m === "cash"
+                                      ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                                      : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
+                                  }
+                                >
+                                  {m === "cash" ? <Banknote className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 text-right text-xl font-black tabular-nums text-gray-950 dark:text-white">
+                            {formatCurrency(total)}
+                          </td>
+                          <td className="px-6 py-5 text-right">
+                            {b.customer_phone ? (
+                              <button
+                                type="button"
+                                disabled={sendingId === b.id}
+                                onClick={(e) => handleSendWhatsApp(e, b)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
+                                title="Send Bill link via WhatsApp"
+                              >
+                                <MessageSquare className="h-4 w-4" />
+                                {sendingId === b.id ? "…" : "WhatsApp"}
+                              </button>
+                            ) : (
+                              <span className="text-sm text-gray-400 italic font-extrabold">No phone</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

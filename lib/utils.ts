@@ -161,7 +161,9 @@ export function getActualSlotDate(baseDate: string, timeStr: string, opening: st
     return addOneDay(baseDate);
   }
   return baseDate;
-}export function cleanErrorMessage(msg: string): string {
+}
+
+export function cleanErrorMessage(msg: string): string {
   if (!msg) return "An unexpected error occurred.";
   const trimmed = msg.trim();
   if (
@@ -175,4 +177,40 @@ export function getActualSlotDate(baseDate: string, timeStr: string, opening: st
     return "Database connection timeout. The database is recovering from a temporary sleep. Please try again in a few seconds.";
   }
   return msg;
+}
+
+/**
+ * Computes the operating day ("YYYY-MM-DD") for a given transaction timestamp,
+ * based on the business day's opening time.
+ *
+ * If the transaction occurred in the early morning before the business day opens,
+ * it is retroactively grouped into the previous calendar day.
+ *
+ * @param dateStr ISO timestamp string or Date object
+ * @param openingTime "HH:MM" format (e.g. "10:00")
+ */
+export function getOperatingDate(dateStr: string | Date | null, openingTime: string = "10:00"): string {
+  if (!dateStr) return "";
+  const d = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+  
+  // Convert UTC time to IST (UTC+5.5)
+  const istTime = new Date(d.getTime() + 5.5 * 3600 * 1000);
+  
+  // Extract IST hours & minutes
+  const hrs = istTime.getUTCHours();
+  const mins = istTime.getUTCMinutes();
+  const currentMins = hrs * 60 + mins;
+
+  // Convert opening time to minutes
+  const [oh, om] = openingTime.split(":").map(Number);
+  const openMins = oh * 60 + om;
+
+  // If the transaction occurred before the store opening time (e.g. early morning overnight portion),
+  // it belongs to the previous business day.
+  if (currentMins < openMins) {
+    const prevDay = new Date(istTime.getTime() - 24 * 3600 * 1000);
+    return prevDay.toISOString().split("T")[0];
+  }
+
+  return istTime.toISOString().split("T")[0];
 }

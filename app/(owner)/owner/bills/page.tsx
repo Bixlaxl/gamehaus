@@ -24,7 +24,7 @@ export default async function OwnerBillsPage() {
   }
 
   const [{ data: locations }, { data: initial }] = await Promise.all([
-    admin.from("locations").select("id, name").eq("is_active", true).order("name"),
+    admin.from("locations").select("id, name, opening_time").eq("is_active", true).order("name"),
     admin
       .from("orders")
       .select(`

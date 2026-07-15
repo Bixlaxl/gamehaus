@@ -23,18 +23,47 @@ export default async function ReportsPage({
 
   const { data: locations } = await admin.from("locations").select("*");
 
-  const loc     = locations?.[0];
-  const opening = loc?.opening_time ?? "10:00";
-  const closing = loc?.closing_time ?? "23:00";
-  const [openH]  = opening.split(":").map(Number);
-  const [closeH] = closing.split(":").map(Number);
-  const crossesMidnight = closeH < openH;
+  // Determine earliest opening and latest closing across all locations
+  let minOpenMins = 600; // default 10:00
+  let maxCloseMins = 1380; // default 23:00
 
-  const fromISO = new Date(fromDate + "T" + opening + "+05:30").toISOString();
+  if (locations && locations.length > 0) {
+    minOpenMins = Infinity;
+    maxCloseMins = -Infinity;
+    for (const l of locations) {
+      const op = l.opening_time ?? "10:00";
+      const cl = l.closing_time ?? "23:00";
+      const [oh, om] = op.split(":").map(Number);
+      const [ch, cm] = cl.split(":").map(Number);
+
+      const openMins = oh * 60 + om;
+      let closeMins = ch * 60 + cm;
+      if (closeMins <= openMins) {
+        closeMins += 24 * 60;
+      }
+
+      if (openMins < minOpenMins) minOpenMins = openMins;
+      if (closeMins > maxCloseMins) maxCloseMins = closeMins;
+    }
+  }
+
+  const earliestOpening = `${String(Math.floor(minOpenMins / 60)).padStart(2, "0")}:${String(minOpenMins % 60).padStart(2, "0")}`;
+  
+  let latestClosing = "";
+  let crossesMidnight = false;
+  if (maxCloseMins >= 24 * 60) {
+    crossesMidnight = true;
+    const norm = maxCloseMins - 24 * 60;
+    latestClosing = `${String(Math.floor(norm / 60)).padStart(2, "0")}:${String(norm % 60).padStart(2, "0")}`;
+  } else {
+    latestClosing = `${String(Math.floor(maxCloseMins / 60)).padStart(2, "0")}:${String(maxCloseMins % 60).padStart(2, "0")}`;
+  }
+
+  const fromISO = new Date(fromDate + "T" + earliestOpening + "+05:30").toISOString();
   const toEndDate = crossesMidnight
     ? (() => { const d = new Date(toDate + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
     : toDate;
-  const toISO = new Date(toEndDate + "T" + closing + "+05:30").toISOString();
+  const toISO = new Date(toEndDate + "T" + latestClosing + "+05:30").toISOString();
 
   // Paginate fetching of orders
   const orders: any[] = [];
@@ -63,7 +92,7 @@ export default async function ReportsPage({
   sixMonthsAgo.setMonth(today.getMonth() - 5);
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
-  const histFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + opening + "+05:30").toISOString();
+  const histFromISO = new Date(sixMonthsAgo.toISOString().split("T")[0] + "T" + earliestOpening + "+05:30").toISOString();
 
   const history: any[] = [];
   let histPage = 0;

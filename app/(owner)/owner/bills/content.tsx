@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getOperatingDate } from "@/lib/utils";
 import type { BillRow } from "@/app/(pos)/pos/bills/content";
 
-type LocationLite = { id: string; name: string };
+type LocationLite = { id: string; name: string; opening_time?: string };
 
 interface Props {
   initialLocations: LocationLite[];
@@ -114,6 +114,43 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
     }
   }
 
+  const earliestOpening = useMemo(() => {
+    let minOpenMins = 600; // default 10:00
+    if (initialLocations && initialLocations.length > 0) {
+      minOpenMins = Infinity;
+      for (const l of initialLocations) {
+        const op = l.opening_time ?? "10:00";
+        const [oh, om] = op.split(":").map(Number);
+        const openMins = oh * 60 + om;
+        if (openMins < minOpenMins) minOpenMins = openMins;
+      }
+    }
+    return `${String(Math.floor(minOpenMins / 60)).padStart(2, "0")}:${String(minOpenMins % 60).padStart(2, "0")}`;
+  }, [initialLocations]);
+
+  const selectedLocationOpeningTime = useMemo(() => {
+    if (selectedLocation === "all") return earliestOpening;
+    const loc = initialLocations.find((l) => l.id === selectedLocation);
+    return loc?.opening_time ?? earliestOpening;
+  }, [selectedLocation, initialLocations, earliestOpening]);
+
+  const groupedBills = useMemo(() => {
+    const groups: { [dateStr: string]: BillRow[] } = {};
+    for (const b of bills) {
+      const dateKey = getOperatingDate(b.finalized_at, selectedLocationOpeningTime);
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(b);
+    }
+    const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    return sortedDates.map((d) => ({
+      dateStr: d,
+      label: new Date(d).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }),
+      items: groups[d],
+    }));
+  }, [bills, selectedLocationOpeningTime]);
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Top Header */}
@@ -161,94 +198,103 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
           {search ? "No matching bills found" : "No finalized bills recorded yet."}
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
-          <table className="w-full text-base">
-            <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">When</th>
-                {selectedLocation === "all" && (
-                  <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Location</th>
-                )}
-                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Customer</th>
-                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Tables</th>
-                <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Payment</th>
-                <th className="px-4 py-4 text-right font-black text-muted-foreground uppercase text-sm tracking-wide">Paid</th>
-                <th className="px-4 py-4 text-right font-black text-muted-foreground uppercase text-sm tracking-wide">Send Bill</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-[#222]">
-              {bills.map((b) => {
-                const tablesList = b.items
-                  .map((i) => tableNameOf(i.table))
-                  .filter((n, idx, arr) => arr.indexOf(n) === idx)
-                  .join(", ");
-                const total = b.amount_due + b.advance_paid;
-                const methods = b.payments
-                  .filter((p) => p.status === "completed")
-                  .map((p) => p.method)
-                  .filter((m, idx, arr) => arr.indexOf(m) === idx);
-                const locName = locationMap.get(b.location_id) ?? "Location";
-
-                return (
-                  <tr
-                    key={b.id}
-                    onClick={() => setSelected(b)}
-                    className="hover:bg-muted/50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-4 py-5 font-mono text-base font-bold">{fmtDateTime(b.finalized_at)}</td>
-                    {selectedLocation === "all" && (
-                      <td className="px-4 py-5">
-                        <span className="inline-flex items-center gap-1.5 text-base font-extrabold px-3 py-1.5 rounded-md bg-muted text-foreground">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          {locName}
-                        </span>
-                      </td>
-                    )}
-                    <td className="px-4 py-5">
-                      <p className="font-black text-foreground text-lg md:text-xl">{b.customer_name ?? "—"}</p>
-                      {b.customer_phone && <p className="text-base text-muted-foreground font-bold mt-1">{b.customer_phone}</p>}
-                    </td>
-                    <td className="px-4 py-5 text-foreground font-extrabold text-lg">{tablesList || "—"}</td>
-                    <td className="px-4 py-5">
-                      <div className="flex gap-2">
-                        {methods.length === 0 ? "—" : methods.map((m) => (
-                          <span
-                            key={m}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-black uppercase tracking-wider"
-                            style={
-                              m === "cash"
-                                ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
-                                : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
-                            }
-                          >
-                            {m === "cash" ? <Banknote className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-5 text-right font-black tabular-nums text-foreground text-lg md:text-xl">{formatCurrency(total)}</td>
-                    <td className="px-4 py-5 text-right">
-                      {b.customer_phone ? (
-                        <button
-                          type="button"
-                          disabled={sendingId === b.id}
-                          onClick={(e) => handleSendWhatsApp(e, b)}
-                          className="inline-flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-base font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
-                          title="Send Bill link via WhatsApp"
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                          {sendingId === b.id ? "…" : "WhatsApp"}
-                        </button>
-                      ) : (
-                        <span className="text-base text-muted-foreground italic font-bold">No phone</span>
+        <div className="space-y-8">
+          {groupedBills.map((group) => (
+            <div key={group.dateStr} className="space-y-4">
+              <h2 className="text-xl font-black text-foreground pt-2 border-b dark:border-[#222] pb-2">
+                {group.label}
+              </h2>
+              <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+                <table className="w-full text-base">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">When</th>
+                      {selectedLocation === "all" && (
+                        <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Location</th>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Customer</th>
+                      <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Tables</th>
+                      <th className="px-4 py-4 text-left font-black text-muted-foreground uppercase text-sm tracking-wide">Payment</th>
+                      <th className="px-4 py-4 text-right font-black text-muted-foreground uppercase text-sm tracking-wide">Paid</th>
+                      <th className="px-4 py-4 text-right font-black text-muted-foreground uppercase text-sm tracking-wide">Send Bill</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-[#222]">
+                    {group.items.map((b) => {
+                      const tablesList = b.items
+                        .map((i) => tableNameOf(i.table))
+                        .filter((n, idx, arr) => arr.indexOf(n) === idx)
+                        .join(", ");
+                      const total = b.amount_due + b.advance_paid;
+                      const methods = b.payments
+                        .filter((p) => p.status === "completed")
+                        .map((p) => p.method)
+                        .filter((m, idx, arr) => arr.indexOf(m) === idx);
+                      const locName = locationMap.get(b.location_id) ?? "Location";
+
+                      return (
+                        <tr
+                          key={b.id}
+                          onClick={() => setSelected(b)}
+                          className="hover:bg-muted/50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-4 py-5 font-mono text-base font-bold">{fmtDateTime(b.finalized_at)}</td>
+                          {selectedLocation === "all" && (
+                            <td className="px-4 py-5">
+                              <span className="inline-flex items-center gap-1.5 text-base font-extrabold px-3 py-1.5 rounded-md bg-muted text-foreground">
+                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                {locName}
+                              </span>
+                            </td>
+                          )}
+                          <td className="px-4 py-5">
+                            <p className="font-black text-foreground text-lg md:text-xl">{b.customer_name ?? "—"}</p>
+                            {b.customer_phone && <p className="text-base text-muted-foreground font-bold mt-1">{b.customer_phone}</p>}
+                          </td>
+                          <td className="px-4 py-5 text-foreground font-extrabold text-lg">{tablesList || "—"}</td>
+                          <td className="px-4 py-5">
+                            <div className="flex gap-2">
+                              {methods.length === 0 ? "—" : methods.map((m) => (
+                                <span
+                                  key={m}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-black uppercase tracking-wider"
+                                  style={
+                                    m === "cash"
+                                      ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                                      : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
+                                  }
+                                >
+                                  {m === "cash" ? <Banknote className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-5 text-right font-black tabular-nums text-foreground text-lg md:text-xl">{formatCurrency(total)}</td>
+                          <td className="px-4 py-5 text-right">
+                            {b.customer_phone ? (
+                              <button
+                                type="button"
+                                disabled={sendingId === b.id}
+                                onClick={(e) => handleSendWhatsApp(e, b)}
+                                className="inline-flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-base font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
+                                title="Send Bill link via WhatsApp"
+                              >
+                                <MessageSquare className="h-4 w-4" />
+                                {sendingId === b.id ? "…" : "WhatsApp"}
+                              </button>
+                            ) : (
+                              <span className="text-base text-muted-foreground italic font-bold">No phone</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

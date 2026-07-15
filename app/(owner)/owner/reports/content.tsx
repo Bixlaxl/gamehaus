@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getOperatingDate } from "@/lib/utils";
 import { BarChart2, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -202,6 +202,18 @@ export function ReportsContent({
 
   const monthlyData = useMemo(() => {
     if (!monthlyHistory) return [];
+
+    let minOpenMins = 600; // default 10:00
+    if (locations && locations.length > 0) {
+      minOpenMins = Infinity;
+      for (const l of locations) {
+        const op = l.opening_time ?? "10:00";
+        const [oh, om] = op.split(":").map(Number);
+        const openMins = oh * 60 + om;
+        if (openMins < minOpenMins) minOpenMins = openMins;
+      }
+    }
+    const earliestOpening = `${String(Math.floor(minOpenMins / 60)).padStart(2, "0")}:${String(minOpenMins % 60).padStart(2, "0")}`;
     
     const list: { monthKey: string; label: string; revenue: number; ordersCount: number; MoM: number }[] = [];
     const today = new Date();
@@ -219,9 +231,9 @@ export function ReportsContent({
       
     for (const order of historicalOrders) {
       if (!order.finalized_at) continue;
-      const istMs = new Date(order.finalized_at).getTime() + 5.5 * 60 * 60 * 1000;
-      const istDate = new Date(istMs);
-      const mKey = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, "0")}`;
+      const opDate = getOperatingDate(order.finalized_at, earliestOpening);
+      const [y, m] = opDate.split("-");
+      const mKey = `${y}-${m}`;
       
       const bucket = list.find(b => b.monthKey === mKey);
       if (bucket) {
