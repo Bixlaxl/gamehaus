@@ -204,7 +204,100 @@ export function OwnerBillsContent({ initialLocations, initial }: Props) {
               <h2 className="text-xl font-black text-foreground pt-2 border-b dark:border-[#222] pb-2">
                 {group.label}
               </h2>
-              <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+              {/* Mobile View (stacked cards) */}
+              <div className="block md:hidden space-y-4">
+                {group.items.map((b) => {
+                  const tablesList = b.items
+                    .map((i) => tableNameOf(i.table))
+                    .filter((n, idx, arr) => arr.indexOf(n) === idx)
+                    .join(", ");
+                  const total = b.amount_due + b.advance_paid;
+                  const methods = b.payments
+                    .filter((p) => p.status === "completed")
+                    .map((p) => p.method)
+                    .filter((m, idx, arr) => arr.indexOf(m) === idx);
+                  const locName = locationMap.get(b.location_id) ?? "Location";
+
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => setSelected(b)}
+                      className="border border-gray-150 dark:border-[#222] rounded-2xl p-4 bg-gray-50/50 dark:bg-[#161616] cursor-pointer space-y-3.5 shadow-sm active:scale-[0.99] transition-transform"
+                    >
+                      {/* DateTime & Location */}
+                      <div className="flex justify-between items-center flex-wrap gap-2 text-sm">
+                        <span className="font-mono font-bold text-gray-550 dark:text-gray-400">
+                          {fmtDateTime(b.finalized_at)}
+                        </span>
+                        {selectedLocation === "all" && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-muted text-foreground text-xs font-black">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                            {locName}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Customer Info */}
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Customer</p>
+                        <p className="text-xl font-black text-foreground">{b.customer_name ?? "—"}</p>
+                        {b.customer_phone && (
+                          <p className="text-base font-bold text-muted-foreground mt-0.5">{b.customer_phone}</p>
+                        )}
+                      </div>
+
+                      {/* Tables & Payments & Total */}
+                      <div className="grid grid-cols-2 gap-2 text-sm bg-white dark:bg-[#111] p-3 rounded-xl border dark:border-gray-800">
+                        <div>
+                          <p className="text-gray-450 font-bold text-[11px] uppercase">Tables</p>
+                          <p className="font-black text-foreground mt-0.5">{tablesList || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-450 font-bold text-[11px] uppercase">Paid Total</p>
+                          <p className="font-black text-emerald-500 mt-0.5">{formatCurrency(total)}</p>
+                        </div>
+                      </div>
+
+                      {/* Payment Methods & Send button */}
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <div className="flex gap-1 flex-wrap">
+                          {methods.length === 0 ? "—" : methods.map((m) => (
+                            <span
+                              key={m}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-wider"
+                              style={
+                                m === "cash"
+                                  ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                                  : { background: "rgba(99,102,241,0.15)", color: "#6366f1" }
+                              }
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+
+                        {b.customer_phone ? (
+                          <button
+                            type="button"
+                            disabled={sendingId === b.id}
+                            onClick={(e) => handleSendWhatsApp(e, b)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 transition-all active:scale-95 disabled:opacity-40"
+                            title="Send Bill link via WhatsApp"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            {sendingId === b.id ? "…" : "WhatsApp"}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic font-bold">No phone</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop View (HTML Table) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-base">
                   <thead className="bg-muted/50 border-b">
                     <tr>

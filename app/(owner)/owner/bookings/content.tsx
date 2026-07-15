@@ -389,8 +389,75 @@ export function BookingsContent({
                 </span>
               </div>
 
-              {/* Slots Table */}
-              <div className="overflow-x-auto">
+              {/* Mobile View (stacked cards) */}
+              <div className="block md:hidden space-y-4">
+                {tableBookings.map((b) => (
+                  <div key={b.id} className="border border-gray-150 dark:border-[#222] rounded-2xl p-4 bg-gray-50/50 dark:bg-[#161616] space-y-4">
+                    {/* Time Slot & Status */}
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                      <span className="font-mono text-base font-black px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300 border dark:border-[#333] shadow-sm">
+                        {fmt(b.scheduled_start)} – {fmt(b.scheduled_end)}
+                      </span>
+                      <Badge
+                        className="px-4 py-1.5 text-sm font-black rounded-xl"
+                        variant={
+                          b.status === "confirmed"  ? "success"     :
+                          b.status === "checked_in" ? "outline"     :
+                          (b.status === "finished" || b.status === "completed") ? "secondary" :
+                          b.status === "no_show"    ? "destructive" : "secondary"
+                        }
+                      >
+                        {STATUS_LABELS[b.status] ?? b.status}
+                      </Badge>
+                    </div>
+
+                    {/* Customer Info */}
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Customer</p>
+                      <p className="text-xl font-black text-gray-900 dark:text-white">{b.order?.customer_name ?? "—"}</p>
+                      {b.order?.customer_phone && (
+                        <p className="text-base font-bold text-gray-600 dark:text-gray-450 mt-0.5">{b.order.customer_phone}</p>
+                      )}
+                    </div>
+
+                    {/* Advance paid */}
+                    {b.order?.advance_paid && b.order.advance_paid > 0 ? (
+                      <div className="text-sm bg-white dark:bg-[#111] p-3 rounded-xl border dark:border-gray-800">
+                        <p className="text-gray-450 font-bold text-[11px] uppercase">Advance Paid</p>
+                        <p className="font-black text-gray-900 dark:text-white mt-0.5">
+                          ₹{Math.round(b.order.advance_paid)}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {/* Actions */}
+                    {mode === "staff" && b.status === "confirmed" && (
+                      <div className="flex gap-2.5 pt-1">
+                        <Button
+                          size="sm"
+                          disabled={busyBookingId === b.id || !actionsAllowed}
+                          onClick={() => void doCheckIn(b)}
+                          className="flex-1 h-12 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                        >
+                          {busyBookingId === b.id ? "…" : "Check-in"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busyBookingId === b.id || !actionsAllowed}
+                          onClick={() => void doNoShow(b)}
+                          className="flex-1 h-12 text-sm font-black rounded-xl"
+                        >
+                          {busyBookingId === b.id ? "…" : "No-show"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop View (HTML Table) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-base">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-[#222] text-left">

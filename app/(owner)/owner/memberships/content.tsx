@@ -563,7 +563,7 @@ export function MembershipsContent({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-base">
+            <table className="w-full min-w-[800px] text-base">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-4 py-3.5 text-left font-black text-gray-700 whitespace-nowrap">ID</th>

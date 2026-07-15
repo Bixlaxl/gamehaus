@@ -675,12 +675,12 @@ export function ReportsContent({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 
         {/* By location */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 min-w-[500px]">
             <BarChart2 className="h-4 w-4 text-gray-500" />
             <h2 className="font-semibold text-gray-900">Revenue by Location</h2>
           </div>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[500px] text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
@@ -1034,12 +1034,12 @@ export function ReportsContent({
       </div>
 
       {/* Top customers */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 min-w-[500px]">
           <Users className="h-4 w-4 text-gray-500" />
           <h2 className="font-semibold text-gray-900">Top Customers</h2>
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[500px] text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
