@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2, Search, Plus, Minus, Trash } from "lucide-react";
 import type { Order, Booking } from "@/lib/supabase/types";
 import type { AppSettings } from "@/lib/settings";
@@ -86,6 +87,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const [itemSearchQuery, setItemSearchQuery] = useState("");
+  const [selectedItemResetKey, setSelectedItemResetKey] = useState(0);
 
   const { data: inventoryItemsRes } = useQuery<any>({
     queryKey: ["inventory-items", locationId],
@@ -115,6 +117,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       if (!body.success) throw new Error(body.error);
       toast.success(`Added ${item.name}`);
       setItemSearchQuery("");
+      setSelectedItemResetKey((prev) => prev + 1);
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
       qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
     } catch (e: any) {
@@ -695,39 +698,30 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               Add Items / Snacks
             </h3>
 
-            {/* Autocomplete Catalog Search */}
-            <div className="relative">
-              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
-              <Input
-                type="text"
-                placeholder="Search and add beverages or extras (e.g. Water, Coke)..."
-                value={itemSearchQuery}
-                onChange={(e) => setItemSearchQuery(e.target.value)}
-                className="pl-9 h-11 text-sm font-semibold rounded-lg"
-              />
-
-              {itemSearchQuery.trim() && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-35 max-h-48 overflow-y-auto rounded-lg shadow-lg bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]">
-                  {inventoryItems
-                    .filter((item: any) => item.is_active && item.stock_count > 0 && item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
-                    .slice(0, 5)
-                    .map((item: any) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleAddExtra(item)}
-                        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors hover:bg-gray-100 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
-                      >
-                        <span className="text-sm font-bold text-gray-900 dark:text-white">{item.name}</span>
-                        <span className="text-sm font-extrabold text-gray-500 font-mono">₹{item.selling_price}</span>
-                      </button>
-                    ))}
-                  {inventoryItems.filter((item: any) => item.is_active && item.stock_count > 0 && item.name.toLowerCase().includes(itemSearchQuery.toLowerCase())).length === 0 && (
-                    <div className="px-4 py-3 text-gray-500 text-xs font-semibold">No matching items found</div>
-                  )}
-                </div>
-              )}
-            </div>
+            {/* Dropdown Catalog Select */}
+            <Select
+              key={selectedItemResetKey}
+              value=""
+              onValueChange={(val) => {
+                const item = inventoryItems.find((i: any) => i.id === val);
+                if (item) {
+                  handleAddExtra(item);
+                }
+              }}
+            >
+              <SelectTrigger className="h-12 text-sm px-4 rounded-xl font-bold bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800">
+                <SelectValue placeholder="Choose inventory item to add..." />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-[#111] border dark:border-[#222]">
+                {inventoryItems
+                  .filter((item: any) => item.is_active && item.stock_count > 0)
+                  .map((item: any) => (
+                    <SelectItem key={item.id} value={item.id} className="text-sm font-semibold">
+                      {item.name} (₹{item.selling_price})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
 
             {/* List of currently added extras */}
             {activeExtras.length > 0 ? (

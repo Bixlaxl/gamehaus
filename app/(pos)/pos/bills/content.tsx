@@ -65,7 +65,7 @@ interface Props {
   locationId: string;
   locationName: string;
   initial: BillRow[];
-  tables?: { id: string; name: string; type: string; hourly_rate: number; modes?: any }[];
+  tables?: { id: string; name: string; type: string; hourly_rate: number; modes?: any; people_pricing?: any }[];
   inventoryItems?: { id: string; name: string; category: string; selling_price: number; stock_count: number }[];
   locationOpeningTime?: string;
 }
@@ -285,13 +285,19 @@ export function BillsContent({
     for (const s of manualSessions) {
       const tbl = tables.find((t) => t.id === s.tableId);
       if (tbl) {
-        let rate = tbl.hourly_rate;
+        let baseRate = tbl.hourly_rate;
+        let pp: Record<string, number> = (tbl as any).people_pricing ?? {};
+
         if (s.selectedModeName && (tbl as any).modes && Array.isArray((tbl as any).modes)) {
           const mode = ((tbl as any).modes as any[]).find((m) => m.name === s.selectedModeName);
           if (mode) {
-            rate = Number(mode.hourly_rate);
+            baseRate = Number(mode.hourly_rate);
+            pp = (mode.people_pricing ?? {}) as Record<string, number>;
           }
         }
+
+        const peopleKey = String(s.numPeople ?? 2);
+        const rate = pp[peopleKey] != null ? Number(pp[peopleKey]) : baseRate;
         sessionCost += rate * (s.hours || 0);
       }
     }
@@ -361,13 +367,20 @@ export function BillsContent({
         customer_phone: manualPhone || undefined,
         table_sessions: manualSessions.map((s) => {
           const tbl = tables.find((t) => t.id === s.tableId);
-          let rate = tbl?.hourly_rate ?? 0;
+          let baseRate = tbl?.hourly_rate ?? 0;
+          let pp: Record<string, number> = (tbl as any)?.people_pricing ?? {};
+
           if (s.selectedModeName && (tbl as any)?.modes && Array.isArray((tbl as any).modes)) {
             const mode = ((tbl as any).modes as any[]).find((m) => m.name === s.selectedModeName);
             if (mode) {
-              rate = Number(mode.hourly_rate);
+              baseRate = Number(mode.hourly_rate);
+              pp = (mode.people_pricing ?? {}) as Record<string, number>;
             }
           }
+
+          const peopleKey = String(s.numPeople ?? 2);
+          const rate = pp[peopleKey] != null ? Number(pp[peopleKey]) : baseRate;
+
           const now = Date.now();
           const startStr = new Date(now - s.hours * 60 * 60 * 1000).toISOString();
           const endStr = new Date(now).toISOString();
