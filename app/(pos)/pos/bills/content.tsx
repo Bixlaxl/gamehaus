@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { FinalizeBillModal } from "@/components/pos/finalize-bill-modal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -1315,6 +1316,8 @@ export function BillsContent({
           </DialogContent>
         </Dialog>
       )}
+
+      <FinalizeBillModal locationId={locationId} />
     </div>
   );
 }

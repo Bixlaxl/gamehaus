@@ -148,8 +148,6 @@ export function POSAlerts({ locationId }: POSAlertsProps) {
           beepedRef.current.add(alertId);
           beep();
         }
-      } else {
-        beepedRef.current.delete(alertId);
       }
     }
   }
@@ -157,77 +155,84 @@ export function POSAlerts({ locationId }: POSAlertsProps) {
   if (pendingExtrasList.length === 0 && alerts.length === 0) return null;
 
   return (
-    <div className="px-6 py-4 space-y-4 border-t border-gray-200 dark:border-[#1F1F1F] bg-gray-50/50 dark:bg-[#0d0d0d]/30">
-      
-      {/* ── Pending tablet orders alerts (High visibility, Accept/Decline) ── */}
-      {pendingExtrasList.map((extra) => {
-        const isBusy = actionLoading === extra.id;
-        return (
-          <div
-            key={extra.id}
-            className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border-2 border-orange-500/40 bg-orange-500/5 dark:bg-orange-500/10 shadow-md transition-all"
-          >
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              <span className="text-3xl shrink-0 mt-0.5" role="img" aria-label="bell">🔔</span>
-              <div className="space-y-1 min-w-0">
-                <p className="text-xs uppercase font-extrabold tracking-widest text-orange-600 dark:text-orange-400">
-                  Tablet Kiosk Order
-                </p>
-                <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white leading-tight truncate">
-                  {extra.quantity}x {extra.cleanName}
-                </p>
-                <p className="text-base font-extrabold text-gray-600 dark:text-gray-300">
-                  Ordered by <span className="underline">{extra.customerName}</span> ({extra.tableLabel})
-                </p>
+    <>
+      {/* ── Floating pending tablet orders (Top-Right, Big, Tick/Cross) ── */}
+      {pendingExtrasList.length > 0 && (
+        <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-4 w-[26rem] max-w-md pointer-events-none">
+          {pendingExtrasList.map((extra) => {
+            const isBusy = actionLoading === extra.id;
+            return (
+              <div
+                key={extra.id}
+                className="pointer-events-auto flex items-center justify-between gap-5 p-6 rounded-[24px] border-2 border-orange-500 bg-white dark:bg-[#1a1a1a] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-top-5 duration-300"
+              >
+                <div className="flex items-start gap-4 min-w-0 flex-1">
+                  <span className="text-4xl shrink-0 mt-0.5" role="img" aria-label="bell">🔔</span>
+                  <div className="space-y-1 min-w-0">
+                    <p className="text-xs uppercase font-extrabold tracking-widest text-orange-600 dark:text-orange-400">
+                      Kiosk Order
+                    </p>
+                    <p className="text-2xl font-black text-gray-900 dark:text-white leading-tight truncate">
+                      {extra.quantity}x {extra.cleanName}
+                    </p>
+                    <p className="text-base font-extrabold text-gray-500 dark:text-gray-400">
+                      {extra.tableLabel} <span className="text-xs font-normal opacity-85">({extra.customerName})</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                     disabled={isBusy}
+                     onClick={() => handleAccept(extra.orderId, extra.id, extra.cleanName)}
+                     className="flex items-center justify-center w-14 h-14 text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 rounded-2xl shadow-lg transition-transform hover:scale-105 active:scale-95"
+                     title="Accept Order"
+                  >
+                    <Check className="h-8 w-8 stroke-[3.5px]" />
+                  </button>
+                  <button
+                     disabled={isBusy}
+                     onClick={() => handleDecline(extra.orderId, extra.id, extra.cleanName)}
+                     className="flex items-center justify-center w-14 h-14 text-white bg-red-650 hover:bg-red-500 active:bg-red-750 disabled:opacity-50 rounded-2xl shadow-lg transition-transform hover:scale-105 active:scale-95"
+                     title="Decline Order"
+                  >
+                    <X className="h-8 w-8 stroke-[3.5px]" />
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                disabled={isBusy}
-                onClick={() => handleAccept(extra.orderId, extra.id, extra.cleanName)}
-                className="flex items-center justify-center gap-1.5 h-14 px-6 text-lg font-black text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-sm transition-all"
-              >
-                <Check className="h-5 w-5 stroke-[3px]" />
-                Accept
-              </button>
-              <button
-                disabled={isBusy}
-                onClick={() => handleDecline(extra.orderId, extra.id, extra.cleanName)}
-                className="flex items-center justify-center gap-1.5 h-14 px-6 text-lg font-black text-white bg-red-600 hover:bg-red-500 active:bg-red-700 disabled:opacity-50 rounded-xl shadow-sm transition-all"
-              >
-                <X className="h-5 w-5 stroke-[3px]" />
-                Decline
-              </button>
-            </div>
-          </div>
-        );
-      })}
-
-      {/* ── Standard Time alerts ── */}
-      {alerts.slice(0, 3).map((alert) => (
-        <div
-          key={alert.id}
-          title={alert.full}
-          className="flex items-center gap-3 px-5 py-4 rounded-xl text-lg font-black leading-tight border-2"
-          style={{
-            background: alert.type === "urgent"
-              ? "rgba(239,68,68,0.08)"
-              : "rgba(245,158,11,0.08)",
-            borderColor: alert.type === "urgent" ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)",
-            color: alert.type === "urgent" ? "#ef4444" : "#f59e0b",
-          }}
-        >
-          <span className="shrink-0 text-xl">{alert.type === "urgent" ? "⚠" : "⏱"}</span>
-          <span className="truncate">{alert.short}</span>
+            );
+          })}
         </div>
-      ))}
-      
-      {alerts.length > 3 && (
-        <p className="text-center text-sm font-black text-gray-400 dark:text-[#666]">
-          +{alerts.length - 3} more alerts
-        </p>
       )}
-    </div>
+
+      {/* ── Standard inline Time alerts ── */}
+      {alerts.length > 0 && (
+        <div className="px-6 py-4 space-y-4 border-t border-gray-200 dark:border-[#1F1F1F] bg-gray-50/50 dark:bg-[#0d0d0d]/30">
+          {alerts.slice(0, 3).map((alert) => (
+            <div
+              key={alert.id}
+              title={alert.full}
+              className="flex items-center gap-3 px-5 py-4 rounded-xl text-lg font-black leading-tight border-2"
+              style={{
+                background: alert.type === "urgent"
+                  ? "rgba(239,68,68,0.08)"
+                  : "rgba(245,158,11,0.08)",
+                borderColor: alert.type === "urgent" ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)",
+                color: alert.type === "urgent" ? "#ef4444" : "#f59e0b",
+              }}
+            >
+              <span className="shrink-0 text-xl">{alert.type === "urgent" ? "⚠" : "⏱"}</span>
+              <span className="truncate">{alert.short}</span>
+            </div>
+          ))}
+
+          {alerts.length > 3 && (
+            <p className="text-center text-sm font-black text-gray-400 dark:text-[#666]">
+              +{alerts.length - 3} more alerts
+            </p>
+          )}
+        </div>
+      )}
+    </>
   );
 }

@@ -210,13 +210,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
               (e) => e.id === newRow.id || (e.name === newRow.name && e.quantity === newRow.quantity)
             );
             if (!alreadyExists) {
-              const tableNames = targetOrder.items.map((i) => i.table?.name).filter(Boolean).join(", ");
-              const displayTable = tableNames ? `Table ${tableNames}` : "A table";
-              const customerName = targetOrder.customer_name ? ` (${targetOrder.customer_name})` : "";
-              toast.success(`${displayTable}${customerName} ordered ${newRow.quantity}x ${newRow.name}!`, {
-                position: "top-right",
-                duration: 6000,
-              });
+              // Handled by the big top-right floating kiosk order card, no need for duplicate toast
             }
           }
           qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
