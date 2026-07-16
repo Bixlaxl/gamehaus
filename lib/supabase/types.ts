@@ -309,12 +309,14 @@ export interface Database {
           rate_per_hour: number;
           final_amount: number | null;
            num_people: number | null;
-          is_deleted: boolean;
+            is_deleted: boolean;
           deleted_at: string | null;
           created_at: string;
           free_hours_to_redeem?: number | null;
           membership_id?: string | null;
           selected_mode_name?: string | null;
+          is_table_released?: boolean;
+          checked_in_at?: string | null;
         };
         Insert: {
           id?: string;
@@ -337,6 +339,8 @@ export interface Database {
           free_hours_to_redeem?: number | null;
           membership_id?: string | null;
           selected_mode_name?: string | null;
+          is_table_released?: boolean;
+          checked_in_at?: string | null;
         };
         Update: {
           id?: string;
@@ -359,6 +363,8 @@ export interface Database {
           free_hours_to_redeem?: number | null;
           membership_id?: string | null;
           selected_mode_name?: string | null;
+          is_table_released?: boolean;
+          checked_in_at?: string | null;
         };
         Relationships: [
           {

@@ -42,7 +42,7 @@ export default async function StaffBillsPage() {
       .limit(100),
     admin
       .from("tables")
-      .select("id, name, type, hourly_rate")
+      .select("id, name, type, hourly_rate, modes")
       .eq("location_id", profile.location_id)
       .eq("is_active", true)
       .order("sort_order"),

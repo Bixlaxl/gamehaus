@@ -17,6 +17,8 @@ const schema = z.object({
     rate_per_hour: z.number().positive(),
     start:         z.string().datetime({ offset: true }),
     end:           z.string().datetime({ offset: true }),
+    num_people:    z.number().int().min(1).optional().nullable(),
+    selected_mode_name: z.string().optional().nullable(),
   })).optional().default([]),
   extras: z.array(z.object({
     inventory_item_id: z.string().uuid().optional(),
@@ -156,6 +158,8 @@ export async function POST(request: Request) {
         expected_end:   s.end,
         actual_end:     s.end,
         final_amount:   s.amount,
+        num_people:     s.num_people ?? null,
+        selected_mode_name: s.selected_mode_name ?? null,
       }))
     );
     if (itemsError) {

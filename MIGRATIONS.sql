@@ -232,3 +232,17 @@ ALTER TABLE order_items
 ALTER TABLE order_items
   ADD COLUMN IF NOT EXISTS membership_id UUID REFERENCES customer_memberships(id) ON DELETE SET NULL;
 
+
+-- ============================================================
+-- AUTO TABLE RELEASE (013_auto_table_release.sql)
+-- ============================================================
+ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS is_table_released BOOLEAN NOT NULL DEFAULT FALSE;
+
+
+-- ============================================================
+-- ACTUAL CHECK-IN TIMESTAMPS (014_actual_checkin_timestamps.sql)
+-- ============================================================
+ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ;
+

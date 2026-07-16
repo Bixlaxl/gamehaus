@@ -80,7 +80,7 @@ function computeTablesWithStatus(
 ): TableWithStatus[] {
   const activeItems = openOrders.flatMap((o) =>
     (o.items ?? []).filter(
-      (i) => (i.status === "running" || i.status === "scheduled" || i.status === "finished") && !i.is_deleted
+      (i) => (i.status === "running" || i.status === "scheduled" || (i.status === "finished" && !i.is_table_released)) && !i.is_deleted
     )
   );
   return rawTables.map((table) => {

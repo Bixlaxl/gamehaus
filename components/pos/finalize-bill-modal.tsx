@@ -7,7 +7,9 @@ import { calculateBill } from "@/lib/billing/engine";
 import { formatCurrency, cleanErrorMessage } from "@/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2, Search, Plus, Minus, Trash } from "lucide-react";
 import type { Order, Booking } from "@/lib/supabase/types";
 import type { AppSettings } from "@/lib/settings";
 
@@ -83,6 +85,78 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const [validatedMemberships, setValidatedMemberships] = useState<any[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  const [itemSearchQuery, setItemSearchQuery] = useState("");
+
+  const { data: inventoryItemsRes } = useQuery<any>({
+    queryKey: ["inventory-items", locationId],
+    queryFn: async () => {
+      const res = await fetch(`/api/inventory?location_id=${locationId}`);
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error);
+      return body.data;
+    },
+  });
+  const inventoryItems = inventoryItemsRes ?? [];
+
+  const handleAddExtra = async (item: any) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/extras`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inventory_item_id: item.id,
+          name: item.name,
+          price: Number(item.selling_price),
+          quantity: 1,
+          source: "pos"
+        })
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error);
+      toast.success(`Added ${item.name}`);
+      setItemSearchQuery("");
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to add item");
+    }
+  };
+
+  const handleUpdateExtraQty = async (extraId: string, currentQty: number, change: number) => {
+    const newQty = currentQty + change;
+    if (newQty <= 0) {
+      handleDeleteExtra(extraId);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/orders/${orderId}/extras/${extraId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: newQty })
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error);
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update quantity");
+    }
+  };
+
+  const handleDeleteExtra = async (extraId: string) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/extras/${extraId}`, {
+        method: "DELETE"
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error);
+      toast.success("Item removed");
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to remove item");
+    }
+  };
 
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
@@ -517,9 +591,14 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                 {bill.tableLines.filter((l) => l.overtimeMins > 0).map((line) => {
                   const ti = activeItems.find((i) => i.id === line.id);
                   const tn = (ti?.table as { name?: string } | null)?.name ?? "Table";
+                  const formatDuration = (mins: number) => {
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
+                  };
                   return (
-                    <div key={line.id} className="flex justify-between text-base font-extrabold">
-                      <span className="text-gray-700 dark:text-[#ccc]">{tn} — overtime {line.overtimeMins}m</span>
+                    <div key={line.id} className="flex justify-between text-base font-extrabold text-left">
+                      <span className="text-gray-700 dark:text-[#ccc]">{tn} — overtime {formatDuration(line.overtimeMins)}</span>
                       <span className="text-gray-900 dark:text-white font-black">{formatCurrency(line.overtimeAmount)}</span>
                     </div>
                   );
@@ -535,9 +614,14 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                       ? `controller${ti.num_people === 1 ? "" : "s"}`
                       : `player${ti.num_people === 1 ? "" : "s"}`}`
                   : "";
+                const formatDuration = (mins: number) => {
+                  const h = Math.floor(mins / 60);
+                  const m = mins % 60;
+                  return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
+                };
                 return (
-                  <div key={line.id} className="flex justify-between text-base font-extrabold">
-                    <span className="text-gray-700 dark:text-[#ccc]">{tn} ({line.durationMins}m{peopleLabel})</span>
+                  <div key={line.id} className="flex justify-between text-base font-extrabold text-left">
+                    <span className="text-gray-700 dark:text-[#ccc]">{tn} ({formatDuration(line.durationMins)}{peopleLabel})</span>
                     <span className="text-gray-900 dark:text-white font-black">{formatCurrency(line.amount)}</span>
                   </div>
                 );
@@ -603,6 +687,102 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
               <span className="text-gray-900 dark:text-white">Total Due</span>
               <span className="text-3xl font-black" style={{ color: "#D4541A" }}>{formatCurrency(finalDue)}</span>
             </div>
+          </div>
+
+          {/* Manage Extras / Snacks */}
+          <div className="rounded-xl p-5 space-y-4 bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#1F1F1F] text-left">
+            <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+              Add Items / Snacks
+            </h3>
+
+            {/* Autocomplete Catalog Search */}
+            <div className="relative">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
+              <Input
+                type="text"
+                placeholder="Search and add beverages or extras (e.g. Water, Coke)..."
+                value={itemSearchQuery}
+                onChange={(e) => setItemSearchQuery(e.target.value)}
+                className="pl-9 h-11 text-sm font-semibold rounded-lg"
+              />
+
+              {itemSearchQuery.trim() && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-35 max-h-48 overflow-y-auto rounded-lg shadow-lg bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333]">
+                  {inventoryItems
+                    .filter((item: any) => item.is_active && item.stock_count > 0 && item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
+                    .slice(0, 5)
+                    .map((item: any) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleAddExtra(item)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors hover:bg-gray-100 dark:hover:bg-[#222] border-b last:border-b-0 border-gray-100 dark:border-[#262626]"
+                      >
+                        <span className="text-sm font-bold text-gray-900 dark:text-white">{item.name}</span>
+                        <span className="text-sm font-extrabold text-gray-500 font-mono">₹{item.selling_price}</span>
+                      </button>
+                    ))}
+                  {inventoryItems.filter((item: any) => item.is_active && item.stock_count > 0 && item.name.toLowerCase().includes(itemSearchQuery.toLowerCase())).length === 0 && (
+                    <div className="px-4 py-3 text-gray-500 text-xs font-semibold">No matching items found</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* List of currently added extras */}
+            {activeExtras.length > 0 ? (
+              <div className="space-y-2">
+                {activeExtras.map((e) => {
+                  const unitPrice = Number(e.price) || 0;
+                  return (
+                    <div key={e.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A] shadow-sm animate-fade-in">
+                      <div className="min-w-0 flex-1 pr-3 text-left">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{e.name}</p>
+                        <p className="text-xs font-semibold text-gray-450 font-mono mt-0.5">₹{unitPrice} each</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Minus */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleUpdateExtraQty(e.id, e.quantity, -1)}
+                          className="h-8 w-8 p-0 rounded-md border-gray-200 dark:border-gray-800"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+
+                        <span className="w-8 text-center text-sm font-black text-gray-950 dark:text-white font-mono">
+                          {e.quantity}
+                        </span>
+
+                        {/* Plus */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleUpdateExtraQty(e.id, e.quantity, 1)}
+                          className="h-8 w-8 p-0 rounded-md border-gray-200 dark:border-gray-800"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+
+                        {/* Delete */}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => handleDeleteExtra(e.id)}
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-750 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-md ml-1"
+                        >
+                          <Trash className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-405 dark:text-[#555] font-semibold text-center py-2">No extra items added to this tab</p>
+            )}
           </div>
           {/* Membership validation section */}
           {customerInfo && customerInfo.active_memberships && customerInfo.active_memberships.length > 0 && (

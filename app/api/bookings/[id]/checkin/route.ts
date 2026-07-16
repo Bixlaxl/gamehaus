@@ -142,6 +142,7 @@ export async function POST(
       status:       "running",
       actual_start: actualStart.toISOString(),
       expected_end: expectedEnd.toISOString(),
+      checked_in_at: now.toISOString(),
     }).eq("id", booking.order_item_id),
     admin.from("orders").update({ status: "open" }).eq("id", booking.order_id),
   ]);

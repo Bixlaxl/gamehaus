@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       status: "finished",
       actual_end: now.toISOString(),
       final_amount: finalAmount,
+      is_table_released: true,
     })
     .eq("id", order_item_id);
 

@@ -245,8 +245,9 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   const liveBill = order
     ? calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount).totalDue
     : calculateBill([item], [], now).subtotal;
-  const startedAt = item.actual_start
-    ? new Date(item.actual_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+  const startReal = item.checked_in_at || item.actual_start;
+  const startedAt = startReal
+    ? new Date(startReal).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
     : "";
 
   let isFiveMinWarning = false;
@@ -352,6 +353,11 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
               {order?.customer_phone && (
                 <span className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-600 dark:text-amber-400 text-base font-black shadow-sm">
                   ★ {points} pts
+                </span>
+              )}
+              {item.scheduled_start && item.scheduled_end && (
+                <span className="text-sm font-bold block w-full mt-1 text-purple-650 dark:text-purple-400">
+                  Slot: {new Date(item.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} - {new Date(item.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                 </span>
               )}
             </div>

@@ -50,6 +50,7 @@ function StopConfirmModalInner({
       toast.error(body.error ?? `Failed to stop session (${res.status})`);
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      usePOSStore.setState({ finalizeOrderId: item.order_id });
     }
     setLoading(false);
   }
