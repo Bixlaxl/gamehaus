@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, X, Banknote, Smartphone, Phone, MessageSquare, ExternalLink, Plus, Trash } from "lucide-react";
 import { toast } from "sonner";
@@ -105,6 +105,38 @@ export function BillsContent({
   const [manualCashInput, setManualCashInput] = useState("");
   const [manualUpiInput, setManualUpiInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-balance helpers — typing in one field updates the other dynamically
+  function changeManualCash(val: string) {
+    const cleaned = val.replace(/[^\d.]/g, "");
+    setManualCashInput(cleaned);
+    const n = parseFloat(cleaned);
+    if (Number.isFinite(n)) {
+      setManualUpiInput(String(Math.max(0, Math.round((manualTotalPreview - n) * 100) / 100)));
+    }
+  }
+
+  function changeManualUpi(val: string) {
+    const cleaned = val.replace(/[^\d.]/g, "");
+    setManualUpiInput(cleaned);
+    const n = parseFloat(cleaned);
+    if (Number.isFinite(n)) {
+      setManualCashInput(String(Math.max(0, Math.round((manualTotalPreview - n) * 100) / 100)));
+    }
+  }
+
+  function enterManualSplit() {
+    setManualSplitMode(true);
+    const half = Math.round((manualTotalPreview / 2) * 100) / 100;
+    setManualCashInput(String(half));
+    setManualUpiInput(String(Math.round((manualTotalPreview - half) * 100) / 100));
+  }
+
+  function exitManualSplit() {
+    setManualSplitMode(false);
+    setManualCashInput("");
+    setManualUpiInput("");
+  }
 
   type CustomerSuggestion = { phone: string; name: string | null; visit_count: number; points_balance: number };
   const [nameSuggestions,      setNameSuggestions]      = useState<CustomerSuggestion[]>([]);
@@ -235,6 +267,15 @@ export function BillsContent({
     }
     return Math.round((sessionCost + extrasCost) * 100) / 100;
   }, [manualSessions, manualExtras, tables, inventoryItems]);
+
+  // Auto-balance split inputs when total changes
+  useEffect(() => {
+    if (manualSplitMode) {
+      const cashVal = parseFloat(manualCashInput) || 0;
+      const newUpi = Math.max(0, Math.round((manualTotalPreview - cashVal) * 100) / 100);
+      setManualUpiInput(String(newUpi));
+    }
+  }, [manualTotalPreview, manualSplitMode]);
 
    async function handleCreateManualBill(e: React.FormEvent) {
     e.preventDefault();
@@ -795,15 +836,7 @@ export function BillsContent({
                   <label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</label>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (manualSplitMode) {
-                        setManualSplitMode(false);
-                      } else {
-                        setManualSplitMode(true);
-                        setManualCashInput("");
-                        setManualUpiInput("");
-                      }
-                    }}
+                    onClick={manualSplitMode ? exitManualSplit : enterManualSplit}
                     className="text-base font-black text-[#D4541A] hover:underline"
                   >
                     {manualSplitMode ? "← Single Method" : "Split between Cash + UPI"}
@@ -821,7 +854,7 @@ export function BillsContent({
                           min="0"
                           placeholder="0.00"
                           value={manualCashInput}
-                          onChange={(e) => setManualCashInput(e.target.value)}
+                          onChange={(e) => changeManualCash(e.target.value)}
                           className="h-16 text-xl px-5 font-bold rounded-xl"
                         />
                       </div>
@@ -833,7 +866,7 @@ export function BillsContent({
                           min="0"
                           placeholder="0.00"
                           value={manualUpiInput}
-                          onChange={(e) => setManualUpiInput(e.target.value)}
+                          onChange={(e) => changeManualUpi(e.target.value)}
                           className="h-16 text-xl px-5 font-bold rounded-xl"
                         />
                       </div>
