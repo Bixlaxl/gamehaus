@@ -101,6 +101,9 @@ export function BillsContent({
   const [manualSessions, setManualSessions] = useState<{ id: string; tableId: string; hours: number }[]>([]);
   const [manualExtras, setManualExtras] = useState<{ id: string; itemId: string; quantity: number }[]>([]);
   const [manualPaymentMethod, setManualPaymentMethod] = useState<"cash" | "upi">("cash");
+  const [manualSplitMode, setManualSplitMode] = useState(false);
+  const [manualCashInput, setManualCashInput] = useState("");
+  const [manualUpiInput, setManualUpiInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   type CustomerSuggestion = { phone: string; name: string | null; visit_count: number; points_balance: number };
@@ -204,6 +207,9 @@ export function BillsContent({
     setManualSessions([]);
     setManualExtras([]);
     setManualPaymentMethod("cash");
+    setManualSplitMode(false);
+    setManualCashInput("");
+    setManualUpiInput("");
     setNameSuggestions([]);
     setPhoneSuggestions([]);
     setShowNameSuggestions(false);
@@ -230,7 +236,7 @@ export function BillsContent({
     return Math.round((sessionCost + extrasCost) * 100) / 100;
   }, [manualSessions, manualExtras, tables, inventoryItems]);
 
-  async function handleCreateManualBill(e: React.FormEvent) {
+   async function handleCreateManualBill(e: React.FormEvent) {
     e.preventDefault();
     if (!manualName.trim()) {
       toast.error("Customer name is required");
@@ -243,6 +249,30 @@ export function BillsContent({
     if (manualSessions.length === 0 && manualExtras.length === 0) {
       toast.error("Provide at least one table session or item");
       return;
+    }
+
+    let payments = [];
+    if (manualSplitMode) {
+      const cashVal = parseFloat(manualCashInput) || 0;
+      const upiVal = parseFloat(manualUpiInput) || 0;
+      const splitSum = cashVal + upiVal;
+      if (Math.abs(splitSum - manualTotalPreview) > 0.5) {
+        toast.error(`Split total ₹${splitSum} must equal ₹${manualTotalPreview}`);
+        return;
+      }
+      if (cashVal > 0) payments.push({ method: "cash" as const, amount: cashVal });
+      if (upiVal > 0) payments.push({ method: "upi" as const, amount: upiVal });
+      if (payments.length === 0) {
+        toast.error("Enter at least one payment amount for split");
+        return;
+      }
+    } else {
+      payments = [
+        {
+          method: manualPaymentMethod,
+          amount: manualTotalPreview,
+        },
+      ];
     }
 
     setIsSubmitting(true);
@@ -272,12 +302,7 @@ export function BillsContent({
             quantity: e.quantity,
           };
         }),
-        payments: [
-          {
-            method: manualPaymentMethod,
-            amount: manualTotalPreview,
-          },
-        ],
+        payments,
         points_redeemed: 0,
       };
 
@@ -298,6 +323,9 @@ export function BillsContent({
       setManualSessions([]);
       setManualExtras([]);
       setManualPaymentMethod("cash");
+      setManualSplitMode(false);
+      setManualCashInput("");
+      setManualUpiInput("");
       setManualOpen(false);
 
       queryClient.invalidateQueries({ queryKey: ["staff-bills"] });
@@ -642,7 +670,7 @@ export function BillsContent({
                       </Select>
                     </div>
 
-                    <div className="w-44">
+                    <div className="w-64 space-y-2">
                       <Input
                         type="number"
                         step="0.1"
@@ -656,6 +684,31 @@ export function BillsContent({
                         }}
                         className="h-20 text-2xl px-6 rounded-2xl font-bold text-center"
                       />
+                      <div className="flex gap-1 justify-center">
+                        {[
+                          { label: "30m", val: 0.5 },
+                          { label: "1h", val: 1.0 },
+                          { label: "2h", val: 2.0 },
+                          { label: "3h", val: 3.0 },
+                        ].map((btn) => (
+                          <button
+                            key={btn.label}
+                            type="button"
+                            onClick={() => {
+                              const updated = [...manualSessions];
+                              updated[idx].hours = btn.val;
+                              setManualSessions(updated);
+                            }}
+                            className={`flex-1 text-sm font-black py-2.5 px-1.5 rounded-xl border text-center transition-all ${
+                              s.hours === btn.val
+                                ? "bg-[#D4541A] text-white border-[#D4541A] shadow-sm"
+                                : "bg-white dark:bg-[#1a1a1a] text-gray-550 dark:text-[#888] border-gray-250 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-[#222]"
+                            }`}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <Button
@@ -737,32 +790,92 @@ export function BillsContent({
               </div>
 
               {/* Payment Method */}
-              <div className="space-y-3 border-t border-gray-200 dark:border-[#222] pt-6">
-                <label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</label>
-                <div className="flex items-center gap-4">
+              <div className="space-y-4 border-t border-gray-200 dark:border-[#222] pt-6">
+                <div className="flex items-center justify-between">
+                  <label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</label>
                   <button
                     type="button"
-                    onClick={() => setManualPaymentMethod("cash")}
-                    className={`flex-1 h-20 rounded-2xl text-xl font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                      manualPaymentMethod === "cash"
-                        ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 ring-2 ring-emerald-300"
-                        : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
-                    }`}
+                    onClick={() => {
+                      if (manualSplitMode) {
+                        setManualSplitMode(false);
+                      } else {
+                        setManualSplitMode(true);
+                        setManualCashInput("");
+                        setManualUpiInput("");
+                      }
+                    }}
+                    className="text-base font-black text-[#D4541A] hover:underline"
                   >
-                    <Banknote className="h-6 w-6" /> Cash
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setManualPaymentMethod("upi")}
-                    className={`flex-1 h-20 rounded-2xl text-xl font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                      manualPaymentMethod === "upi"
-                        ? "bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-400 ring-2 ring-indigo-300"
-                        : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
-                    }`}
-                  >
-                    <Smartphone className="h-6 w-6" /> UPI
+                    {manualSplitMode ? "← Single Method" : "Split between Cash + UPI"}
                   </button>
                 </div>
+
+                {manualSplitMode ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-500">Cash Amount (₹)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={manualCashInput}
+                          onChange={(e) => setManualCashInput(e.target.value)}
+                          className="h-16 text-xl px-5 font-bold rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-500">UPI Amount (₹)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={manualUpiInput}
+                          onChange={(e) => setManualUpiInput(e.target.value)}
+                          className="h-16 text-xl px-5 font-bold rounded-xl"
+                        />
+                      </div>
+                    </div>
+                    <div
+                      className="text-base font-black text-center mt-2"
+                      style={{
+                        color:
+                          Math.abs((parseFloat(manualCashInput) || 0) + (parseFloat(manualUpiInput) || 0) - manualTotalPreview) <= 0.5
+                            ? "#10b981"
+                            : "#ef4444",
+                      }}
+                    >
+                      Split sum: {formatCurrency((parseFloat(manualCashInput) || 0) + (parseFloat(manualUpiInput) || 0))} / {formatCurrency(manualTotalPreview)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setManualPaymentMethod("cash")}
+                      className={`flex-1 h-20 rounded-2xl text-xl font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                        manualPaymentMethod === "cash"
+                          ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 ring-2 ring-emerald-300"
+                          : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
+                      }`}
+                    >
+                      <Banknote className="h-6 w-6" /> Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManualPaymentMethod("upi")}
+                      className={`flex-1 h-20 rounded-2xl text-xl font-black border transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                        manualPaymentMethod === "upi"
+                          ? "bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-400 ring-2 ring-indigo-300"
+                          : "bg-white dark:bg-[#181818] border-gray-200 dark:border-gray-800"
+                      }`}
+                    >
+                      <Smartphone className="h-6 w-6" /> UPI
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Live Preview */}
