@@ -346,17 +346,17 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
             <p className="font-black text-gray-900 dark:text-white text-5xl leading-tight truncate">
               {order?.customer_name ?? "—"}
             </p>
-            <div className="flex flex-wrap items-center gap-2.5 mt-2">
-              <span className="text-lg font-mono font-black tabular-nums text-gray-700 dark:text-[#ccc]">
+            <div className="flex flex-wrap items-center gap-3 mt-2">
+              <span className="text-2xl font-mono font-black tabular-nums text-gray-800 dark:text-gray-200">
                 Started {startedAt}
               </span>
               {order?.customer_phone && (
-                <span className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-600 dark:text-amber-400 text-base font-black shadow-sm">
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-600 dark:text-amber-400 text-lg font-black shadow-sm">
                   ★ {points} pts
                 </span>
               )}
               {item.scheduled_start && item.scheduled_end && (
-                <span className="text-sm font-bold block w-full mt-1 text-purple-650 dark:text-purple-400">
+                <span className="text-xl font-black block w-full mt-2 text-purple-600 dark:text-purple-400">
                   Slot: {new Date(item.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} - {new Date(item.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                 </span>
               )}
