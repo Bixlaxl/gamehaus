@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ok, err } from "@/lib/validators/schemas";
+import { getOperatingDate } from "@/lib/utils";
 
 export const runtime = 'edge';
 
@@ -53,7 +54,36 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  const orders = (data ?? []).filter((o) => !(o.type === "online" && (o.advance_paid ?? 0) === 0 && !o.created_by));
+  const allOrders = (data ?? []).filter((o) => !(o.type === "online" && (o.advance_paid ?? 0) === 0 && !o.created_by));
+  const todayStr = getOperatingDate(new Date());
+
+  const orders = allOrders.filter((o) => {
+    const orderDateStr = getOperatingDate(new Date(o.created_at));
+    if (orderDateStr === todayStr) return true;
+    const hasRunning = o.items?.some((i: any) => i.status === "running");
+    const hasDue = Number(o.amount_due) > 0;
+    return hasRunning || hasDue;
+  });
+
+  const danglingOrders = allOrders.filter((o) => {
+    const orderDateStr = getOperatingDate(new Date(o.created_at));
+    if (orderDateStr === todayStr) return false;
+    const hasRunning = o.items?.some((i: any) => i.status === "running");
+    const hasDue = Number(o.amount_due) > 0;
+    return !hasRunning && !hasDue;
+  });
+
+  if (danglingOrders.length > 0) {
+    const danglingIds = danglingOrders.map((o) => o.id);
+    admin
+      .from("orders")
+      .update({ status: "finalized", finalized_at: new Date().toISOString() })
+      .in("id", danglingIds)
+      .then(({ error }) => {
+        if (error) console.error("Failed to auto-finalize dangling orders:", error);
+      });
+  }
+
   const phones = Array.from(new Set(orders.map((o) => o.customer_phone).filter((p): p is string => !!p)));
 
   let profileMap: Record<string, number> = {};
