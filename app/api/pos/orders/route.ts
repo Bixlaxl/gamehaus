@@ -55,19 +55,15 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
   const allOrders = (data ?? []).filter((o) => !(o.type === "online" && (o.advance_paid ?? 0) === 0 && !o.created_by));
-  const todayStr = getOperatingDate(new Date());
 
   const orders = allOrders.filter((o) => {
-    const orderDateStr = getOperatingDate(new Date(o.created_at));
-    if (orderDateStr === todayStr) return true;
     const hasRunning = o.items?.some((i: any) => i.status === "running");
     const hasDue = Number(o.amount_due) > 0;
+    // Keep in unpaid active feed only if it has a running session or has a remaining unpaid balance
     return hasRunning || hasDue;
   });
 
   const danglingOrders = allOrders.filter((o) => {
-    const orderDateStr = getOperatingDate(new Date(o.created_at));
-    if (orderDateStr === todayStr) return false;
     const hasRunning = o.items?.some((i: any) => i.status === "running");
     const hasDue = Number(o.amount_due) > 0;
     return !hasRunning && !hasDue;
