@@ -59,7 +59,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const qc            = useQueryClient();
 
   const orderId     = finalizeOrderId;
-  const savedPoints = pointsToRedeem[orderId] ?? 0;
+  const savedPoints = pointsToRedeem[orderId] ?? (selectedOrder?.points_redeemed ?? 0);
 
   const [method,           setMethod]           = useState<PaymentMethod | null>(null);
   // Split-payment state — when on, cashInput + upiInput drive `payments`;
@@ -288,9 +288,18 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const minPointsToRedeem = settings?.loyalty?.min_points_to_redeem ?? 100;
 
   const maxPointsByBill   = Math.floor(billAfterMembership / redeemRate);
-  const maxRedeem         = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
-  // Minimum points balance to qualify for redemption is dynamically configured
-  const clampedRedeem     = ((customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  const preExistingPoints = selectedOrder?.points_redeemed ?? 0;
+  const diff = redeemPoints - preExistingPoints;
+  const isQualified = (customerInfo?.points_balance ?? 0) >= minPointsToRedeem || preExistingPoints >= minPointsToRedeem;
+  const allowedNewMax = isQualified ? Math.min(customerInfo?.points_balance ?? 0, Math.max(0, maxPointsByBill - preExistingPoints)) : 0;
+  const maxRedeem = preExistingPoints + allowedNewMax;
+
+  let clampedRedeem = preExistingPoints;
+  if (diff > 0) {
+    clampedRedeem = Math.min(redeemPoints, maxRedeem);
+  } else {
+    clampedRedeem = redeemPoints;
+  }
   const finalDue          = Math.max(0, Math.round((billAfterMembership - (clampedRedeem * redeemRate)) * 100) / 100);
   const pointsToEarn      = Math.floor(finalDue / earnRate);
 

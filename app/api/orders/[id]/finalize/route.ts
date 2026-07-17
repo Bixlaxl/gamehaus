@@ -124,7 +124,7 @@ export async function POST(
           .gte("expires_at", now.toISOString())
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
-    (points_redeemed > 0 && effectivePhone)
+    ((points_redeemed > 0 || (order.points_redeemed ?? 0) > 0) && effectivePhone)
       ? admin.from("customer_profiles").select("points_balance").eq("phone", effectivePhone).single()
       : Promise.resolve({ data: null }),
   ]);
@@ -228,20 +228,32 @@ export async function POST(
   const redeemRate = settings.loyalty.redeem_rupees_per_point;
   const minToRedeem = settings.loyalty.min_points_to_redeem ?? 100;
 
-  // Validate points against remaining balance — cap so redemption can't push
-  // the bill below zero or exceed the customer's actual balance.
-  // Minimum redemption is dynamically configured — anything below is treated as zero.
-  let validatedPoints = points_redeemed;
-  if (validatedPoints > 0 && effectivePhone) {
+  // Pre-existing points already redeemed/validated on this order before checkout
+  const preExistingPoints = order.points_redeemed ?? 0;
+  const requestedPoints = points_redeemed;
+  const netPointsChange = requestedPoints - preExistingPoints;
+
+  let validatedPoints = preExistingPoints;
+  let pointsBalanceChange = 0;
+
+  if (netPointsChange !== 0 && effectivePhone) {
     const balance = (pointsProfileResult as { data: { points_balance: number } | null }).data?.points_balance ?? 0;
-    if (balance < minToRedeem) {
-      validatedPoints = 0;
+    
+    if (netPointsChange > 0) {
+      // Staff wants to redeem MORE points. Validate and deduct only the NEW portion.
+      const isQualified = preExistingPoints >= minToRedeem || balance >= minToRedeem;
+      if (isQualified) {
+        const remainingBill = billAfterMembership - (preExistingPoints * redeemRate);
+        const maxNewByBill = Math.max(0, Math.floor(remainingBill / redeemRate));
+        const validatedNew = Math.min(netPointsChange, balance, maxNewByBill);
+        validatedPoints = preExistingPoints + validatedNew;
+        pointsBalanceChange = -validatedNew;
+      }
     } else {
-      const maxByBill = Math.floor(billAfterMembership / redeemRate);
-      validatedPoints = Math.min(validatedPoints, balance, maxByBill);
+      // Staff wants to reduce the point redemption (refund).
+      validatedPoints = requestedPoints;
+      pointsBalanceChange = -netPointsChange;
     }
-  } else {
-    validatedPoints = 0;
   }
 
   // Apply points discount: each point is worth `redeemRate` rupees off the bill.
@@ -342,7 +354,7 @@ export async function POST(
       await admin
         .from("customer_profiles")
         .update({
-          points_balance: Math.max(0, profile.points_balance - validatedPoints + pointsEarned),
+          points_balance: Math.max(0, profile.points_balance + pointsBalanceChange + pointsEarned),
           visit_count:    profile.visit_count + 1,
           total_spent:    profile.total_spent + (order.advance_paid ?? 0) + finalDue,
           last_visit_at:  now.toISOString(),
