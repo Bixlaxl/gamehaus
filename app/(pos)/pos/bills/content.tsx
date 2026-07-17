@@ -583,6 +583,7 @@ export function BillsContent({
                       .filter((n, idx, arr) => arr.indexOf(n) === idx)
                       .join(", ");
                     const isAnyRunning = (o.items ?? []).some((i) => i.status === "running");
+                    const isAnyScheduled = (o.items ?? []).some((i) => i.status === "scheduled");
                     
                     let subtotal = 0;
                     for (const item of o.items ?? []) {
@@ -625,10 +626,12 @@ export function BillsContent({
                               style={
                                 isAnyRunning
                                   ? { background: "rgba(16,185,129,0.15)", color: "#10b981" }
+                                  : isAnyScheduled
+                                  ? { background: "rgba(59,130,246,0.15)", color: "#3b82f6" }
                                   : { background: "rgba(245,158,11,0.15)", color: "#f59e0b" }
                               }
                             >
-                              {isAnyRunning ? "Playing" : "Session Ended"}
+                              {isAnyRunning ? "Playing" : isAnyScheduled ? "Scheduled" : "Session Ended"}
                             </span>
                           </div>
                         </td>
