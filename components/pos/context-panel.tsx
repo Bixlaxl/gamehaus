@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, memo, useMemo } from "react";
+import { useState, useRef, memo, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
 import { useNowSampled } from "@/hooks/use-now-sampled";
@@ -871,7 +871,12 @@ function PanelSession({
   const qc                = useQueryClient();
 
   const [catalogueOpen,   setCatalogueOpen]   = useState(false);
-  const [redeemInput,    setRedeemInput]    = useState(String(pointsToRedeem[order.id] ?? 0));
+  const savedPoints = pointsToRedeem[order.id] ?? (order.points_redeemed ?? 0);
+  const [redeemInput,    setRedeemInput]    = useState(String(savedPoints));
+
+  useEffect(() => {
+    setRedeemInput(String(savedPoints));
+  }, [savedPoints, order.id]);
 
   // Lazy — only fetch when staff opens the catalogue. Cached 5 min after first open.
   const { data: inventoryItems } = useQuery<InventoryItem[]>({
@@ -942,12 +947,22 @@ function PanelSession({
 
   const redeemRate        = settings?.loyalty?.redeem_rupees_per_point ?? 1;
   const minPointsToRedeem = settings?.loyalty?.min_points_to_redeem ?? 100;
+  const redeemPoints      = Math.max(0, parseInt(redeemInput) || 0);
 
-  const redeemPoints  = Math.max(0, parseInt(redeemInput) || 0);
-  const maxPointsByBill = Math.floor(bill.totalDue / redeemRate);
-  const maxRedeem     = Math.min(customerInfo?.points_balance ?? 0, maxPointsByBill);
-  // Minimum configurable points balance required to qualify for redemption
-  const clampedRedeem = ((customerInfo?.points_balance ?? 0) >= minPointsToRedeem) ? Math.min(redeemPoints, maxRedeem) : 0;
+  const maxPointsByBill   = Math.floor(bill.totalDue / redeemRate);
+  const preExistingPoints = order.points_redeemed ?? 0;
+  const diff = redeemPoints - preExistingPoints;
+  const isQualified = (customerInfo?.points_balance ?? 0) >= minPointsToRedeem || preExistingPoints >= minPointsToRedeem;
+  const allowedNewMax = isQualified ? Math.min(customerInfo?.points_balance ?? 0, Math.max(0, maxPointsByBill - preExistingPoints)) : 0;
+  const maxRedeem = preExistingPoints + allowedNewMax;
+
+  let clampedRedeem = preExistingPoints;
+  if (diff > 0) {
+    clampedRedeem = Math.min(redeemPoints, maxRedeem);
+  } else {
+    clampedRedeem = redeemPoints;
+  }
+
   const displayTotal  = Math.max(0, Math.round((bill.totalDue - (clampedRedeem * redeemRate)) * 100) / 100);
 
   function handleRedeemChange(val: string) {

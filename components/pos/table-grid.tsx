@@ -243,7 +243,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
     return pct > max ? pct : max;
   }, 0);
   const liveBill = order
-    ? calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount).totalDue
+    ? Math.max(0, calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount).totalDue - (order.points_redeemed ?? 0))
     : calculateBill([item], [], now).subtotal;
   const startReal = item.checked_in_at || item.actual_start;
   const startedAt = startReal
