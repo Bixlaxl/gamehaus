@@ -733,6 +733,7 @@ export default function CheckoutPage() {
       return;
     }
 
+    let paymentSuccess = false;
     try {
       if (typeof window === "undefined" || !window.Razorpay) {
         throw new Error("Payment gateway script is still loading. Please wait a few seconds and try again.");
@@ -751,11 +752,13 @@ export default function CheckoutPage() {
         prefill: { name: name.trim(), contact: phone.trim() },
         theme: { color: "#D4541A" },
         handler: async (response) => {
+          paymentSuccess = true;
           cart.clearCart();
           router.push(`/booking/${order_id}?payment_id=${response.razorpay_payment_id}`);
         },
         modal: {
           ondismiss: () => {
+            if (paymentSuccess) return;
             // User closed the popup without paying — free the slot immediately
             fetch(`/api/orders/${order_id}/cancel`, {
               method: "POST",
