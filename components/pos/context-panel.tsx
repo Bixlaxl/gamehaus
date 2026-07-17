@@ -1708,7 +1708,7 @@ function PanelSession({
               Total due
             </span>
             <span className="text-6xl font-black tabular-nums leading-none" style={{ color: "#D4541A" }}>
-              {formatCurrency(hasRunning ? bill.totalDue : displayTotal)}
+              {formatCurrency(displayTotal)}
             </span>
           </div>
 
