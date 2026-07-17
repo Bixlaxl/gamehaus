@@ -211,9 +211,9 @@ export function CheckinSlider({ locationId }: CheckinSliderProps) {
                       <p className="text-xs mt-0.5 text-gray-400 dark:text-[#555]">{booking.order.customer_phone}</p>
                     )}
                     <p className="text-xs font-mono font-semibold mt-1.5 tabular-nums" style={{ color: "#f59e0b" }}>
-                      {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(booking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       {" → "}
-                      {new Date(booking.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(booking.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </p>
                     {/* Membership preview */}
                     {memberPct > 0 && (

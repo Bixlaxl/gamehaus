@@ -45,7 +45,7 @@ function TableThumb({ table, size = 28 }: { table: { image_url: string | null; n
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
 // ── Idle card ─────────────────────────────────────────────────────────────────
@@ -247,7 +247,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
     : calculateBill([item], [], now).subtotal;
   const startReal = item.checked_in_at || item.actual_start;
   const startedAt = startReal
-    ? new Date(startReal).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+    ? fmtTime(startReal)
     : "";
 
   let isFiveMinWarning = false;
@@ -357,7 +357,7 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
               )}
               {item.scheduled_start && item.scheduled_end && (
                 <span className="text-xl font-black block w-full mt-2 text-purple-600 dark:text-purple-400">
-                  Slot: {new Date(item.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} - {new Date(item.scheduled_end).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                  Slot: {fmtTime(item.scheduled_start)} - {fmtTime(item.scheduled_end)}
                 </span>
               )}
             </div>

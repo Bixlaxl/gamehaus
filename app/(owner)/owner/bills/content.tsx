@@ -25,7 +25,7 @@ interface Props {
 function fmtDateTime(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-IN", {
-    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true,
   });
 }
 

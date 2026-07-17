@@ -321,7 +321,7 @@ function StockLogDrawer({ itemId, itemName, onClose }: { itemId: string; itemNam
                         <div className="flex justify-between items-center text-base text-gray-400 dark:text-[#666] pt-3 border-t border-gray-100/50 dark:border-gray-800/50 mt-2">
                           <span>
                             {new Date(e.created_at).toLocaleString("en-IN", {
-                              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true,
                             })}
                           </span>
                           {e.actor?.name && (

@@ -69,7 +69,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
     const sessionEnd   = now.getTime() + dur * 60 * 1000;
     const bookingStart = new Date(table.upcomingBooking.scheduled_start).getTime();
     if (sessionEnd > bookingStart) {
-      const t = new Date(table.upcomingBooking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      const t = new Date(table.upcomingBooking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
       return `Conflicts with booking at ${t}`;
     }
     return null;
@@ -338,7 +338,7 @@ function WalkInSliderInner({ locationId }: WalkInSliderProps) {
                     </div>
                     {!selected && table.upcomingBooking && (
                       <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
-                        Booked {new Date(table.upcomingBooking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        Booked {new Date(table.upcomingBooking.scheduled_start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                         {table.upcomingBooking.order?.customer_name ? ` · ${table.upcomingBooking.order.customer_name}` : ""}
                       </p>
                     )}

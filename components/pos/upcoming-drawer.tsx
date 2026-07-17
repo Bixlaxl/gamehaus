@@ -74,7 +74,7 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
   }
 
   const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
   const minsFromNow = (iso: string) => {
     const diff = (new Date(iso).getTime() - now.getTime()) / 60000;

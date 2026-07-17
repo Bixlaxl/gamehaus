@@ -82,7 +82,7 @@ function fmtRelative(iso: string | null): string {
 
 function fmtAbsolute(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", {
-    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true,
   });
 }
 
