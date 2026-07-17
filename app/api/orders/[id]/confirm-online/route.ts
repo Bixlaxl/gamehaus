@@ -268,6 +268,7 @@ export async function POST(
         discount_amount: totalDiscount,
         public_discount_amount: (order as any).public_discount_amount ?? 0,
         total_amount: netAdvancePaid,
+        points_redeemed_online: order.points_redeemed ?? 0,
         // Guard: only overwrite advance_paid if the Razorpay webhook hasn't already
         // written the real payment amount. Webhook fires async — if it won the race
         // first (advance_paid > 0 on the order), preserve that value.

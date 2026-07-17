@@ -15,6 +15,7 @@ import { X, Plus, Trash2, Square, Timer, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
 import type { POSOrder, TableWithStatus } from "@/store/pos";
+import { groupOrders } from "@/lib/billing/grouping";
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -379,6 +380,7 @@ function PanelWalkIn({
       membership_id:    null,
       advance_paid:     0,
       points_redeemed:        0,
+      points_redeemed_online: 0,
       subtotal:               0,
       discount_amount:        0,
       public_discount_amount: 0,
@@ -870,8 +872,18 @@ function PanelSession({
   const setSelectedTableId = usePOSStore((s) => s.setSelectedTableId);
   const qc                = useQueryClient();
 
+  const openOrders        = usePOSStore((s) => s.openOrders);
+  const currentGroup = useMemo(() => {
+    const grouped = groupOrders(openOrders);
+    return grouped.find((g) => g.orderIds.includes(order.id)) || {
+      ...order,
+      orderIds: [order.id],
+      points_redeemed_online: (order as any).points_redeemed_online ?? 0,
+    };
+  }, [openOrders, order]);
+
   const [catalogueOpen,   setCatalogueOpen]   = useState(false);
-  const savedPoints = pointsToRedeem[order.id] ?? (order.points_redeemed ?? 0);
+  const savedPoints = pointsToRedeem[order.id] ?? (currentGroup.points_redeemed ?? 0);
   const [redeemInput,    setRedeemInput]    = useState(String(savedPoints));
 
   useEffect(() => {
@@ -893,14 +905,14 @@ function PanelSession({
 
   // Cached across order opens — same phone won't re-fetch within 60s
   const { data: customerInfo } = useQuery<{ points_balance: number; membership_discount_pct?: number; active_memberships?: any[] } | null>({
-    queryKey: ["customer-lookup", order.customer_phone],
+    queryKey: ["customer-lookup", currentGroup.customer_phone],
     queryFn: async () => {
-      if (!order.customer_phone) return null;
-      const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(order.customer_phone)}`);
+      if (!currentGroup.customer_phone) return null;
+      const res  = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(currentGroup.customer_phone)}`);
       const body = await res.json() as { found: boolean; customer: { points_balance: number; membership_discount_pct?: number; active_memberships?: any[] } | null };
       return body.customer;
     },
-    enabled: !!order.customer_phone,
+    enabled: !!currentGroup.customer_phone,
     staleTime: 60 * 1000,
   });
 
@@ -915,8 +927,8 @@ function PanelSession({
     staleTime: 5 * 60 * 1000,
   });
 
-  const activeItems  = order.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
-  const activeExtras = order.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]"));
+  const activeItems  = currentGroup.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
+  const activeExtras = currentGroup.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]"));
   const groupedExtras = Array.from(
     activeExtras.reduce((acc, current) => {
       const key = `${current.name}_${current.price}_${current.inventory_item_id || ""}`;
@@ -932,17 +944,17 @@ function PanelSession({
     .values()
   );
   const posTablesStore = usePOSStore((s) => s.tables);
-  const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
-  const isMembershipApplied = !!order.membership_id;
+  const publicDiscount = (currentGroup as any)?.public_discount_amount ?? currentGroup.discount_amount ?? 0;
+  const isMembershipApplied = !!currentGroup.membership_id;
   const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
-    ? customerInfo.active_memberships.filter((m: any) => m.id === order.membership_id)
+    ? customerInfo.active_memberships.filter((m: any) => m.id === currentGroup.membership_id)
     : [];
   const freeHrsDiscount = computeFreeHoursDiscount(activeItems, applicableMemberships, now, posTablesStore);
   const applicableMembershipPct = applicableMemberships.reduce((max: number, m: any) => {
     const pct = m.plan?.discount_pct ?? 0;
     return pct > max ? pct : max;
   }, 0);
-  const bill         = calculateBill(activeItems, activeExtras, now, null, order.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount);
+  const bill         = calculateBill(activeItems, activeExtras, now, null, currentGroup.advance_paid ?? 0, publicDiscount, applicableMembershipPct, freeHrsDiscount);
   const hasRunning   = activeItems.some((i) => i.status === "running");
 
   const redeemRate        = settings?.loyalty?.redeem_rupees_per_point ?? 1;
@@ -950,7 +962,7 @@ function PanelSession({
   const redeemPoints      = Math.max(0, parseInt(redeemInput) || 0);
 
   const maxPointsByBill   = Math.floor(bill.totalDue / redeemRate);
-  const preExistingPoints = order.points_redeemed ?? 0;
+  const preExistingPoints = currentGroup.points_redeemed ?? 0;
   const diff = redeemPoints - preExistingPoints;
   const isQualified = (customerInfo?.points_balance ?? 0) >= minPointsToRedeem || preExistingPoints >= minPointsToRedeem;
   const allowedNewMax = isQualified ? Math.min(customerInfo?.points_balance ?? 0, Math.max(0, maxPointsByBill - preExistingPoints)) : 0;
@@ -1635,7 +1647,7 @@ function PanelSession({
           ))}
           {bill.discountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-base font-black" style={{ color: "#10b981" }}>Coupon Discount</span>
+              <span className="text-base font-black" style={{ color: "#10b981" }}>Public Discount</span>
               <span className="text-base font-black tabular-nums" style={{ color: "#10b981" }}>
                 −{formatCurrency(bill.discountAmount)}
               </span>
@@ -1643,7 +1655,7 @@ function PanelSession({
           )}
           {bill.freeHoursDiscountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-base font-black" style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+              <span className="text-base font-black" style={{ color: "#8b5cf6" }}>Membership Discount (Free Hours)</span>
               <span className="text-base font-black tabular-nums" style={{ color: "#8b5cf6" }}>
                 −{formatCurrency(bill.freeHoursDiscountAmount)}
               </span>
@@ -1651,7 +1663,7 @@ function PanelSession({
           )}
           {bill.memberDiscountAmount > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-base font-black" style={{ color: "#8b5cf6" }}>Member Discount ({customerInfo?.membership_discount_pct}% Off)</span>
+              <span className="text-base font-black" style={{ color: "#8b5cf6" }}>Membership Discount ({customerInfo?.membership_discount_pct}% Off)</span>
               <span className="text-base font-black tabular-nums" style={{ color: "#8b5cf6" }}>
                 −{formatCurrency(bill.memberDiscountAmount)}
               </span>
@@ -1665,11 +1677,19 @@ function PanelSession({
               </span>
             </div>
           )}
-          {clampedRedeem > 0 && (
+          {currentGroup.points_redeemed_online > 0 && (
             <div className="flex justify-between items-baseline gap-2 py-0.5">
-              <span className="text-base font-black" style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
+              <span className="text-base font-black" style={{ color: "#f59e0b" }}>Points Redeemed (Online)</span>
               <span className="text-base font-black tabular-nums" style={{ color: "#f59e0b" }}>
-                −{formatCurrency(clampedRedeem * redeemRate)}
+                −{formatCurrency(currentGroup.points_redeemed_online * redeemRate)}
+              </span>
+            </div>
+          )}
+          {clampedRedeem - (currentGroup.points_redeemed_online ?? 0) > 0 && (
+            <div className="flex justify-between items-baseline gap-2 py-0.5">
+              <span className="text-base font-black" style={{ color: "#f59e0b" }}>Points Redeemed (At Venue)</span>
+              <span className="text-base font-black tabular-nums" style={{ color: "#f59e0b" }}>
+                −{formatCurrency((clampedRedeem - (currentGroup.points_redeemed_online ?? 0)) * redeemRate)}
               </span>
             </div>
           )}

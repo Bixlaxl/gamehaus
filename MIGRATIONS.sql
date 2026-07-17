@@ -246,3 +246,12 @@ ALTER TABLE order_items
 ALTER TABLE order_items
   ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ;
 
+
+-- ============================================================
+-- ONLINE POINTS REDEEMED (015_points_redeemed_online.sql)
+-- ============================================================
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS points_redeemed_online INTEGER NOT NULL DEFAULT 0;
+
+UPDATE orders SET points_redeemed_online = points_redeemed WHERE type = 'online';
+

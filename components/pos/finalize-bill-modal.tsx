@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
-import { calculateBill } from "@/lib/billing/engine";
+import { calculateBill, computeFreeHoursDiscount } from "@/lib/billing/engine";
 import { formatCurrency, cleanErrorMessage } from "@/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Banknote, Smartphone, Star, CheckCircle2, AlertTriangle, Trash2, Search, Plus, Minus, Trash } from "lucide-react";
 import type { Order, Booking } from "@/lib/supabase/types";
 import type { AppSettings } from "@/lib/settings";
+import { groupOrders } from "@/lib/billing/grouping";
 
 interface FinalizeBillModalProps {
   locationId: string;
@@ -56,10 +57,20 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
   const isOpen        = true;
   const selectedOrder = openOrders.find((o) => o.id === finalizeOrderId) ?? null;
+  const currentGroup = useMemo(() => {
+    if (!finalizeOrderId || !selectedOrder) return null;
+    const grouped = groupOrders(openOrders);
+    return grouped.find((g) => g.orderIds.includes(finalizeOrderId)) || {
+      ...selectedOrder,
+      orderIds: [finalizeOrderId],
+      points_redeemed_online: (selectedOrder as any).points_redeemed_online ?? 0,
+    };
+  }, [openOrders, finalizeOrderId, selectedOrder]);
+
   const qc            = useQueryClient();
 
   const orderId     = finalizeOrderId;
-  const savedPoints = pointsToRedeem[orderId] ?? (selectedOrder?.points_redeemed ?? 0);
+  const savedPoints = pointsToRedeem[orderId] ?? (currentGroup?.points_redeemed ?? 0);
 
   const [method,           setMethod]           = useState<PaymentMethod | null>(null);
   // Split-payment state — when on, cashInput + upiInput drive `payments`;
@@ -161,20 +172,54 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     }
   };
 
+  const handleAddExtension = async (orderItemId: string, mins: number) => {
+    try {
+      const res = await fetch("/api/sessions/extend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_item_id: orderItemId, extend_mins: mins }),
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error);
+      toast.success(`Extended session by ${mins} minutes`);
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to extend session");
+    }
+  };
+
+  const handleRemoveExtension = async (orderItemId: string) => {
+    try {
+      const res = await fetch("/api/sessions/remove-extension", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_item_id: orderItemId }),
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error);
+      toast.success("Removed session extension");
+      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to remove extension");
+    }
+  };
+
   const redeemPoints = Math.max(0, parseInt(redeemInput) || 0);
 
-  const activeItems  = selectedOrder?.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted) ?? [];
-  const activeExtras = selectedOrder?.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]")) ?? [];
+  const activeItems  = currentGroup?.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted) ?? [];
+  const activeExtras = currentGroup?.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]")) ?? [];
 
   const allMemberships = validatedMemberships.length > 0
     ? validatedMemberships
-    : (selectedOrder?.membership_id && customerInfo?.active_memberships
-        ? customerInfo.active_memberships.filter(m => m.id === selectedOrder.membership_id)
+    : (currentGroup?.membership_id && customerInfo?.active_memberships
+        ? customerInfo.active_memberships.filter(m => m.id === currentGroup.membership_id)
         : []);
 
-  const storedDiscount = (selectedOrder?.discount_amount ?? 0) - ((selectedOrder as any)?.public_discount_amount ?? 0);
-  const fallbackPct = (selectedOrder?.membership_id && selectedOrder?.subtotal && Number(selectedOrder.subtotal) > 0)
-    ? Math.round((Number(storedDiscount) / Number(selectedOrder.subtotal)) * 100)
+  const storedDiscount = (currentGroup?.discount_amount ?? 0) - ((currentGroup as any)?.public_discount_amount ?? 0);
+  const fallbackPct = (currentGroup?.membership_id && currentGroup?.subtotal && Number(currentGroup.subtotal) > 0)
+    ? Math.round((Number(storedDiscount) / Number(currentGroup.subtotal)) * 100)
     : 0;
 
   const membershipPct = allMemberships.reduce((max, m) => {
@@ -260,11 +305,11 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   // Use public_discount_amount (coupon-only portion stored at booking time).
   // Member discount is always applied live via membershipPct so it covers
   // extensions + extras added after the booking — matching the finalize route.
-  const publicFixedDiscount = (selectedOrder as any)?.public_discount_amount ?? selectedOrder?.discount_amount ?? 0;
-  const bill          = calculateBill(activeItems, activeExtras, now, null, selectedOrder?.advance_paid ?? 0, publicFixedDiscount, membershipPct, totalFreeHoursDiscount);
+  const publicFixedDiscount = (currentGroup as any)?.public_discount_amount ?? currentGroup?.discount_amount ?? 0;
+  const bill          = calculateBill(activeItems, activeExtras, now, null, currentGroup?.advance_paid ?? 0, publicFixedDiscount, membershipPct, totalFreeHoursDiscount);
   // fullyPrePaid: all charges are already covered by advance (online full-pay).
   // Use bill.totalDue which is already net of ALL discounts + advance.
-  const fullyPrePaid  = bill.totalDue <= 0 && (selectedOrder?.advance_paid ?? 0) > 0;
+  const fullyPrePaid  = bill.totalDue <= 0 && (currentGroup?.advance_paid ?? 0) > 0;
   const totalFreeHoursDiscountVal = bill.freeHoursDiscountAmount;
   const pctDiscount = bill.memberDiscountAmount;
   const membershipDiscount = Math.round((totalFreeHoursDiscountVal + pctDiscount) * 100) / 100;
@@ -382,24 +427,31 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   }
 
   async function handleEmergencyCancel() {
+    if (!currentGroup) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/orders/${orderId}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emergency: true }),
-      });
-      const body = await res.json() as { success: boolean; error?: string };
-      if (!body.success) {
-        setError(cleanErrorMessage(body.error ?? "Failed to cancel order"));
-        setLoading(false);
-        return;
+      const cancelPromises = currentGroup.orderIds.map(id =>
+        fetch(`/api/orders/${id}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emergency: true }),
+        })
+      );
+      const responses = await Promise.all(cancelPromises);
+      for (const res of responses) {
+        const body = await res.json() as { success: boolean; error?: string };
+        if (!body.success) {
+          setError(cleanErrorMessage(body.error ?? "Failed to cancel order"));
+          setLoading(false);
+          return;
+        }
       }
-      toast.success("Bill and table session cancelled successfully");
+      toast.success("Bill and table sessions cancelled successfully");
       qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
       qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
       qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bills",    locationId] });
       selectOrder_fn(null);
       close();
     } catch (e: any) {
@@ -415,19 +467,21 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
   const splitOk  = Math.abs(splitSum - finalDue) <= 0.5;
 
   async function confirmPayment() {
-    if (submittingRef.current) return;
+    if (submittingRef.current || !currentGroup) return;
 
-    // Build the payments array — single-method = 1 entry; split = up to 2
-    const paymentsPayload = splitMode
-      ? [
-          { method: "cash" as const, amount: Math.round((parseFloat(cashInput) || 0) * 100) / 100 },
-          { method: "upi"  as const, amount: Math.round((parseFloat(upiInput)  || 0) * 100) / 100 },
-        ].filter((p) => p.amount > 0)
-      : method
-        ? [{ method, amount: finalDue }]
-        : [];
+    let cashAmt = splitMode
+      ? Math.round((parseFloat(cashInput) || 0) * 100) / 100
+      : method === "cash"
+      ? finalDue
+      : 0;
 
-    if (finalDue > 0 && paymentsPayload.length === 0) return;
+    let upiAmt = splitMode
+      ? Math.round((parseFloat(upiInput) || 0) * 100) / 100
+      : method === "upi"
+      ? finalDue
+      : 0;
+
+    if (finalDue > 0 && cashAmt + upiAmt === 0) return;
     if (splitMode && !splitOk) {
       setError(`Split total ₹${splitSum} must equal ₹${finalDue}`);
       return;
@@ -438,30 +492,94 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     setError(null);
 
     try {
-      const res = await fetch(`/api/orders/${finalizeOrderId}/finalize`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payments:        paymentsPayload,
-          points_redeemed: clampedRedeem,
-          membership_id:   validatedMemberships.length > 0 ? (validatedMemberships[0].short_id || validatedMemberships[0].id) : undefined,
-          ...(manualPhone && !selectedOrder?.customer_phone ? { customer_phone: manualPhone } : {}),
-        }),
+      const ordersToFinalize = openOrders.filter(o => currentGroup.orderIds.includes(o.id));
+      let newVenuePoints = clampedRedeem - currentGroup.points_redeemed_online;
+
+      // 1. Calculate tempDue for each individual order
+      const ordersWithDue = ordersToFinalize.map(o => {
+        const oItems = o.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
+        const oExtras = o.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]"));
+        const oPublicDiscount = (o as any).public_discount_amount ?? o.discount_amount ?? 0;
+        const oFreeHrs = computeFreeHoursDiscount(oItems, allMemberships, now, storeTablesRef);
+        const oMembPct = allMemberships.reduce((max, m) => {
+          const pct = m.plan?.discount_pct ?? 0;
+          return pct > max ? pct : max;
+        }, fallbackPct);
+        const oBill = calculateBill(oItems, oExtras, now, null, o.advance_paid ?? 0, oPublicDiscount, oMembPct, oFreeHrs);
+        return {
+          order: o,
+          tempDue: oBill.totalDue,
+          assignedPoints: o.points_redeemed_online ?? 0,
+          assignedPayments: [] as any[],
+        };
       });
 
-      const body = await res.json() as
-        | { success: true;  data: { total_due: number; points_earned: number } }
-        | { success: false; error: string };
-
-      if (!body.success) {
-        setError(cleanErrorMessage(body.error));
-        setLoading(false);
-        submittingRef.current = false;
-        return;
+      // 2. Distribute new venue points to satisfy individual order balances
+      if (newVenuePoints > 0) {
+        for (const item of ordersWithDue) {
+          if (item.tempDue > 0) {
+            const maxPointsByBill = Math.floor(item.tempDue / redeemRate);
+            const pointsToAssign = Math.min(newVenuePoints, maxPointsByBill);
+            item.assignedPoints += pointsToAssign;
+            newVenuePoints -= pointsToAssign;
+            item.tempDue = Math.max(0, item.tempDue - pointsToAssign * redeemRate);
+          }
+        }
       }
 
+      // 3. Distribute Cash and UPI payments across the orders
+      for (const item of ordersWithDue) {
+        if (item.tempDue > 0) {
+          if (cashAmt > 0) {
+            const payCash = Math.min(cashAmt, item.tempDue);
+            item.assignedPayments.push({ method: "cash", amount: Math.round(payCash * 100) / 100 });
+            cashAmt -= payCash;
+            item.tempDue -= payCash;
+          }
+          if (item.tempDue > 0 && upiAmt > 0) {
+            const payUpi = Math.min(upiAmt, item.tempDue);
+            item.assignedPayments.push({ method: "upi", amount: Math.round(payUpi * 100) / 100 });
+            upiAmt -= payUpi;
+            item.tempDue -= payUpi;
+          }
+        }
+      }
+
+      // 4. Fire parallel finalization requests
+      const finalizePromises = ordersWithDue.map(item =>
+        fetch(`/api/orders/${item.order.id}/finalize`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payments:        item.assignedPayments,
+            points_redeemed: item.assignedPoints,
+            membership_id:   validatedMemberships.length > 0 ? (validatedMemberships[0].short_id || validatedMemberships[0].id) : undefined,
+            ...(manualPhone && !item.order.customer_phone ? { customer_phone: manualPhone } : {}),
+          }),
+        })
+      );
+
+      const responses = await Promise.all(finalizePromises);
+      for (const res of responses) {
+        const body = await res.json() as { success: boolean; error?: string };
+        if (!body.success) {
+          setError(cleanErrorMessage(body.error ?? "Failed to finalize order"));
+          setLoading(false);
+          submittingRef.current = false;
+          return;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bills",    locationId] });
+      selectOrder_fn(null);
+      setLoading(false);
+      submittingRef.current = false;
+
       // Capture handovers from current table state BEFORE queries invalidate
-      const finalizedTableIds = new Set((selectedOrder?.items ?? []).map((i) => i.table_id));
+      const finalizedTableIds = new Set(activeItems.map((i) => i.table_id));
       const handovers: HandoverBooking[] = storeTablesRef
         .filter((t) => finalizedTableIds.has(t.id) && t.upcomingBooking !== null)
         .map((t) => ({
@@ -470,13 +588,6 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
           scheduled_end:   t.upcomingBooking!.scheduled_end,
           order:           t.upcomingBooking!.order,
         }));
-
-      qc.invalidateQueries({ queryKey: ["pos-orders",   locationId] });
-      qc.invalidateQueries({ queryKey: ["pos-tables",   locationId] });
-      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
-      selectOrder_fn(null);
-      setLoading(false);
-      submittingRef.current = false;
 
       if (handovers.length > 0) {
         setHandoverBookings(handovers);
@@ -631,10 +742,58 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                   const m = mins % 60;
                   return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
                 };
+
+                const baseMins = ti?.scheduled_duration_mins || 60;
+                const extMins = ti?.extended_mins || 0;
+
                 return (
-                  <div key={line.id} className="flex justify-between text-base font-extrabold text-left">
-                    <span className="text-gray-700 dark:text-[#ccc]">{tn} ({formatDuration(line.durationMins)}{peopleLabel})</span>
-                    <span className="text-gray-900 dark:text-white font-black">{formatCurrency(line.amount)}</span>
+                  <div key={line.id} className="space-y-1 py-1">
+                    <div className="flex justify-between text-base font-extrabold text-left">
+                      <span className="text-gray-700 dark:text-[#ccc]">{tn} (Original {formatDuration(baseMins)}{peopleLabel})</span>
+                      <span className="text-gray-900 dark:text-white font-black">{formatCurrency((baseMins / 60) * (ti?.rate_per_hour || 0))}</span>
+                    </div>
+                    {extMins > 0 && (
+                      <div className="pl-4 flex items-center justify-between text-sm font-extrabold text-amber-600 dark:text-amber-400">
+                        <span className="flex items-center gap-1.5">
+                          <span>Extension (+{formatDuration(extMins)})</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveExtension(ti!.id)}
+                            className="text-red-500 hover:text-red-700 transition-colors p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                            title="Remove Extension"
+                          >
+                            <Trash className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                        <span className="font-mono">{formatCurrency((extMins / 60) * (ti?.rate_per_hour || 0))}</span>
+                      </div>
+                    )}
+                    {ti && (ti.status === "finished" || ti.status === "running") && (
+                      <div className="pl-4 flex items-center gap-2 mt-1 py-0.5">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Add extension:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddExtension(ti.id, 30)}
+                          className="text-[10px] font-black px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-[#ccc] transition-all"
+                        >
+                          +30m
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAddExtension(ti.id, 60)}
+                          className="text-[10px] font-black px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-[#ccc] transition-all"
+                        >
+                          +1h
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAddExtension(ti.id, 120)}
+                          className="text-[10px] font-black px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-[#ccc] transition-all"
+                        >
+                          +2h
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -656,7 +815,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
 
             {bill.discountAmount > 0 && (
               <div className="flex justify-between text-base font-black">
-                <span style={{ color: "#10b981" }}>Public Coupon / Discount</span>
+                <span style={{ color: "#10b981" }}>Public Discount</span>
                 <span style={{ color: "#10b981" }}>−{formatCurrency(bill.discountAmount)}</span>
               </div>
             )}
@@ -669,7 +828,7 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
             {totalFreeHoursDiscount > 0 && (
               <div className="space-y-1 text-base font-black">
                 <div className="flex justify-between">
-                  <span style={{ color: "#8b5cf6" }}>Membership (Free Hours)</span>
+                  <span style={{ color: "#8b5cf6" }}>Membership Discount (Free Hours)</span>
                   <span style={{ color: "#8b5cf6" }}>−{formatCurrency(totalFreeHoursDiscount)}</span>
                 </div>
                 <div className="pl-3 border-l-2 py-0.5 space-y-0.5" style={{ borderColor: "#8b5cf6" }}>
@@ -683,15 +842,21 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
             )}
             {pctDiscount > 0 && (
               <div className="flex justify-between text-base font-black">
-                <span style={{ color: "#8b5cf6" }}>Membership ({membershipPct}% off)</span>
+                <span style={{ color: "#8b5cf6" }}>Membership Discount ({membershipPct}% off)</span>
                 <span style={{ color: "#8b5cf6" }}>−{formatCurrency(pctDiscount)}</span>
               </div>
             )}
 
-            {clampedRedeem > 0 && (
+            {currentGroup?.points_redeemed_online > 0 && (
               <div className="flex justify-between text-base font-black">
-                <span style={{ color: "#f59e0b" }}>Points ({clampedRedeem} pts)</span>
-                <span style={{ color: "#f59e0b" }}>−{formatCurrency(clampedRedeem * redeemRate)}</span>
+                <span style={{ color: "#f59e0b" }}>Points Redeemed (Online)</span>
+                <span style={{ color: "#f59e0b" }}>−{formatCurrency((currentGroup?.points_redeemed_online ?? 0) * redeemRate)}</span>
+              </div>
+            )}
+            {clampedRedeem - (currentGroup?.points_redeemed_online ?? 0) > 0 && (
+              <div className="flex justify-between text-base font-black">
+                <span style={{ color: "#f59e0b" }}>Points Redeemed (At Venue)</span>
+                <span style={{ color: "#f59e0b" }}>−{formatCurrency((clampedRedeem - (currentGroup?.points_redeemed_online ?? 0)) * redeemRate)}</span>
               </div>
             )}
 

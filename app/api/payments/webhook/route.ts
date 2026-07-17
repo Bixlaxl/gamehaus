@@ -84,15 +84,24 @@ export async function POST(request: Request) {
         }
       })() : Promise.resolve();
 
+      const { data: order } = await admin
+        .from("orders")
+        .select("customer_phone, customer_name, points_redeemed")
+        .eq("id", orderId)
+        .single();
+
       // All of these are independent — run in parallel
-      const [, , { data: order }] = await Promise.all([
+      await Promise.all([
         admin.from("payments").update({
           status:              "completed",
           razorpay_payment_id: payment.id,
           collected_at:        now,
         }).eq("id", paymentRow.id),
-        admin.from("orders").update({ status: "open", advance_paid: paymentRow.amount }).eq("id", orderId),
-        admin.from("orders").select("customer_phone, customer_name, points_redeemed").eq("id", orderId).single(),
+        admin.from("orders").update({
+          status: "open",
+          advance_paid: paymentRow.amount,
+          points_redeemed_online: order?.points_redeemed ?? 0
+        }).eq("id", orderId),
         admin.from("order_items").update({ status: "scheduled" }).eq("order_id", orderId).eq("status", "cancelled"),
         bookingsPromise,
       ]);

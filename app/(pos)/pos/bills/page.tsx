@@ -30,7 +30,7 @@ export default async function StaffBillsPage() {
       .from("orders")
       .select(`
         id, location_id, type, customer_name, customer_phone, status,
-        subtotal, discount_amount, total_amount, amount_due, advance_paid, points_redeemed,
+        subtotal, discount_amount, total_amount, amount_due, advance_paid, points_redeemed, points_redeemed_online,
         finalized_at, created_at,
         items:order_items(id, table_id, status, actual_start, actual_end, expected_end, rate_per_hour, final_amount, num_people, table:tables(name, type)),
         extras:order_extras(id, name, price, quantity, is_deleted),

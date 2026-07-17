@@ -217,6 +217,7 @@ export interface Database {
           advance_paid: number;
           amount_due: number | null;
           points_redeemed: number;
+          points_redeemed_online: number;
           created_by: string | null;
           created_at: string;
           finalized_at: string | null;
@@ -237,6 +238,7 @@ export interface Database {
           advance_paid?: number;
           amount_due?: number | null;
           points_redeemed?: number;
+          points_redeemed_online?: number;
           created_by?: string | null;
           created_at?: string;
           finalized_at?: string | null;
@@ -257,6 +259,7 @@ export interface Database {
           advance_paid?: number;
           amount_due?: number | null;
           points_redeemed?: number;
+          points_redeemed_online?: number;
           created_by?: string | null;
           created_at?: string;
           finalized_at?: string | null;

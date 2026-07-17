@@ -324,6 +324,7 @@ export async function POST(
         total_amount:    bill.subtotal - (bill.discountAmount + membershipDiscount),
         amount_due:      finalDue,
         points_redeemed: validatedPoints,
+        points_redeemed_online: order.points_redeemed_online ?? 0,
         finalized_at:    now.toISOString(),
         coupon_id:       coupon?.id ?? order.coupon_id,
         membership_id:   order.membership_id ?? primaryMembership?.id ?? null,

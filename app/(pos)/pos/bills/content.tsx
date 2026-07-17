@@ -3,6 +3,8 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
+import { groupOrders } from "@/lib/billing/grouping";
+import { subscribeToPOS } from "@/lib/realtime/subscriptions";
 import { Search, X, Banknote, Smartphone, Phone, MessageSquare, ExternalLink, Plus, Trash } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -32,6 +34,7 @@ export interface BillRow {
   amount_due: number;
   advance_paid: number;
   points_redeemed: number;
+  points_redeemed_online: number;
   finalized_at: string | null;
   created_at: string;
   items: {
@@ -112,10 +115,46 @@ export function BillsContent({
     refetchInterval: 15 * 1000,
   });
 
+  const setOpenOrders = usePOSStore((s) => s.setOpenOrders);
+  const handleOrderItemChange = usePOSStore((s) => s.handleOrderItemChange);
+  const handleOrderChange = usePOSStore((s) => s.handleOrderChange);
+  const handleTableChange = usePOSStore((s) => s.handleTableChange);
+
+  const openOrdersZustand = usePOSStore((s) => s.openOrders);
+
+  // Synchronize React Query fetched openOrders into the Zustand store
+  useEffect(() => {
+    if (openOrders && openOrders.length > 0) {
+      setOpenOrders(openOrders as any);
+    }
+  }, [openOrders, setOpenOrders]);
+
+  // Subscribe to Supabase Realtime channel
+  useEffect(() => {
+    const unsubscribe = subscribeToPOS(locationId, {
+      handleOrderItemChange,
+      handleOrderChange,
+      handleTableChange,
+      onBookingsChange: () => {
+        queryClient.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
+      },
+      onExtrasChange: () => {
+        queryClient.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      }
+    });
+    return unsubscribe;
+  }, [locationId, handleOrderItemChange, handleOrderChange, handleTableChange, queryClient]);
+
+  const openOrdersToUse = openOrdersZustand.length > 0 ? openOrdersZustand : openOrders;
+
+  const groupedOpenOrders = useMemo(() => {
+    return groupOrders(openOrdersToUse as any[]);
+  }, [openOrdersToUse]);
+
   // Filter open orders locally based on search
   const filteredOpenOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return openOrders.filter((o) => {
+    return (groupedOpenOrders as any[]).filter((o) => {
       const hasContent = (o.items && o.items.length > 0) || (o.extras && o.extras.length > 0);
       if (!hasContent) return false;
       if (!q) return true;
@@ -123,7 +162,7 @@ export function BillsContent({
       const phone = o.customer_phone ?? "";
       return name.includes(q) || phone.includes(q);
     });
-  }, [openOrders, search]);
+  }, [groupedOpenOrders, search]);
 
   const [manualOpen, setManualOpen] = useState(false);
   const [manualName, setManualName] = useState("");
@@ -579,11 +618,11 @@ export function BillsContent({
                 <tbody className="divide-y dark:divide-[#222]">
                   {filteredOpenOrders.map((o) => {
                     const tablesList = (o.items ?? [])
-                      .map((i) => tableNameOf(i.table))
-                      .filter((n, idx, arr) => arr.indexOf(n) === idx)
+                      .map((i: any) => tableNameOf(i.table))
+                      .filter((n: any, idx: any, arr: any) => arr.indexOf(n) === idx)
                       .join(", ");
-                    const isAnyRunning = (o.items ?? []).some((i) => i.status === "running");
-                    const isAnyScheduled = (o.items ?? []).some((i) => i.status === "scheduled");
+                    const isAnyRunning = (o.items ?? []).some((i: any) => i.status === "running");
+                    const isAnyScheduled = (o.items ?? []).some((i: any) => i.status === "scheduled");
                     
                     let subtotal = 0;
                     for (const item of o.items ?? []) {
@@ -1423,13 +1462,13 @@ function BillDetailModal({
               return (
                 <>
                   {pubDisc > 0 && (
-                    <div className="flex justify-between text-emerald-600"><span>Public Coupon / Discount</span><span className="tabular-nums">−{formatCurrency(pubDisc)}</span></div>
+                    <div className="flex justify-between text-emerald-600"><span>Public Discount</span><span className="tabular-nums">−{formatCurrency(pubDisc)}</span></div>
                   )}
                   {memDisc > 0 && (
-                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium"><span>Membership Discount / Free Hours</span><span className="tabular-nums">−{formatCurrency(memDisc)}</span></div>
+                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium"><span>Membership Discount</span><span className="tabular-nums">−{formatCurrency(memDisc)}</span></div>
                   )}
                   {pubDisc === 0 && memDisc === 0 && bill.discount_amount > 0 && (
-                    <div className="flex justify-between text-emerald-600"><span>Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
+                    <div className="flex justify-between text-emerald-600"><span>Public Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
                   )}
                 </>
               );
@@ -1437,8 +1476,11 @@ function BillDetailModal({
             {bill.advance_paid > 0 && (
               <div className="flex justify-between text-emerald-600"><span>Advance paid</span><span className="tabular-nums">−{formatCurrency(bill.advance_paid)}</span></div>
             )}
-            {bill.points_redeemed > 0 && (
-              <div className="flex justify-between text-amber-600"><span>Points redeemed ({bill.points_redeemed} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed)}</span></div>
+            {bill.points_redeemed_online > 0 && (
+              <div className="flex justify-between text-amber-600"><span>Points Redeemed (Online) ({bill.points_redeemed_online} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed_online)}</span></div>
+            )}
+            {bill.points_redeemed - (bill.points_redeemed_online ?? 0) > 0 && (
+              <div className="flex justify-between text-amber-600"><span>Points Redeemed (At Venue) ({bill.points_redeemed - (bill.points_redeemed_online ?? 0)} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed - (bill.points_redeemed_online ?? 0))}</span></div>
             )}
             <div className="flex justify-between pt-2 border-t dark:border-[#222] font-bold text-base">
               <span>Collected at venue</span>
