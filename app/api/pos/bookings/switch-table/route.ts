@@ -24,57 +24,66 @@ export async function POST(request: Request) {
   const { booking_id, target_table_id } = parsed.data;
 
   const admin = createAdminClient();
+  
+  // 1. Fetch user role & location
   const { data: viewer } = await admin
-    .from("users").select("role, location_id").eq("id", session.user.id).single();
+    .from("users")
+    .select("role, location_id")
+    .eq("id", session.user.id)
+    .single();
+
   if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
   }
 
-  // Load booking with joined order item and source table
-  const { data: booking, error: bookingErr } = await admin
-    .from("bookings")
-    .select("*, order_item:order_items(*, table:tables(*))")
-    .eq("id", booking_id)
-    .single();
+  // 2. Fetch booking and target table details
+  const [bookingResult, targetResult] = await Promise.all([
+    admin
+      .from("bookings")
+      .select("*, order_item:order_items(*, table:tables(*))")
+      .eq("id", booking_id)
+      .single(),
+    admin
+      .from("tables")
+      .select("*")
+      .eq("id", target_table_id)
+      .single(),
+  ]);
 
-  if (bookingErr || !booking) {
+  if (bookingResult.error || !bookingResult.data) {
     return NextResponse.json(err("Booking not found", "NOT_FOUND"), { status: 404 });
   }
-
-  const orderItem = booking.order_item as any;
-  const sourceTable = orderItem?.table as any;
-  if (!orderItem || !sourceTable) {
-    return NextResponse.json(err("Booking order item or table not found", "NOT_FOUND"), { status: 404 });
-  }
-
-  // Load target table
-  const { data: targetTable, error: tableErr } = await admin
-    .from("tables")
-    .select("*")
-    .eq("id", target_table_id)
-    .single();
-
-  if (tableErr || !targetTable) {
+  if (targetResult.error || !targetResult.data) {
     return NextResponse.json(err("Target table not found", "NOT_FOUND"), { status: 404 });
   }
 
-  // Authorize location boundary for staff
-  if (viewer.role === "staff" && (viewer.location_id !== sourceTable.location_id || viewer.location_id !== targetTable.location_id)) {
-    return NextResponse.json(err("Forbidden: Location mismatch", "FORBIDDEN"), { status: 403 });
+  const booking = bookingResult.data;
+  const orderItem = booking.order_item as any;
+  const sourceTable = orderItem?.table as any;
+  const targetTable = targetResult.data;
+
+  if (!orderItem || !sourceTable) {
+    return NextResponse.json(err("Source table or order item not found", "NOT_FOUND"), { status: 404 });
   }
 
-  // Enforce that both tables are "Medium" tables
-  const isSourceMedium = sourceTable.name.toLowerCase().includes("medium");
-  const isTargetMedium = targetTable.name.toLowerCase().includes("medium");
-  if (!isSourceMedium || !isTargetMedium) {
-    return NextResponse.json(err("Table switching is restricted to Medium Tables only", "VALIDATION_ERROR"), { status: 400 });
+  // 3. Location Check
+  if (sourceTable.location_id !== targetTable.location_id) {
+    return NextResponse.json(err("Source and target tables must belong to the same location", "VALIDATION_ERROR"), { status: 400 });
   }
 
-  if (sourceTable.id === targetTable.id) {
-    return NextResponse.json(err("Target table is identical to current table", "VALIDATION_ERROR"), { status: 400 });
+  // Staff role constraint
+  if (viewer.role === "staff" && viewer.location_id !== sourceTable.location_id) {
+    return NextResponse.json(err("This location belongs to a different staff", "FORBIDDEN"), { status: 403 });
   }
 
-  // Conflict overlap checks on target table
+  // 4. "Medium" Table constraints
+  const sourceName = (sourceTable.name ?? "").toLowerCase();
+  const targetName = (targetTable.name ?? "").toLowerCase();
+  if (!sourceName.includes("medium") || !targetName.includes("medium")) {
+    return NextResponse.json(err("Table switching is only allowed for Medium tables", "VALIDATION_ERROR"), { status: 400 });
+  }
+
+  // 5. Conflict Check on Target Table
   const startMs = new Date(booking.scheduled_start).getTime();
   const endMs   = new Date(booking.scheduled_end).getTime();
 
@@ -83,21 +92,21 @@ export async function POST(request: Request) {
       .from("order_items")
       .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
       .eq("table_id", target_table_id)
+      .neq("id", booking.order_item_id)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
     admin
       .from("bookings")
       .select("id, scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id)")
       .eq("status", "confirmed")
-      .eq("order_items.table_id", target_table_id)
-      .neq("id", booking_id),
+      .neq("id", booking_id)
+      .eq("order_items.table_id", target_table_id),
   ]);
 
   const overlaps = (aS: number, aE: number, bS: number, bE: number) => aS < bE && aE > bS;
   let isConflict = false;
 
   for (const ex of (existingItems ?? [])) {
-    if (ex.id === orderItem.id) continue;
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
     if (exS && exE && overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {
@@ -109,24 +118,25 @@ export async function POST(request: Request) {
   if (!isConflict) {
     for (const b of (existingBookings ?? [])) {
       if (!b.scheduled_start || !b.scheduled_end) continue;
-      if (!overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) continue;
-      isConflict = true;
-      break;
+      if (overlaps(startMs, endMs, new Date(b.scheduled_start).getTime(), new Date(b.scheduled_end).getTime())) {
+        isConflict = true;
+        break;
+      }
     }
   }
 
   if (isConflict) {
-    return NextResponse.json(err("Conflict: target table is occupied during this time window", "TABLE_TAKEN"), { status: 409 });
+    return NextResponse.json(err("Conflict: target table already has a session or booking in this window", "TABLE_TAKEN"), { status: 409 });
   }
 
-  // Update table ID on order item
-  const { error: updateErr } = await admin
+  // 6. Perform the table switch
+  const { error: updateError } = await admin
     .from("order_items")
     .update({ table_id: target_table_id })
-    .eq("id", orderItem.id);
+    .eq("id", booking.order_item_id);
 
-  if (updateErr) {
-    return NextResponse.json(err(updateErr.message, "DB_ERROR"), { status: 500 });
+  if (updateError) {
+    return NextResponse.json(err(updateError.message, "DB_ERROR"), { status: 500 });
   }
 
   return NextResponse.json(ok({ success: true }));

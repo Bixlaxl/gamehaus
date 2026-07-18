@@ -100,6 +100,45 @@ export function BookingsContent({
   const [statusFilter, setStatus] = useState("all");
   const [manualOpen,    setManualOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
+  const [tablesList, setTablesList] = useState<any[]>([]);
+  const [loadingTables, setLoadingTables] = useState(false);
+  const [targetTableId, setTargetTableId] = useState("");
+  const [switching, setSwitching] = useState(false);
+
+  useEffect(() => {
+    if (!selectedBooking) {
+      setTablesList([]);
+      setTargetTableId("");
+      return;
+    }
+    const orderItem = selectedBooking.order_item;
+    const tableName = (orderItem?.table?.name ?? "").toLowerCase();
+    if (!tableName.includes("medium")) return;
+
+    const locId = selectedBooking.order_item?.table?.location?.id;
+    if (!locId) return;
+
+    setLoadingTables(true);
+    fetch(`/api/tables?location_id=${locId}`)
+      .then(res => res.json())
+      .then(body => {
+        if (body.success) {
+          setTablesList(body.data ?? []);
+        }
+      })
+      .catch(err => console.error("Failed to load tables:", err))
+      .finally(() => setLoadingTables(false));
+  }, [selectedBooking]);
+
+  const otherMediumTables = useMemo(() => {
+    if (!selectedBooking) return [];
+    const currentTableId = selectedBooking.order_item?.table?.id;
+    return tablesList.filter(
+      (t) =>
+        t.id !== currentTableId &&
+        (t.name ?? "").toLowerCase().includes("medium")
+    );
+  }, [tablesList, selectedBooking]);
 
   function shiftDate(days: number) {
     const d = new Date(date + "T12:00:00");
@@ -700,6 +739,56 @@ export function BookingsContent({
                     <div className="flex justify-between border-t border-dashed border-gray-150 dark:border-[#222] pt-2.5 text-base font-black">
                       <span className="text-gray-900 dark:text-white">Remaining Balance (Pay at Venue)</span>
                       <span className="tabular-nums text-[#D4541A] text-lg">₹{Math.round(remainingDue)}</span>
+                    </div>
+                  )}
+
+                  {otherMediumTables.length > 0 && (
+                    <div className="space-y-2 border-t border-gray-100 dark:border-[#222] pt-4">
+                      <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Switch Table (Medium Table Only)</p>
+                      <div className="flex gap-2">
+                        <select
+                          value={targetTableId}
+                          onChange={(e) => setTargetTableId(e.target.value)}
+                          className="flex-1 h-11 px-3 text-sm rounded-lg border border-input bg-background font-semibold text-gray-900 dark:text-white"
+                        >
+                          <option value="" className="text-gray-500 font-semibold">Select table...</option>
+                          {otherMediumTables.map((t) => (
+                            <option key={t.id} value={t.id} className="font-semibold">{t.name}</option>
+                          ))}
+                        </select>
+                        <Button
+                          size="sm"
+                          disabled={!targetTableId || switching}
+                          onClick={async () => {
+                            setSwitching(true);
+                            try {
+                              const res = await fetch("/api/pos/bookings/switch-table", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  booking_id: b.id,
+                                  target_table_id: targetTableId,
+                                }),
+                              });
+                              const body = await res.json();
+                              if (body.success) {
+                                toast.success("Table switched successfully!");
+                                setSelectedBooking(null);
+                                void refetch();
+                              } else {
+                                toast.error(body.error || "Failed to switch table");
+                              }
+                            } catch (err: any) {
+                              toast.error(err?.message || "Failed to switch table");
+                            } finally {
+                              setSwitching(false);
+                            }
+                          }}
+                          className="h-11 px-4 text-xs font-black bg-[#D4541A] hover:bg-[#b04312] text-white rounded-lg"
+                        >
+                          {switching ? "Switching..." : "Switch"}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
