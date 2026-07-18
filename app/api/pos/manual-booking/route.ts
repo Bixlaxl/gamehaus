@@ -47,6 +47,49 @@ const schema = z.object({
   }).optional(),
 });
 
+function isWithinOperatingHours(
+  startIso: string,
+  endIso: string,
+  openingTime: string,
+  closingTime: string
+): boolean {
+  const startMs = new Date(startIso).getTime();
+  const endMs   = new Date(endIso).getTime();
+  
+  // Convert slot start time to IST date string
+  const startInIst = new Date(startMs + 5.5 * 60 * 60 * 1000);
+  const y = startInIst.getUTCFullYear();
+  const mo = String(startInIst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(startInIst.getUTCDate()).padStart(2, "0");
+  const slotDate = `${y}-${mo}-${d}`;
+  
+  const [oh, om] = openingTime.split(":").map(Number);
+  const [ch, cm] = closingTime.split(":").map(Number);
+  const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
+
+  const checkWindow = (dateStr: string) => {
+    const opens = new Date(`${dateStr}T${openingTime}:00+05:30`).getTime();
+    let closes = new Date(`${dateStr}T${closingTime}:00+05:30`).getTime();
+    if (crossesMidnight) {
+      closes += 24 * 60 * 60 * 1000;
+    }
+    return startMs >= opens && endMs <= closes;
+  };
+
+  if (checkWindow(slotDate)) return true;
+
+  if (crossesMidnight) {
+    const yesterday = new Date(new Date(`${slotDate}T12:00:00+05:30`).getTime() - 24 * 60 * 60 * 1000);
+    const yy = yesterday.getUTCFullYear();
+    const ymo = String(yesterday.getUTCMonth() + 1).padStart(2, "0");
+    const yd = String(yesterday.getUTCDate()).padStart(2, "0");
+    const yesterdayStr = `${yy}-${ymo}-${yd}`;
+    if (checkWindow(yesterdayStr)) return true;
+  }
+
+  return false;
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -60,13 +103,35 @@ export async function POST(request: Request) {
   const { location_id, customer_name, customer_phone, table_id, scheduled_start, scheduled_end, rate_per_hour, num_people, selected_mode_name, advance_paid } = parsed.data;
 
   const admin = createAdminClient();
-  const { data: viewer } = await admin
-    .from("users").select("role, location_id").eq("id", session.user.id).single();
+  const [{ data: viewer }, { data: loc }] = await Promise.all([
+    admin.from("users").select("role, location_id").eq("id", session.user.id).single(),
+    admin.from("locations").select("opening_time, closing_time").eq("id", location_id).single(),
+  ]);
+
   if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
   }
   if (viewer.role === "staff" && viewer.location_id !== location_id) {
     return NextResponse.json(err("This location belongs to a different staff", "FORBIDDEN"), { status: 403 });
+  }
+  if (!loc) {
+    return NextResponse.json(err("Location not found", "NOT_FOUND"), { status: 404 });
+  }
+
+  // Validate operating hours
+  if (loc.opening_time && loc.closing_time) {
+    const withinHours = isWithinOperatingHours(
+      scheduled_start,
+      scheduled_end,
+      loc.opening_time,
+      loc.closing_time
+    );
+    if (!withinHours) {
+      return NextResponse.json(
+        err(`Booking time must be within operating hours (${loc.opening_time} – ${loc.closing_time})`, "OUTSIDE_HOURS"),
+        { status: 400 }
+      );
+    }
   }
 
   // Basic sanity — end must be after start, within a reasonable window

@@ -285,6 +285,8 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
       if (isToday && slotStartMs < minStartMs) continue;
 
       const slotWindowEndMs = slotStartMs + duration * 60_000;
+      const businessCloseMs = new Date(`${date}T${opening}:00+05:30`).getTime() + (closeMins - openMins) * 60_000;
+      if (slotWindowEndMs > businessCloseMs) continue;
 
       const isBlocked = blockedSlots.some((b) => {
         const bStart = new Date(b.start).getTime();
