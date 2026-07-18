@@ -623,11 +623,11 @@ export function BookingsContent({
 
       {/* Booking Details Breakdown Modal */}
       <Dialog open={!!selectedBooking} onOpenChange={(open) => !open && setSelectedBooking(null)}>
-        <DialogContent className="max-w-md p-6 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A] rounded-2xl shadow-xl">
-          <DialogHeader className="pb-4 border-b border-gray-100 dark:border-[#222]">
-            <DialogTitle className="text-xl font-black text-gray-900 dark:text-white flex items-center justify-between">
+        <DialogContent className="max-w-2xl p-10 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A] rounded-3xl shadow-2xl">
+          <DialogHeader className="pb-6 border-b border-gray-100 dark:border-[#222]">
+            <DialogTitle className="text-3xl font-black text-gray-900 dark:text-white flex items-center justify-between">
               <span>Booking Details</span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 uppercase">
+              <span className="text-sm font-black px-4 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 uppercase tracking-wider">
                 {selectedBooking?.order?.type || "Walk-in"}
               </span>
             </DialogTitle>
@@ -664,92 +664,92 @@ export function BookingsContent({
             const remainingDue = isFinalized ? 0 : Math.max(0, total - advance);
 
             return (
-              <div className="space-y-5 pt-4 text-left">
+              <div className="space-y-8 pt-6 text-left">
                 {/* Slot & Table info */}
-                <div className="bg-gray-50 dark:bg-[#161616] p-4 rounded-xl space-y-1.5 border dark:border-[#222]">
-                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Resource & Slot</p>
-                  <p className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-1.5">
+                <div className="bg-gray-50 dark:bg-[#161616] p-6 rounded-2xl space-y-3 border dark:border-[#222]">
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Resource & Slot</p>
+                  <p className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
                     <span>{table?.name || "Table"}</span>
-                    <span className="text-xs font-bold text-gray-500">({table?.type})</span>
+                    <span className="text-sm font-bold text-gray-500">({table?.type})</span>
                   </p>
-                  <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+                  <p className="text-base font-semibold text-gray-600 dark:text-gray-400">
                     {formatD(b.scheduled_start)} at {formatTime(b.scheduled_start)} – {formatTime(b.scheduled_end)} ({formatDuration(durationMins)})
                   </p>
                 </div>
 
                 {/* Customer Details */}
-                <div className="space-y-1">
-                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Customer</p>
-                  <p className="text-base font-black text-gray-900 dark:text-white">{order?.customer_name || "Guest"}</p>
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Customer</p>
+                  <p className="text-2xl font-black text-gray-900 dark:text-white">{order?.customer_name || "Guest"}</p>
                   {order?.customer_phone && (
-                    <p className="text-sm font-bold text-gray-500">{order.customer_phone}</p>
+                    <p className="text-base font-bold text-gray-500">{order.customer_phone}</p>
                   )}
                 </div>
 
                 {/* Calculation Breakdown */}
-                <div className="space-y-2 border-t border-gray-100 dark:border-[#222] pt-4">
-                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Price Calculation</p>
+                <div className="space-y-4 border-t border-gray-100 dark:border-[#222] pt-6">
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Price Calculation</p>
                   
-                  <div className="flex justify-between text-sm font-semibold">
+                  <div className="flex justify-between text-base font-semibold">
                     <span className="text-gray-500 dark:text-gray-400">Booking Subtotal</span>
                     <span className="tabular-nums font-bold text-gray-900 dark:text-white">₹{Math.round(baseSubtotal)}</span>
                   </div>
 
                   {pubDisc > 0 && (
-                    <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                    <div className="flex justify-between text-base font-semibold text-emerald-600">
                       <span>Public Discount</span>
                       <span className="tabular-nums font-bold">−₹{Math.round(pubDisc)}</span>
                     </div>
                   )}
 
                   {memDisc > 0 && (
-                    <div className="flex justify-between text-sm font-semibold text-purple-600 dark:text-purple-400">
+                    <div className="flex justify-between text-base font-semibold text-purple-600 dark:text-purple-400">
                       <span>Membership Discount</span>
                       <span className="tabular-nums font-bold">−₹{Math.round(memDisc)}</span>
                     </div>
                   )}
 
                   {ptsRedeemedOnline > 0 && (
-                    <div className="flex justify-between text-sm font-semibold text-amber-600">
+                    <div className="flex justify-between text-base font-semibold text-amber-600">
                       <span>Points Redeemed (Online)</span>
                       <span className="tabular-nums font-bold">−₹{Math.round(ptsRedeemedOnline)}</span>
                     </div>
                   )}
 
                   {ptsRedeemedVenue > 0 && (
-                    <div className="flex justify-between text-sm font-semibold text-amber-600">
+                    <div className="flex justify-between text-base font-semibold text-amber-600">
                       <span>Points Redeemed (At Venue)</span>
                       <span className="tabular-nums font-bold">−₹{Math.round(ptsRedeemedVenue)}</span>
                     </div>
                   )}
 
                   {advance > 0 && (
-                    <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                    <div className="flex justify-between text-base font-semibold text-emerald-600">
                       <span>Advance Paid Online</span>
                       <span className="tabular-nums font-bold">−₹{Math.round(advance)}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between border-t border-gray-100 dark:border-[#222] pt-3 text-base font-black">
+                  <div className="flex justify-between border-t border-gray-100 dark:border-[#222] pt-4 text-xl font-black">
                     <span className="text-gray-900 dark:text-white">Amount Paid / Settled</span>
-                    <span className="tabular-nums text-emerald-600 text-lg">₹{Math.round(amountPaid)}</span>
+                    <span className="tabular-nums text-emerald-600 text-2xl">₹{Math.round(amountPaid)}</span>
                   </div>
 
                   {!isFinalized && remainingDue > 0 && (
-                    <div className="flex justify-between border-t border-dashed border-gray-150 dark:border-[#222] pt-2.5 text-base font-black">
+                    <div className="flex justify-between border-t border-dashed border-gray-150 dark:border-[#222] pt-3 text-xl font-black">
                       <span className="text-gray-900 dark:text-white">Remaining Balance (Pay at Venue)</span>
-                      <span className="tabular-nums text-[#D4541A] text-lg">₹{Math.round(remainingDue)}</span>
+                      <span className="tabular-nums text-[#D4541A] text-2xl">₹{Math.round(remainingDue)}</span>
                     </div>
                   )}
 
                   {otherMediumTables.length > 0 && (
-                    <div className="space-y-2 border-t border-gray-100 dark:border-[#222] pt-4">
-                      <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Switch Table (Medium Table Only)</p>
-                      <div className="flex gap-2">
+                    <div className="space-y-3 border-t border-gray-100 dark:border-[#222] pt-6">
+                      <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Switch Table (Medium Table Only)</p>
+                      <div className="flex gap-4">
                         <select
                           value={targetTableId}
                           onChange={(e) => setTargetTableId(e.target.value)}
-                          className="flex-1 h-11 px-3 text-sm rounded-lg border border-input bg-background font-semibold text-gray-900 dark:text-white"
+                          className="flex-1 h-14 px-4 text-base rounded-xl border border-input bg-background font-semibold text-gray-900 dark:text-white"
                         >
                           <option value="" className="text-gray-500 font-semibold">Select table...</option>
                           {otherMediumTables.map((t) => (
@@ -757,7 +757,7 @@ export function BookingsContent({
                           ))}
                         </select>
                         <Button
-                          size="sm"
+                          size="default"
                           disabled={!targetTableId || switching}
                           onClick={async () => {
                             setSwitching(true);
@@ -784,7 +784,7 @@ export function BookingsContent({
                               setSwitching(false);
                             }
                           }}
-                          className="h-11 px-4 text-xs font-black bg-[#D4541A] hover:bg-[#b04312] text-white rounded-lg"
+                          className="h-14 px-8 text-sm font-black bg-[#D4541A] hover:bg-[#b04312] text-white rounded-xl shadow-sm"
                         >
                           {switching ? "Switching..." : "Switch"}
                         </Button>
@@ -794,10 +794,10 @@ export function BookingsContent({
                 </div>
 
                 {/* Footer Status badge */}
-                <div className="pt-2 flex justify-between items-center text-sm font-bold text-gray-500 border-t border-gray-100 dark:border-[#222]">
+                <div className="pt-4 flex justify-between items-center text-base font-bold text-gray-500 border-t border-gray-100 dark:border-[#222]">
                   <span>Status</span>
                   <Badge
-                    className="px-3.5 py-1 text-xs font-black rounded-lg"
+                    className="px-6 py-2.5 text-sm font-black rounded-xl"
                     variant={
                       b.status === "confirmed"  ? "success"     :
                       b.status === "checked_in" ? "outline"     :
