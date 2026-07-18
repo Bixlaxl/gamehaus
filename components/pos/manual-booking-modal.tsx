@@ -256,8 +256,10 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   // Generate slots grid for visual picking
   const slotPills = useMemo(() => {
-    const opening = locationInfo?.opening_time ?? "10:00";
-    const closing = locationInfo?.closing_time ?? "23:00";
+    const rawOpening = locationInfo?.opening_time ?? "10:00";
+    const rawClosing = locationInfo?.closing_time ?? "23:00";
+    const opening = rawOpening.split(":").slice(0, 2).join(":");
+    const closing = rawClosing.split(":").slice(0, 2).join(":");
     const [oh, om] = opening.split(":").map(Number);
     const [ch, cm] = closing.split(":").map(Number);
     let openMins = oh * 60 + om;

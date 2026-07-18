@@ -100,41 +100,6 @@ export function BookingsContent({
   const [statusFilter, setStatus] = useState("all");
   const [manualOpen,    setManualOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
-  const [allTables, setAllTables] = useState<any[]>([]);
-  const [fetchingTables, setFetchingTables] = useState(false);
-  const [targetTableId, setTargetTableId] = useState<string>("");
-  const [switching, setSwitching] = useState(false);
-
-  useEffect(() => {
-    if (!selectedBooking || !selectedBooking.order_item?.table) {
-      setAllTables([]);
-      setTargetTableId("");
-      return;
-    }
-    const tableName = selectedBooking.order_item.table.name.toLowerCase();
-    if (!tableName.includes("medium")) {
-      setAllTables([]);
-      setTargetTableId("");
-      return;
-    }
-
-    setFetchingTables(true);
-    fetch(`/api/tables?location_id=${selectedBooking.order_item.table.location.id}`)
-      .then(res => res.json())
-      .then(body => {
-        if (body.success) {
-          const list = (body.data ?? []).filter((t: any) => 
-            t.name.toLowerCase().includes("medium") && t.id !== selectedBooking.order_item?.table?.id
-          );
-          setAllTables(list);
-          if (list.length > 0) {
-            setTargetTableId(list[0].id);
-          }
-        }
-      })
-      .catch(console.error)
-      .finally(() => setFetchingTables(false));
-  }, [selectedBooking]);
 
   function shiftDate(days: number) {
     const d = new Date(date + "T12:00:00");
@@ -738,59 +703,6 @@ export function BookingsContent({
                     </div>
                   )}
                 </div>
-
-                {/* Switch Table Section */}
-                {allTables.length > 0 && (
-                  <div className="space-y-2 border-t border-gray-100 dark:border-[#222] pt-4">
-                    <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Switch Table</p>
-                    <div className="flex gap-2.5">
-                      <Select value={targetTableId} onValueChange={setTargetTableId} disabled={switching}>
-                        <SelectTrigger className="flex-1 h-11 text-sm font-medium">
-                          <SelectValue placeholder="Select target table" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allTables.map((t) => (
-                            <SelectItem key={t.id} value={t.id} className="text-sm font-medium">
-                              {t.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        disabled={switching || !targetTableId}
-                        onClick={async () => {
-                          setSwitching(true);
-                          try {
-                            const res = await fetch("/api/pos/bookings/switch-table", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                booking_id: b.id,
-                                target_table_id: targetTableId,
-                              }),
-                            });
-                            const body = await res.json();
-                            if (body.success) {
-                              toast.success("Table switched successfully!");
-                              setSelectedBooking(null);
-                              void refetch();
-                            } else {
-                              toast.error(body.error || "Failed to switch table");
-                            }
-                          } catch (err: any) {
-                            toast.error(err?.message || "Failed to switch table");
-                          } finally {
-                            setSwitching(false);
-                          }
-                        }}
-                        className="h-11 px-4 font-black text-white bg-[#D4541A] hover:bg-[#D4541A]/90 rounded-xl shrink-0 text-sm"
-                      >
-                        {switching ? "Switching…" : "Switch"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Footer Status badge */}
                 <div className="pt-2 flex justify-between items-center text-sm font-bold text-gray-500 border-t border-gray-100 dark:border-[#222]">

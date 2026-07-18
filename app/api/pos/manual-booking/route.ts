@@ -63,13 +63,15 @@ function isWithinOperatingHours(
   const d = String(startInIst.getUTCDate()).padStart(2, "0");
   const slotDate = `${y}-${mo}-${d}`;
   
-  const [oh, om] = openingTime.split(":").map(Number);
-  const [ch, cm] = closingTime.split(":").map(Number);
+  const op = openingTime.split(":").slice(0, 2).join(":");
+  const cl = closingTime.split(":").slice(0, 2).join(":");
+  const [oh, om] = op.split(":").map(Number);
+  const [ch, cm] = cl.split(":").map(Number);
   const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
 
   const checkWindow = (dateStr: string) => {
-    const opens = new Date(`${dateStr}T${openingTime}:00+05:30`).getTime();
-    let closes = new Date(`${dateStr}T${closingTime}:00+05:30`).getTime();
+    const opens = new Date(`${dateStr}T${op}:00+05:30`).getTime();
+    let closes = new Date(`${dateStr}T${cl}:00+05:30`).getTime();
     if (crossesMidnight) {
       closes += 24 * 60 * 60 * 1000;
     }
