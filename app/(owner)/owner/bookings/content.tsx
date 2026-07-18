@@ -620,6 +620,10 @@ export function BookingsContent({
               return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
             };
 
+            const isFinalized = order?.status === "finalized";
+            const amountPaid = isFinalized ? total : advance;
+            const remainingDue = isFinalized ? 0 : Math.max(0, total - advance);
+
             return (
               <div className="space-y-5 pt-4 text-left">
                 {/* Slot & Table info */}
@@ -689,8 +693,15 @@ export function BookingsContent({
 
                   <div className="flex justify-between border-t border-gray-100 dark:border-[#222] pt-3 text-base font-black">
                     <span className="text-gray-900 dark:text-white">Amount Paid / Settled</span>
-                    <span className="tabular-nums text-[#D4541A] text-lg">₹{Math.round(total)}</span>
+                    <span className="tabular-nums text-emerald-600 text-lg">₹{Math.round(amountPaid)}</span>
                   </div>
+
+                  {!isFinalized && remainingDue > 0 && (
+                    <div className="flex justify-between border-t border-dashed border-gray-150 dark:border-[#222] pt-2.5 text-base font-black">
+                      <span className="text-gray-900 dark:text-white">Remaining Balance (Pay at Venue)</span>
+                      <span className="tabular-nums text-[#D4541A] text-lg">₹{Math.round(remainingDue)}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer Status badge */}
