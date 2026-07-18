@@ -759,13 +759,7 @@ export default function CheckoutPage() {
         modal: {
           ondismiss: () => {
             if (paymentSuccess) return;
-            // User closed the popup without paying — free the slot immediately
-            fetch(`/api/orders/${order_id}/cancel`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ emergency: true }),
-            }).catch(() => {/* best-effort */});
-            setError("Payment was cancelled. Your slot has been released. You can try again.");
+            setError("Payment window was closed. You can try again within 10 minutes.");
             setLoading(false);
             submitting.current = false;
           },

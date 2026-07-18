@@ -62,27 +62,32 @@ export async function POST(request: Request) {
         .select("id")
         .eq("order_id", orderId);
 
-      const bookingsPromise = (!existingBookings || existingBookings.length === 0) ? (async () => {
-        const { data: items } = await admin
-          .from("order_items")
-          .select("id, scheduled_start, scheduled_end")
-          .eq("order_id", orderId)
-          .eq("is_deleted", false);
-          
-        const bookingsToInsert = (items ?? [])
-          .filter((item) => item.scheduled_start && item.scheduled_end)
-          .map((item) => ({
-            order_id: orderId,
-            order_item_id: item.id,
-            scheduled_start: item.scheduled_start!,
-            scheduled_end: item.scheduled_end!,
-            held_until: new Date(new Date(item.scheduled_start!).getTime() + 15 * 60 * 1000).toISOString(),
-            status: "confirmed" as const,
-          }));
-        if (bookingsToInsert.length > 0) {
-          await admin.from("bookings").insert(bookingsToInsert);
+      const bookingsPromise = (async () => {
+        if (!existingBookings || existingBookings.length === 0) {
+          const { data: items } = await admin
+            .from("order_items")
+            .select("id, scheduled_start, scheduled_end")
+            .eq("order_id", orderId)
+            .eq("is_deleted", false);
+            
+          const bookingsToInsert = (items ?? [])
+            .filter((item) => item.scheduled_start && item.scheduled_end)
+            .map((item) => ({
+              order_id: orderId,
+              order_item_id: item.id,
+              scheduled_start: item.scheduled_start!,
+              scheduled_end: item.scheduled_end!,
+              held_until: new Date(new Date(item.scheduled_start!).getTime() + 15 * 60 * 1000).toISOString(),
+              status: "confirmed" as const,
+            }));
+          if (bookingsToInsert.length > 0) {
+            await admin.from("bookings").insert(bookingsToInsert);
+          }
+        } else {
+          // Self-heal: if bookings already exist (e.g. cancelled by a race condition), restore them to confirmed!
+          await admin.from("bookings").update({ status: "confirmed" }).eq("order_id", orderId);
         }
-      })() : Promise.resolve();
+      })();
 
       const { data: order } = await admin
         .from("orders")

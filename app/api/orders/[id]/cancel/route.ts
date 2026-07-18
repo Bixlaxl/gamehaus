@@ -48,6 +48,10 @@ export async function POST(
       return NextResponse.json(err("Order not found", "NOT_FOUND"), { status: 404 });
     }
 
+    if (isEmergency && order.advance_paid && order.advance_paid > 0) {
+      return NextResponse.json(err("Cannot emergency-cancel a paid order", "FORBIDDEN"), { status: 400 });
+    }
+
     if (order.status !== "open" && !isEmergency) {
       return NextResponse.json(
         err(`Order cannot be cancelled because its status is '${order.status}'`, "INVALID_STATE"),
