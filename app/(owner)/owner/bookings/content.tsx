@@ -26,6 +26,14 @@ type BookingRow = Booking & {
     customer_name: string;
     customer_phone: string | null;
     advance_paid: number;
+    type: string;
+    status: string;
+    subtotal: number | null;
+    discount_amount: number;
+    public_discount_amount?: number;
+    total_amount: number | null;
+    points_redeemed: number;
+    points_redeemed_online?: number;
     order_items?: Array<{ id: string; status: string }> | null;
   } | null;
   order_item: { table: TableRef } | null;
@@ -91,6 +99,7 @@ export function BookingsContent({
   const [typeFilter, setType]     = useState("all");
   const [statusFilter, setStatus] = useState("all");
   const [manualOpen,    setManualOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
 
   function shiftDate(days: number) {
     const d = new Date(date + "T12:00:00");
@@ -392,7 +401,11 @@ export function BookingsContent({
               {/* Mobile View (stacked cards) */}
               <div className="block md:hidden space-y-4">
                 {tableBookings.map((b) => (
-                  <div key={b.id} className="border border-gray-150 dark:border-[#222] rounded-2xl p-4 bg-gray-50/50 dark:bg-[#161616] space-y-4">
+                  <div
+                    key={b.id}
+                    onClick={() => setSelectedBooking(b)}
+                    className="border border-gray-150 dark:border-[#222] rounded-2xl p-4 bg-gray-50/50 dark:bg-[#161616] space-y-4 cursor-pointer hover:bg-gray-100/50 dark:hover:bg-[#1f1f1f]/30 transition-colors"
+                  >
                     {/* Time Slot & Status */}
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <span className="font-mono text-base font-black px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300 border dark:border-[#333] shadow-sm">
@@ -436,7 +449,7 @@ export function BookingsContent({
                         <Button
                           size="sm"
                           disabled={busyBookingId === b.id || !actionsAllowed}
-                          onClick={() => void doCheckIn(b)}
+                          onClick={(e) => { e.stopPropagation(); void doCheckIn(b); }}
                           className="flex-1 h-12 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl"
                         >
                           {busyBookingId === b.id ? "…" : "Check-in"}
@@ -445,7 +458,7 @@ export function BookingsContent({
                           size="sm"
                           variant="destructive"
                           disabled={busyBookingId === b.id || !actionsAllowed}
-                          onClick={() => void doNoShow(b)}
+                          onClick={(e) => { e.stopPropagation(); void doNoShow(b); }}
                           className="flex-1 h-12 text-sm font-black rounded-xl"
                         >
                           {busyBookingId === b.id ? "…" : "No-show"}
@@ -470,7 +483,11 @@ export function BookingsContent({
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-[#222]">
                     {tableBookings.map((b) => (
-                      <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-[#1f1f1f]/50 transition-colors">
+                      <tr
+                        key={b.id}
+                        onClick={() => setSelectedBooking(b)}
+                        className="hover:bg-gray-50 dark:hover:bg-[#1f1f1f]/50 transition-colors cursor-pointer"
+                      >
                         {/* Time Slot */}
                         <td className="px-4 py-5 font-semibold text-gray-900 dark:text-white align-middle">
                           <span className="inline-flex items-center justify-center font-mono text-xl md:text-2xl font-black px-6 py-3.5 rounded-2xl bg-gray-100 dark:bg-[#222] text-gray-700 dark:text-gray-300 border-2 border-gray-250 dark:border-[#444] shadow-sm">
@@ -517,7 +534,7 @@ export function BookingsContent({
                                   <Button
                                     size="default"
                                     className="h-16 text-xl px-8 font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm rounded-2xl"
-                                    onClick={() => doCheckIn(b)}
+                                    onClick={(e) => { e.stopPropagation(); void doCheckIn(b); }}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Check in this slot"}
                                   >
@@ -527,7 +544,7 @@ export function BookingsContent({
                                     variant="outline"
                                     size="default"
                                     className="h-16 text-xl px-8 font-black text-gray-500 hover:text-red-500 hover:border-red-200 rounded-2xl"
-                                    onClick={() => doNoShow(b)}
+                                    onClick={(e) => { e.stopPropagation(); void doNoShow(b); }}
                                     disabled={!actionsAllowed || busyBookingId === b.id}
                                     title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
                                   >
@@ -564,6 +581,138 @@ export function BookingsContent({
           onCreated={() => { setManualOpen(false); void refetch(); }}
         />
       )}
+
+      {/* Booking Details Breakdown Modal */}
+      <Dialog open={!!selectedBooking} onOpenChange={(open) => !open && setSelectedBooking(null)}>
+        <DialogContent className="max-w-md p-6 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A] rounded-2xl shadow-xl">
+          <DialogHeader className="pb-4 border-b border-gray-100 dark:border-[#222]">
+            <DialogTitle className="text-xl font-black text-gray-900 dark:text-white flex items-center justify-between">
+              <span>Booking Details</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 uppercase">
+                {selectedBooking?.order?.type || "Walk-in"}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedBooking && (() => {
+            const b = selectedBooking;
+            const order = b.order;
+            const table = b.order_item?.table;
+            const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+            const formatD = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+            
+            const baseSubtotal = order?.subtotal ?? 0;
+            const discount = order?.discount_amount ?? 0;
+            const advance = order?.advance_paid ?? 0;
+            const total = order?.total_amount ?? 0;
+            
+            const pubDisc = order?.public_discount_amount ?? 0;
+            const memDisc = Math.max(0, discount - pubDisc);
+            
+            const ptsRedeemed = order?.points_redeemed ?? 0;
+            const ptsRedeemedOnline = order?.points_redeemed_online ?? 0;
+            const ptsRedeemedVenue = Math.max(0, ptsRedeemed - ptsRedeemedOnline);
+
+            const durationMins = Math.round((new Date(b.scheduled_end).getTime() - new Date(b.scheduled_start).getTime()) / 60000);
+            const formatDuration = (mins: number) => {
+              const h = Math.floor(mins / 60);
+              const m = mins % 60;
+              return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
+            };
+
+            return (
+              <div className="space-y-5 pt-4 text-left">
+                {/* Slot & Table info */}
+                <div className="bg-gray-50 dark:bg-[#161616] p-4 rounded-xl space-y-1.5 border dark:border-[#222]">
+                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Resource & Slot</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <span>{table?.name || "Table"}</span>
+                    <span className="text-xs font-bold text-gray-500">({table?.type})</span>
+                  </p>
+                  <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+                    {formatD(b.scheduled_start)} at {formatTime(b.scheduled_start)} – {formatTime(b.scheduled_end)} ({formatDuration(durationMins)})
+                  </p>
+                </div>
+
+                {/* Customer Details */}
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Customer</p>
+                  <p className="text-base font-black text-gray-900 dark:text-white">{order?.customer_name || "Guest"}</p>
+                  {order?.customer_phone && (
+                    <p className="text-sm font-bold text-gray-500">{order.customer_phone}</p>
+                  )}
+                </div>
+
+                {/* Calculation Breakdown */}
+                <div className="space-y-2 border-t border-gray-100 dark:border-[#222] pt-4">
+                  <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Price Calculation</p>
+                  
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span className="text-gray-500 dark:text-gray-400">Booking Subtotal</span>
+                    <span className="tabular-nums font-bold text-gray-900 dark:text-white">₹{Math.round(baseSubtotal)}</span>
+                  </div>
+
+                  {pubDisc > 0 && (
+                    <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                      <span>Public Discount</span>
+                      <span className="tabular-nums font-bold">−₹{Math.round(pubDisc)}</span>
+                    </div>
+                  )}
+
+                  {memDisc > 0 && (
+                    <div className="flex justify-between text-sm font-semibold text-purple-600 dark:text-purple-400">
+                      <span>Membership Discount</span>
+                      <span className="tabular-nums font-bold">−₹{Math.round(memDisc)}</span>
+                    </div>
+                  )}
+
+                  {ptsRedeemedOnline > 0 && (
+                    <div className="flex justify-between text-sm font-semibold text-amber-600">
+                      <span>Points Redeemed (Online)</span>
+                      <span className="tabular-nums font-bold">−₹{Math.round(ptsRedeemedOnline)}</span>
+                    </div>
+                  )}
+
+                  {ptsRedeemedVenue > 0 && (
+                    <div className="flex justify-between text-sm font-semibold text-amber-600">
+                      <span>Points Redeemed (At Venue)</span>
+                      <span className="tabular-nums font-bold">−₹{Math.round(ptsRedeemedVenue)}</span>
+                    </div>
+                  )}
+
+                  {advance > 0 && (
+                    <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                      <span>Advance Paid Online</span>
+                      <span className="tabular-nums font-bold">−₹{Math.round(advance)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between border-t border-gray-100 dark:border-[#222] pt-3 text-base font-black">
+                    <span className="text-gray-900 dark:text-white">Amount Paid / Settled</span>
+                    <span className="tabular-nums text-[#D4541A] text-lg">₹{Math.round(total)}</span>
+                  </div>
+                </div>
+
+                {/* Footer Status badge */}
+                <div className="pt-2 flex justify-between items-center text-sm font-bold text-gray-500 border-t border-gray-100 dark:border-[#222]">
+                  <span>Status</span>
+                  <Badge
+                    className="px-3.5 py-1 text-xs font-black rounded-lg"
+                    variant={
+                      b.status === "confirmed"  ? "success"     :
+                      b.status === "checked_in" ? "outline"     :
+                      (b.status === "finished" || b.status === "completed") ? "secondary" :
+                      b.status === "no_show"    ? "destructive" : "secondary"
+                    }
+                  >
+                    {STATUS_LABELS[b.status] ?? b.status}
+                  </Badge>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

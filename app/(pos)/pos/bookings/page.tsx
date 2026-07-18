@@ -48,7 +48,7 @@ export default async function StaffBookingsPage() {
     .from("bookings")
     .select(`
       *,
-      order:orders(customer_name, customer_phone, advance_paid, type, status),
+      order:orders(customer_name, customer_phone, advance_paid, type, status, subtotal, discount_amount, total_amount, points_redeemed, public_discount_amount, points_redeemed_online),
       order_item:order_items(table:tables(id, name, type, location:locations(name, id)))
     `)
     .gte("scheduled_start", from)
