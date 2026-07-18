@@ -514,22 +514,54 @@ function OwnerBillDetailModal({
                 <span>Subtotal</span>
                 <span className="font-mono">{formatCurrency(bill.subtotal)}</span>
               </div>
-              {bill.discount_amount > 0 && (
-                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                  <span>Discount</span>
-                  <span className="font-mono">-{formatCurrency(bill.discount_amount)}</span>
-                </div>
-              )}
+              {(() => {
+                const pubDisc = bill.public_discount_amount ?? 0;
+                const memDisc = Math.max(0, bill.discount_amount - pubDisc);
+                return (
+                  <>
+                    {pubDisc > 0 && (
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                        <span>Public Discount</span>
+                        <span className="font-mono">−{formatCurrency(pubDisc)}</span>
+                      </div>
+                    )}
+                    {memDisc > 0 && (
+                      <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium">
+                        <span>Membership Discount</span>
+                        <span className="font-mono">−{formatCurrency(memDisc)}</span>
+                      </div>
+                    )}
+                    {pubDisc === 0 && memDisc === 0 && bill.discount_amount > 0 && (
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                        <span>Public Discount</span>
+                        <span className="font-mono">−{formatCurrency(bill.discount_amount)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               {bill.advance_paid > 0 && (
                 <div className="flex justify-between text-indigo-600 dark:text-indigo-400">
                   <span>Advance Paid</span>
-                  <span className="font-mono">-{formatCurrency(bill.advance_paid)}</span>
+                  <span className="font-mono">−{formatCurrency(bill.advance_paid)}</span>
+                </div>
+              )}
+              {bill.points_redeemed_online > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-500 font-medium">
+                  <span>Points Redeemed (Online) ({bill.points_redeemed_online} pts)</span>
+                  <span className="font-mono">−{formatCurrency(bill.points_redeemed_online)}</span>
+                </div>
+              )}
+              {bill.points_redeemed - (bill.points_redeemed_online ?? 0) > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-500 font-medium">
+                  <span>Points Redeemed (At Venue) ({bill.points_redeemed - (bill.points_redeemed_online ?? 0)} pts)</span>
+                  <span className="font-mono">−{formatCurrency(bill.points_redeemed - (bill.points_redeemed_online ?? 0))}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base pt-2 border-t text-foreground">
-                <span>Total Amount</span>
+                <span>Collected at venue</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(bill.total_amount)}
+                  {formatCurrency(bill.amount_due)}
                 </span>
               </div>
             </div>
