@@ -273,7 +273,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
     // Allow slots starting within 5 minutes ago so current boundary is selectable
     const minStartMs = isToday ? nowMs - 5 * 60 * 1000 : 0;
 
-    const list: { timeStr: string; label: string; isBlocked: boolean; startIso: string; endIso: string }[] = [];
+    const list: { timeStr: string; label: string; isBlocked: boolean; isNextDay: boolean; startIso: string; endIso: string }[] = [];
     for (let m = openMins; m < closeMins; m += stepMins) {
       const isNextDay = m >= 24 * 60;
       const norm = m % (24 * 60);
@@ -304,6 +304,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
         timeStr,
         label,
         isBlocked,
+        isNextDay,
         startIso: new Date(slotStartMs).toISOString(),
         endIso: new Date(slotWindowEndMs).toISOString(),
       });
@@ -661,21 +662,26 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
               {slotPills.map((s) => {
                 const isSelected = time === s.timeStr;
                 return (
-                  <button
-                    key={s.timeStr}
-                    type="button"
-                    disabled={s.isBlocked}
-                    onClick={() => setTime(s.timeStr)}
-                    className={`py-5 px-3 rounded-2xl text-xl font-mono font-black transition-all text-center ${
-                      isSelected
-                        ? "bg-[#D4541A] text-white shadow-md border-2 border-[#D4541A]"
-                        : s.isBlocked
-                        ? "bg-red-50 dark:bg-red-950/20 text-red-400 dark:text-red-400/60 border border-red-200/50 dark:border-red-900/30 line-through opacity-60 cursor-not-allowed"
-                        : "bg-white dark:bg-[#222] text-gray-800 dark:text-[#ddd] border border-gray-200 dark:border-gray-700 hover:border-[#D4541A]"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
+                   <button
+                     key={s.timeStr}
+                     type="button"
+                     disabled={s.isBlocked}
+                     onClick={() => setTime(s.timeStr)}
+                     className={`py-4 px-2.5 rounded-2xl text-xl font-mono font-black transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                       isSelected
+                         ? "bg-[#D4541A] text-white shadow-md border-2 border-[#D4541A]"
+                         : s.isBlocked
+                         ? "bg-red-50 dark:bg-red-950/20 text-red-400 dark:text-red-400/60 border border-red-200/50 dark:border-red-900/30 line-through opacity-60 cursor-not-allowed"
+                         : "bg-white dark:bg-[#222] text-gray-800 dark:text-[#ddd] border border-gray-200 dark:border-gray-700 hover:border-[#D4541A]"
+                     }`}
+                   >
+                     <span>{s.label}</span>
+                     {s.isNextDay && (
+                       <span className={`text-[10px] font-sans font-bold leading-none tracking-tight ${isSelected ? "text-white/90" : "text-[#D4541A] opacity-90"}`}>
+                         Next Day
+                       </span>
+                     )}
+                   </button>
                 );
               })}
             </div>
