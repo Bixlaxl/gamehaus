@@ -129,8 +129,6 @@ export default function CheckoutPage() {
   const [now, setNow]                 = useState(() => new Date());
   const [couponState, setCouponState] = useState<CouponState>({ status: "idle" });
   const [publicCoupons, setPublicCoupons] = useState<any[]>([]);
-  const [publicCouponRemoved, setPublicCouponRemoved] = useState(false);
-  const [showPrivateInput, setShowPrivateInput] = useState(false);
   const [checkoutAddons, setCheckoutAddons] = useState<any[]>([]);
   const [selectedExtras, setSelectedExtras] = useState<Record<string, number>>({});
   // Owner-configurable booking knobs. Defaults match the pre-settings world
@@ -179,7 +177,6 @@ export default function CheckoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const lookupTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const couponTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitting   = useRef(false);
 
   useEffect(() => {
@@ -212,19 +209,6 @@ export default function CheckoutPage() {
     return () => { abort = true; };
   }, [cart.locationId]);
 
-  const activePublicCoupon = publicCoupons.length > 0 ? publicCoupons[0] : null;
-
-  useEffect(() => {
-    if (activePublicCoupon && paymentMode === "full" && !publicCouponRemoved && !showPrivateInput) {
-      setCoupon(activePublicCoupon.code);
-    } else if (paymentMode !== "full" || publicCouponRemoved || showPrivateInput) {
-      if (activePublicCoupon && coupon === activePublicCoupon.code) {
-        setCoupon("");
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePublicCoupon, paymentMode, publicCouponRemoved, showPrivateInput]);
-
   useEffect(() => { setMounted(true); }, []);
 
   // Live tick so expired-slot warning appears even if user leaves page open
@@ -233,16 +217,25 @@ export default function CheckoutPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Auto-switch to full pay when subtotal is at or below the advance threshold
-  // so the customer never gets stuck on an invalid payment mode.
+  // Determine if any booking on a specific table is for more than 1 Hour 45 Minutes (2 Hours and above)
+  const hasLongBooking = useMemo(() => {
+    const tableDurations: Record<string, number> = {};
+    for (const item of cart.items) {
+      tableDurations[item.tableId] = (tableDurations[item.tableId] || 0) + item.durationMins;
+    }
+    return Object.values(tableDurations).some((mins) => mins > 105);
+  }, [cart.items]);
+
+  // Auto-switch to full pay when subtotal is at or below the advance threshold,
+  // membership is applied, or booking duration on any table exceeds 1 Hour 45 Mins.
   useEffect(() => {
     const advanceAmt = advancePerTable * cart.items.length;
     const currentSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
-    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMemberships.length > 0) {
+    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMemberships.length > 0 || hasLongBooking) {
       setPaymentMode("full");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [advancePerTable, cart.items, validatedMemberships]);
+  }, [advancePerTable, cart.items, validatedMemberships, hasLongBooking]);
 
   // Any cart item whose start time has already passed by the time the user reaches checkout
   const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
@@ -250,50 +243,51 @@ export default function CheckoutPage() {
 
   const subtotalForCoupon = cart.items.reduce((s, i) => s + i.amount, 0);
 
-  // Debounced live coupon validation — fires whenever the customer changes the
-  // code OR the cart subtotal changes (so the displayed discount stays accurate).
-  useEffect(() => {
-    if (couponTimer.current) clearTimeout(couponTimer.current);
-    const trimmed = coupon.trim();
-    if (!trimmed) {
-      setCouponState({ status: "idle" });
+  // Manual coupon application handler triggered only by the Apply button
+  async function handleApplyCoupon(codeOverride?: string) {
+    const codeToApply = (codeOverride ?? coupon).trim().toUpperCase();
+    if (!codeToApply) {
+      setCouponState({ status: "invalid", reason: "Please enter a coupon code" });
       return;
     }
     if (paymentMode !== "full") {
-      // Coupons only apply to full-payment orders
-      setCouponState({ status: "idle" });
+      setCouponState({ status: "invalid", reason: "Coupons are only available for Pay in Full bookings" });
       return;
     }
     setCouponState({ status: "checking" });
-    couponTimer.current = setTimeout(async () => {
-      const url = `/api/coupons/validate?code=${encodeURIComponent(trimmed)}&location_id=${encodeURIComponent(cart.locationId ?? "")}&amount=${subtotalForCoupon}`;
-      try {
-        const res = await fetch(url);
-        const body = await res.json() as
-          | { success: true; data: { valid: true; code: string; discount_amount: number; discount_type: "percent" | "flat"; discount_value: number } }
-          | { success: true; data: { valid: false; reason: string } }
-          | { success: false; error: string };
-        if (!body.success) {
-          setCouponState({ status: "invalid", reason: body.error });
-          return;
-        }
-        if (body.data.valid) {
-          setCouponState({
-            status:          "valid",
-            code:            body.data.code,
-            discount_amount: body.data.discount_amount,
-            discount_type:   body.data.discount_type,
-            discount_value:  body.data.discount_value,
-          });
-        } else {
-          setCouponState({ status: "invalid", reason: body.data.reason });
-        }
-      } catch {
-        setCouponState({ status: "invalid", reason: "Couldn't check this code right now" });
+    try {
+      const url = `/api/coupons/validate?code=${encodeURIComponent(codeToApply)}&location_id=${encodeURIComponent(cart.locationId ?? "")}&amount=${subtotalForCoupon}`;
+      const res = await fetch(url);
+      const body = await res.json() as
+        | { success: true; data: { valid: true; code: string; discount_amount: number; discount_type: "percent" | "flat"; discount_value: number } }
+        | { success: true; data: { valid: false; reason: string } }
+        | { success: false; error: string };
+
+      if (!body.success) {
+        setCouponState({ status: "invalid", reason: body.error });
+        return;
       }
-    }, 400);
-    return () => { if (couponTimer.current) clearTimeout(couponTimer.current); };
-  }, [coupon, cart.locationId, subtotalForCoupon, paymentMode]);
+      if (body.data.valid) {
+        setCoupon(body.data.code);
+        setCouponState({
+          status:          "valid",
+          code:            body.data.code,
+          discount_amount: body.data.discount_amount,
+          discount_type:   body.data.discount_type,
+          discount_value:  body.data.discount_value,
+        });
+      } else {
+        setCouponState({ status: "invalid", reason: body.data.reason });
+      }
+    } catch {
+      setCouponState({ status: "invalid", reason: "Couldn't check this code right now" });
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setCoupon("");
+    setCouponState({ status: "idle" });
+  }
 
   const couponDiscount = couponState.status === "valid" ? couponState.discount_amount : 0;
 
@@ -321,9 +315,9 @@ export default function CheckoutPage() {
   const tableSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
   const subtotal      = tableSubtotal + extrasTotal;
   const advanceAmount = advancePerTable * cart.items.length;
-  // When total cost is at or below the advance fee, there's nothing to reserve.
-  // Force full pay and hide the advance option entirely.
-  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || validatedMemberships.length > 0;
+  // When total cost is at or below advance fee, membership is applied, or booking on a table > 1h 45m.
+  // Force full pay and disable the advance option entirely.
+  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || validatedMemberships.length > 0 || hasLongBooking;
   const baseAmount    = paymentMode === "advance" ? advanceAmount : subtotal;
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
@@ -1383,6 +1377,8 @@ export default function CheckoutPage() {
                 <p className="text-xs text-gray-500 mt-1 px-1" style={{ color: textMut }}>
                   {validatedMemberships.length > 0
                     ? "Reserve option disabled when membership is applied — paying in full applies your membership credits directly."
+                    : hasLongBooking
+                    ? "Reserve option disabled for bookings 2 Hours and above on a table — full payment required."
                     : `Reserve option unavailable — booking total (${formatCurrency(subtotal)}) is at or below the advance threshold (${formatCurrency(advanceAmount)}).`}
                 </p>
               )}
@@ -1524,103 +1520,111 @@ export default function CheckoutPage() {
 
               {/* Coupons Input (only for Full pre-payment) */}
               {paymentMode === "full" && (
-                <div className="pt-4 border-t border-dashed space-y-2.5" style={{ borderColor: border }}>
+                <div className="pt-4 border-t border-dashed space-y-3" style={{ borderColor: border }}>
                   <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ color: textSec }}>
                     <Tag className="h-3.5 w-3.5 text-gray-400" />
                     Coupon code <span className="text-[10px] text-gray-400 font-normal lowercase tracking-normal">(Pay in Full bookings only)</span>
                   </label>
-                  
-                  {activePublicCoupon && !publicCouponRemoved && !showPrivateInput ? (
-                    <div className="rounded-xl p-3 border flex items-center justify-between transition-all"
+
+                  {couponState.status === "valid" ? (
+                    <div
+                      className="rounded-xl p-3 border flex items-center justify-between transition-all"
                       style={{
-                        background: "rgba(16,185,129,0.03)",
-                        borderColor: "rgba(16,185,129,0.2)",
+                        background: "rgba(16,185,129,0.04)",
+                        borderColor: "rgba(16,185,129,0.3)",
                       }}
                     >
                       <div className="flex items-center gap-2">
-                        <Tag className="h-4 w-4 text-green-600" />
+                        <Tag className="h-4 w-4 text-emerald-600" />
                         <div>
-                          <p className="font-semibold text-xs text-gray-900 dark:text-white" style={{ color: textPri }}>
-                            Deal applied: {activePublicCoupon.discount_type === "percent"
-                              ? `${activePublicCoupon.discount_value}% off`
-                              : `₹${activePublicCoupon.discount_value} off`}
+                          <p className="font-bold text-xs text-emerald-700 dark:text-emerald-400">
+                            ✓ Code Applied: {couponState.code}
                           </p>
-                          <p className="text-[10px] text-gray-500" style={{ color: textSec }}>
-                            Online full prepay booking discount
+                          <p className="text-[11px] text-emerald-600 font-medium">
+                            {couponState.discount_type === "percent"
+                              ? `${couponState.discount_value}% off`
+                              : `${formatCurrency(couponState.discount_value)} off`}
+                            {" "}({formatCurrency(couponState.discount_amount)} saved)
                           </p>
                         </div>
                       </div>
                       <button
-                        onClick={() => {
-                          setPublicCouponRemoved(true);
-                          setCoupon("");
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-500 border border-red-500/10 hover:bg-red-50"
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-500 border border-red-500/20 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       >
                         Remove
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {activePublicCoupon && !showPrivateInput ? (
-                        <button
-                          onClick={() => setShowPrivateInput(true)}
-                          className="text-xs font-semibold text-[#D4541A] hover:opacity-85 transition-opacity"
-                        >
-                          Have a private code?
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={coupon}
-                            onChange={e => setCoupon(e.target.value.toUpperCase())}
-                            placeholder="Enter code"
-                            className="flex-1 px-4 py-2 rounded-xl text-sm font-semibold outline-none transition-colors border"
-                            style={{
-                              background: inputBg,
-                              borderColor:
-                                couponState.status === "valid"   ? "#10B981" :
-                                couponState.status === "invalid" ? "#EF4444" :
-                                inputBdr,
-                              color: textPri,
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="px-4 py-2 rounded-xl border font-bold text-xs transition-all bg-[#FFF5F2] border-[#FDDCD0] text-[#D4541A] hover:bg-[#FFEBE5]"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      )}
-                      
-                      {activePublicCoupon && (
-                        <button
-                          onClick={() => {
-                            setShowPrivateInput(false);
-                            setPublicCouponRemoved(false);
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={coupon}
+                          onChange={(e) => {
+                            setCoupon(e.target.value.toUpperCase());
+                            if (couponState.status !== "idle") {
+                              setCouponState({ status: "idle" });
+                            }
                           }}
-                          className="text-xs font-semibold text-gray-500 hover:text-gray-700 block mt-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleApplyCoupon();
+                            }
+                          }}
+                          placeholder="Enter coupon code"
+                          className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold outline-none transition-colors border"
+                          style={{
+                            background: inputBg,
+                            borderColor: couponState.status === "invalid" ? "#EF4444" : inputBdr,
+                            color: textPri,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleApplyCoupon()}
+                          disabled={couponState.status === "checking" || !coupon.trim()}
+                          className="px-5 py-2.5 rounded-xl border font-bold text-xs transition-all bg-[#FFF5F2] border-[#FDDCD0] text-[#D4541A] hover:bg-[#FFEBE5] disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                         >
-                          ← Back to public deal
+                          {couponState.status === "checking" ? "Checking…" : "Apply"}
                         </button>
-                      )}
+                      </div>
 
-                      {couponState.status === "checking" && (
-                        <p className="text-xs text-gray-400">Checking…</p>
-                      )}
-                      {couponState.status === "valid" && (
-                        <p className="text-xs font-semibold text-green-600">
-                          ✓ Applied — {couponState.discount_type === "percent"
-                            ? `${couponState.discount_value}% off`
-                            : `${formatCurrency(couponState.discount_value)} off`}
-                          {" "}({formatCurrency(couponState.discount_amount)} saved)
-                        </p>
-                      )}
                       {couponState.status === "invalid" && (
                         <p className="text-xs font-semibold text-red-500">
                           ✗ {couponState.reason}
                         </p>
+                      )}
+
+                      {publicCoupons.length > 0 && (
+                        <div className="pt-1 space-y-1.5">
+                          <p className="text-[11px] font-semibold text-gray-500">Available deals:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {publicCoupons.map((c: any) => (
+                              <div
+                                key={c.id}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 text-xs"
+                              >
+                                <Tag className="h-3.5 w-3.5 text-emerald-600" />
+                                <span className="font-bold text-emerald-900 dark:text-emerald-200">{c.code}</span>
+                                <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                                  ({c.discount_type === "percent" ? `${c.discount_value}% OFF` : `₹${c.discount_value} OFF`})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCoupon(c.code);
+                                    handleApplyCoupon(c.code);
+                                  }}
+                                  className="ml-1 px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px] hover:bg-emerald-700 transition-colors shadow-xs"
+                                >
+                                  Apply
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
