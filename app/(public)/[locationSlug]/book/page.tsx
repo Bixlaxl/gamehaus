@@ -237,16 +237,26 @@ export default function CheckoutPage() {
     return Object.values(tableDurations).some((mins) => mins > 105);
   }, [cart.items]);
 
+  // Determine if any booking in the cart is on a Saturday (6) or Sunday (0)
+  const isWeekendBooking = useMemo(() => {
+    return cart.items.some((item) => {
+      if (!item.scheduledStart) return false;
+      const d = new Date(item.scheduledStart);
+      const day = d.getDay();
+      return day === 0 || day === 6;
+    });
+  }, [cart.items]);
+
   // Auto-switch to full pay when subtotal is at or below the advance threshold,
-  // membership is applied, or booking duration on any table exceeds 1 Hour 45 Mins.
+  // membership is applied, booking duration exceeds 1h45m, or booking is on a weekend.
   useEffect(() => {
     const advanceAmt = advancePerTable * cart.items.length;
     const currentSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
-    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMemberships.length > 0 || hasLongBooking) {
+    if ((cart.items.length > 0 && currentSubtotal <= advanceAmt) || validatedMemberships.length > 0 || hasLongBooking || isWeekendBooking) {
       setPaymentMode("full");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [advancePerTable, cart.items, validatedMemberships, hasLongBooking]);
+  }, [advancePerTable, cart.items, validatedMemberships, hasLongBooking, isWeekendBooking]);
 
   // Any cart item whose start time has already passed by the time the user reaches checkout
   const expiredItems = cart.items.filter(i => new Date(i.scheduledStart) <= now);
@@ -326,9 +336,9 @@ export default function CheckoutPage() {
   const tableSubtotal = cart.items.reduce((s, i) => s + i.amount, 0);
   const subtotal      = tableSubtotal + extrasTotal;
   const advanceAmount = advancePerTable * cart.items.length;
-  // When total cost is at or below advance fee, membership is applied, or booking on a table > 1h 45m.
+  // When total cost is at or below advance fee, membership is applied, booking is > 1h 45m, or on weekend.
   // Force full pay and disable the advance option entirely.
-  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || validatedMemberships.length > 0 || hasLongBooking;
+  const forceFullPay  = (cart.items.length > 0 && subtotal <= advanceAmount) || validatedMemberships.length > 0 || hasLongBooking || isWeekendBooking;
   const baseAmount    = paymentMode === "advance" ? advanceAmount : subtotal;
   // Coupon discount only applies to "full" mode (UI hides input in advance mode anyway)
   const effectiveDiscount = paymentMode === "full" ? couponDiscount : 0;
@@ -1382,6 +1392,8 @@ export default function CheckoutPage() {
                 <p className="text-xs text-gray-500 mt-1 px-1" style={{ color: textMut }}>
                   {validatedMemberships.length > 0
                     ? "Reserve option disabled when membership is applied — paying in full applies your membership credits directly."
+                    : isWeekendBooking
+                    ? "Reserve option disabled for Saturday and Sunday bookings — full payment required."
                     : hasLongBooking
                     ? "Reserve option disabled for bookings 2 Hours and above on a table — full payment required."
                     : `Reserve option unavailable — booking total (${formatCurrency(subtotal)}) is at or below the advance threshold (${formatCurrency(advanceAmount)}).`}
