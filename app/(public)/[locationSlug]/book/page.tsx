@@ -221,7 +221,18 @@ export default function CheckoutPage() {
   const hasLongBooking = useMemo(() => {
     const tableDurations: Record<string, number> = {};
     for (const item of cart.items) {
-      tableDurations[item.tableId] = (tableDurations[item.tableId] || 0) + item.durationMins;
+      let mins = Number(item.durationMins);
+      if (!mins || isNaN(mins) || mins <= 0) {
+        if (item.scheduledStart && item.scheduledEnd) {
+          const startMs = new Date(item.scheduledStart).getTime();
+          const endMs = new Date(item.scheduledEnd).getTime();
+          mins = (endMs - startMs) / (60 * 1000);
+        } else {
+          mins = 0;
+        }
+      }
+      const tid = item.tableId || "default";
+      tableDurations[tid] = (tableDurations[tid] || 0) + mins;
     }
     return Object.values(tableDurations).some((mins) => mins > 105);
   }, [cart.items]);
@@ -1219,23 +1230,17 @@ export default function CheckoutPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Card 1: Reserve with Advance */}
-                {(() => {
-                  const isSelected = paymentMode === "advance" && !forceFullPay;
-                  const isDisabled = forceFullPay;
+              <div className={`grid grid-cols-1 ${forceFullPay ? "" : "md:grid-cols-2"} gap-4`}>
+                {/* Card 1: Reserve with Advance (hidden when forceFullPay is true) */}
+                {!forceFullPay && (() => {
+                  const isSelected = paymentMode === "advance";
                   return (
                     <button
                       type="button"
-                      disabled={isDisabled}
                       onClick={() => {
-                        if (!isDisabled) {
-                          setPaymentMode("advance");
-                        }
+                        setPaymentMode("advance");
                       }}
-                      className={`rounded-2xl p-4 border-2 flex flex-col justify-between text-left transition-all select-none w-full ${
-                        isDisabled ? "opacity-45 cursor-not-allowed" : "cursor-pointer"
-                      }`}
+                      className="rounded-2xl p-4 border-2 flex flex-col justify-between text-left cursor-pointer transition-all select-none w-full"
                       style={{
                         background: isSelected ? "rgba(212,84,26,0.03)" : surface,
                         borderColor: isSelected ? "#D4541A" : border,
