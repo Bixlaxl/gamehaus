@@ -23,7 +23,7 @@ export async function PATCH(request: Request) {
       .eq("id", session.user.id)
       .single();
 
-    if (!viewer || viewer.role !== "owner") {
+    if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
       return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
     }
 
@@ -46,21 +46,32 @@ export async function PATCH(request: Request) {
     }
 
     const admin = createAdminClient();
-    let query = admin.from("customer_profiles").update({ points_balance: pointsNum });
 
+    let updateRes;
     if (customerId) {
-      query = query.eq("id", customerId);
+      updateRes = await admin
+        .from("customer_profiles")
+        .update({ points_balance: pointsNum })
+        .eq("id", customerId)
+        .select("id, phone, name, points_balance, visit_count, total_spent, last_visit_at");
     } else {
-      query = query.eq("phone", phone);
+      updateRes = await admin
+        .from("customer_profiles")
+        .update({ points_balance: pointsNum })
+        .eq("phone", phone)
+        .select("id, phone, name, points_balance, visit_count, total_spent, last_visit_at");
     }
 
-    const { data, error } = await query.select().single();
-
-    if (error) {
-      return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+    if (updateRes.error) {
+      return NextResponse.json(err(updateRes.error.message, "DB_ERROR"), { status: 500 });
     }
 
-    return NextResponse.json(ok(data));
+    const updatedRecord =
+      updateRes.data && updateRes.data.length > 0
+        ? updateRes.data[0]
+        : { id: customerId, phone, points_balance: pointsNum };
+
+    return NextResponse.json(ok(updatedRecord));
   } catch (error: any) {
     return NextResponse.json(err(error?.message || "Internal server error", "INTERNAL_ERROR"), {
       status: 500,

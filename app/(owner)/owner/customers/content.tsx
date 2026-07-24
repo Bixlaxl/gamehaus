@@ -103,6 +103,7 @@ export function CustomersContent({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [newPointsInput, setNewPointsInput] = useState("");
   const [isSavingPoints, setIsSavingPoints] = useState(false);
+  const [isSavedSuccess, setIsSavedSuccess] = useState(false);
 
   // Sync state with URL when back button or external route changes occur
   useEffect(() => { setSelectedLocation(currentLocation); }, [currentLocation]);
@@ -168,6 +169,7 @@ export function CustomersContent({
     }
 
     setIsSavingPoints(true);
+    setIsSavedSuccess(false);
     try {
       const res = await fetch("/api/owner/customers/loyalty", {
         method: "PATCH",
@@ -188,17 +190,19 @@ export function CustomersContent({
         `Loyalty points updated to ${pts} pts for ${selectedCustomer.name || selectedCustomer.phone}`
       );
 
-      // Update local state in modal results
+      // Update selected customer state & results list
+      setSelectedCustomer((prev) => (prev ? { ...prev, points_balance: pts } : null));
       setModalResults((prev) =>
         prev.map((c) => (c.id === selectedCustomer.id ? { ...c, points_balance: pts } : c))
       );
-      setSelectedCustomer(null);
-      setNewPointsInput("");
+      
+      setIsSavedSuccess(true);
 
       // Refresh router for server data sync
       router.refresh();
     } catch (err: any) {
       toast.error(err?.message || "Failed to update points");
+      setIsSavedSuccess(false);
     } finally {
       setIsSavingPoints(false);
     }
@@ -734,6 +738,7 @@ export function CustomersContent({
                       onClick={() => {
                         setSelectedCustomer(c);
                         setNewPointsInput(String(c.points_balance));
+                        setIsSavedSuccess(false);
                       }}
                       className={`p-3.5 flex items-center justify-between cursor-pointer transition-all ${
                         isSelected
@@ -787,7 +792,10 @@ export function CustomersContent({
                       type="number"
                       min="0"
                       value={newPointsInput}
-                      onChange={(e) => setNewPointsInput(e.target.value)}
+                      onChange={(e) => {
+                        setNewPointsInput(e.target.value);
+                        setIsSavedSuccess(false);
+                      }}
                       placeholder="Enter points..."
                       className="bg-white border-red-300 focus:border-red-600 font-bold text-gray-900 text-lg h-11 rounded-xl flex-1"
                     />
@@ -801,6 +809,7 @@ export function CustomersContent({
                           onClick={() => {
                             const cur = parseInt(newPointsInput, 10) || 0;
                             setNewPointsInput(String(cur + addVal));
+                            setIsSavedSuccess(false);
                           }}
                           className="h-11 px-2.5 text-xs font-bold border-red-200 hover:bg-red-100 text-red-700 bg-white rounded-xl"
                         >
@@ -810,6 +819,13 @@ export function CustomersContent({
                     </div>
                   </div>
                 </div>
+
+                {isSavedSuccess && (
+                  <div className="bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold p-3 rounded-xl flex items-center gap-2 animate-in fade-in-50">
+                    <Check className="h-4 w-4 text-emerald-700" />
+                    <span>Loyalty points updated successfully to {selectedCustomer.points_balance.toLocaleString("en-IN")} pts!</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -824,23 +840,33 @@ export function CustomersContent({
               Cancel
             </Button>
             {selectedCustomer && (
-              <Button
-                onClick={handleConfirmSave}
-                disabled={isSavingPoints || !newPointsInput.trim()}
-                className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-yellow-300 hover:text-yellow-200 font-bold rounded-xl text-sm h-10 px-5 flex items-center gap-2 border-none shadow-sm cursor-pointer"
-              >
-                {isSavingPoints ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-4 w-4 text-yellow-300" />
-                    Confirm & Save
-                  </>
-                )}
-              </Button>
+              isSavedSuccess ? (
+                <Button
+                  disabled
+                  className="bg-emerald-600 text-white font-bold rounded-xl text-sm h-10 px-5 flex items-center gap-2 border-none shadow-sm opacity-100 cursor-default"
+                >
+                  <Check className="h-4 w-4 text-white" />
+                  Updated Successfully ✓
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleConfirmSave}
+                  disabled={isSavingPoints || !newPointsInput.trim()}
+                  className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-yellow-300 hover:text-yellow-200 font-bold rounded-xl text-sm h-10 px-5 flex items-center gap-2 border-none shadow-sm cursor-pointer"
+                >
+                  {isSavingPoints ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 text-yellow-300" />
+                      Confirm & Save
+                    </>
+                  )}
+                </Button>
+              )
             )}
           </DialogFooter>
         </DialogContent>
