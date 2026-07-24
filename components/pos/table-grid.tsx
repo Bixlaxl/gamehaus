@@ -232,7 +232,13 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
   const posTablesRef = usePOSStore((s) => s.tables);
   const activeItems = (order?.items ?? [item]).filter((i) => !i.is_deleted && i.status !== "cancelled" && i.status !== "scheduled");
   const activeExtras = (order?.extras ?? []).filter((e) => !e.is_deleted);
-  const publicDiscount = (order as any)?.public_discount_amount ?? order?.discount_amount ?? 0;
+  const publicDiscount = (() => {
+    const pub = Number((order as any)?.public_discount_amount);
+    if (!isNaN(pub) && pub > 0) return pub;
+    const disc = Number(order?.discount_amount);
+    if (!isNaN(disc) && disc > 0) return disc;
+    return 0;
+  })();
   const isMembershipApplied = !!order?.membership_id;
   const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
     ? customerInfo.active_memberships.filter((m: any) => m.id === order.membership_id)
@@ -716,7 +722,13 @@ function BillReadyCardImpl({ table, order, isSelected, onClick }: {
   const posTablesRef = usePOSStore((s) => s.tables);
   const activeItems = order.items.filter((i) => !i.is_deleted && i.status !== "cancelled" && i.status !== "scheduled");
   const activeExtras = order.extras.filter((e) => !e.is_deleted);
-  const publicDiscount = (order as any)?.public_discount_amount ?? order.discount_amount ?? 0;
+  const publicDiscount = (() => {
+    const pub = Number((order as any)?.public_discount_amount);
+    if (!isNaN(pub) && pub > 0) return pub;
+    const disc = Number(order?.discount_amount);
+    if (!isNaN(disc) && disc > 0) return disc;
+    return 0;
+  })();
   const isMembershipApplied = !!order?.membership_id;
   const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
     ? customerInfo.active_memberships.filter((m: any) => m.id === order.membership_id)

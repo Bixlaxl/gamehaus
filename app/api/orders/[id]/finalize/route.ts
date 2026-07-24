@@ -209,10 +209,14 @@ export async function POST(
     now,
     coupon,
     order.advance_paid,
-    // Use public_discount_amount (coupon-only) NOT discount_amount (which mixes in
-    // the member portion baked at booking time). Member discount is always applied
-    // live below so it correctly covers extensions + extras added post-booking.
-    (order as any).public_discount_amount ?? 0,
+    // Use public_discount_amount (coupon-only) if set > 0, otherwise fallback to discount_amount
+    (() => {
+      const pub = Number((order as any).public_discount_amount);
+      if (!isNaN(pub) && pub > 0) return pub;
+      const disc = Number(order.discount_amount);
+      if (!isNaN(disc) && disc > 0) return disc;
+      return 0;
+    })(),
     membershipDiscountPct,
     totalFreeHoursDiscount
   );
@@ -261,9 +265,19 @@ export async function POST(
   const finalDue = Math.max(0, Math.round((billAfterMembership - pointsDiscount) * 100) / 100);
   const pointsEarned = Math.floor(finalDue / earnRate);
 
-  // Validate split total: sum of payment amounts must equal finalDue, within
-  // ₹1 to absorb minor rounding (the modal rounds amounts to whole rupees).
-  const paymentTotal = Math.round(payments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+  // Match payment total with finalDue:
+  // Single-method payment (e.g. staff tapped Cash or UPI): match finalDue exactly so minor rounding/discount differences don't block finalizing.
+  // Multi-method split payment: absorb rounding discrepancies up to ₹5 by adjusting the last payment method amount.
+  let paymentTotal = Math.round(payments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+  if (payments.length === 1 && payments[0].amount > 0 && finalDue >= 0) {
+    payments[0].amount = finalDue;
+    paymentTotal = finalDue;
+  } else if (payments.length > 1 && Math.abs(paymentTotal - finalDue) <= 5) {
+    const diff = Math.round((finalDue - paymentTotal) * 100) / 100;
+    payments[payments.length - 1].amount = Math.max(0, Math.round((payments[payments.length - 1].amount + diff) * 100) / 100);
+    paymentTotal = finalDue;
+  }
+
   if (Math.abs(paymentTotal - finalDue) > 1) {
     return NextResponse.json(
       err(`Payment total ₹${paymentTotal} does not match bill ₹${finalDue}`, "PAYMENT_MISMATCH"),

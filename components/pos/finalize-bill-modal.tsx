@@ -302,10 +302,13 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       });
     }
   }
-  // Use public_discount_amount (coupon-only portion stored at booking time).
-  // Member discount is always applied live via membershipPct so it covers
-  // extensions + extras added after the booking — matching the finalize route.
-  const publicFixedDiscount = (currentGroup as any)?.public_discount_amount ?? currentGroup?.discount_amount ?? 0;
+  const publicFixedDiscount = (() => {
+    const pub = Number((currentGroup as any)?.public_discount_amount);
+    if (!isNaN(pub) && pub > 0) return pub;
+    const disc = Number(currentGroup?.discount_amount);
+    if (!isNaN(disc) && disc > 0) return disc;
+    return 0;
+  })();
   const bill          = calculateBill(activeItems, activeExtras, now, null, currentGroup?.advance_paid ?? 0, publicFixedDiscount, membershipPct, totalFreeHoursDiscount);
   // fullyPrePaid: all charges are already covered by advance (online full-pay).
   // Use bill.totalDue which is already net of ALL discounts + advance.
@@ -499,7 +502,13 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
       const ordersWithDue = ordersToFinalize.map(o => {
         const oItems = o.items.filter((i) => i.status !== "cancelled" && i.status !== "scheduled" && !i.is_deleted);
         const oExtras = o.extras.filter((e) => !e.is_deleted && !e.name.startsWith("[PENDING]"));
-        const oPublicDiscount = (o as any).public_discount_amount ?? o.discount_amount ?? 0;
+        const oPublicDiscount = (() => {
+          const pub = Number((o as any).public_discount_amount);
+          if (!isNaN(pub) && pub > 0) return pub;
+          const disc = Number(o.discount_amount);
+          if (!isNaN(disc) && disc > 0) return disc;
+          return 0;
+        })();
         const oFreeHrs = computeFreeHoursDiscount(oItems, allMemberships, now, storeTablesRef);
         const oMembPct = allMemberships.reduce((max, m) => {
           const pct = m.plan?.discount_pct ?? 0;

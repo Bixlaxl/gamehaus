@@ -77,7 +77,10 @@ export function groupOrders(orders: POSOrder[]): GroupedPOSOrder[] {
     for (const o of groupList) {
       totalSubtotal += Number(o.subtotal) || 0;
       totalDiscount += Number(o.discount_amount) || 0;
-      totalPublicDiscount += Number((o as any).public_discount_amount) || 0;
+      const pubDisc = Number((o as any).public_discount_amount);
+      const discAmt = Number(o.discount_amount);
+      const effectivePub = (!isNaN(pubDisc) && pubDisc > 0) ? pubDisc : (!isNaN(discAmt) && discAmt > 0 ? discAmt : 0);
+      totalPublicDiscount += effectivePub;
       totalTotalAmount += Number(o.total_amount) || 0;
       totalAdvancePaid += Number(o.advance_paid) || 0;
       totalPointsRedeemed += Number(o.points_redeemed) || 0;

@@ -944,7 +944,13 @@ function PanelSession({
     .values()
   );
   const posTablesStore = usePOSStore((s) => s.tables);
-  const publicDiscount = (currentGroup as any)?.public_discount_amount ?? currentGroup.discount_amount ?? 0;
+  const publicDiscount = (() => {
+    const pub = Number((currentGroup as any)?.public_discount_amount);
+    if (!isNaN(pub) && pub > 0) return pub;
+    const disc = Number(currentGroup?.discount_amount);
+    if (!isNaN(disc) && disc > 0) return disc;
+    return 0;
+  })();
   const isMembershipApplied = !!currentGroup.membership_id;
   const applicableMemberships = isMembershipApplied && customerInfo?.active_memberships
     ? customerInfo.active_memberships.filter((m: any) => m.id === currentGroup.membership_id)
