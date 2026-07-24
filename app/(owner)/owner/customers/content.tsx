@@ -115,29 +115,46 @@ export function CustomersContent({
   useEffect(() => {
     if (!isManageModalOpen) return;
 
-    const trimmed = modalSearch.trim();
-    if (!trimmed) {
-      setModalResults(initialCustomers.slice(0, 15));
+    const query = modalSearch.trim().toLowerCase();
+    if (!query) {
+      setModalResults(initialCustomers.slice(0, 20));
       setIsSearchingModal(false);
       return;
     }
 
     setIsSearchingModal(true);
     const timer = setTimeout(async () => {
+      let combined: Customer[] = [];
+
+      // 1. Local filter across loaded customers
+      const localMatches = initialCustomers.filter(
+        (c) =>
+          (c.name && c.name.toLowerCase().includes(query)) ||
+          (c.phone && c.phone.toLowerCase().includes(query))
+      );
+      combined = [...localMatches];
+
+      // 2. Fetch from backend API for full DB search
       try {
-        const res = await fetch(`/api/owner/customers/search?q=${encodeURIComponent(trimmed)}`);
-        const json = await res.json();
-        if (json.ok && Array.isArray(json.data)) {
-          setModalResults(json.data);
-        } else {
-          setModalResults([]);
+        const res = await fetch(`/api/owner/customers/search?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.ok && Array.isArray(json.data) && json.data.length > 0) {
+            const existingIds = new Set(combined.map((c) => c.id));
+            for (const item of json.data) {
+              if (!existingIds.has(item.id)) {
+                combined.push(item);
+              }
+            }
+          }
         }
       } catch (e) {
-        console.error("Failed to search customers:", e);
-      } finally {
-        setIsSearchingModal(false);
+        console.error("Failed to search customers via backend:", e);
       }
-    }, 300);
+
+      setModalResults(combined);
+      setIsSearchingModal(false);
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [modalSearch, isManageModalOpen, initialCustomers]);
@@ -678,36 +695,36 @@ export function CustomersContent({
 
       {/* Manage Loyalty Points Popup Window */}
       <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
-        <DialogContent className="sm:max-w-lg bg-white rounded-2xl p-6 border border-gray-100 shadow-xl">
+        <DialogContent className="sm:max-w-2xl bg-white rounded-2xl p-6 border border-gray-100 shadow-2xl">
           <DialogHeader className="space-y-1">
-            <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <div className="bg-red-100 p-2 rounded-xl text-red-600">
-                <Coins className="h-5 w-5" />
+            <DialogTitle className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <div className="bg-red-100 p-2.5 rounded-xl text-red-600">
+                <Coins className="h-6 w-6" />
               </div>
               Manage Customer Loyalty Points
             </DialogTitle>
-            <DialogDescription className="text-xs text-gray-500">
-              Search for a customer by name or phone number, edit their loyalty points, and confirm.
+            <DialogDescription className="text-sm text-gray-500">
+              Search for a customer by name or phone number, select them to edit their points, and confirm.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 my-2">
+          <div className="space-y-4 my-3">
             {/* Search input */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search name or phone number…"
+                placeholder="Search customer by name or phone number…"
                 value={modalSearch}
                 onChange={(e) => setModalSearch(e.target.value)}
-                className="pl-9 bg-gray-50 border-gray-200 focus:bg-white text-sm"
+                className="pl-10 h-11 bg-gray-50 border-gray-200 focus:bg-white text-base rounded-xl"
               />
               {isSearchingModal && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+                <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
               )}
             </div>
 
             {/* Results List */}
-            <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-xl bg-gray-50/50">
+            <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-gray-50/50">
               {modalResults.length > 0 ? (
                 modalResults.map((c) => {
                   const isSelected = selectedCustomer?.id === c.id;
@@ -718,16 +735,25 @@ export function CustomersContent({
                         setSelectedCustomer(c);
                         setNewPointsInput(String(c.points_balance));
                       }}
-                      className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${
-                        isSelected ? "bg-red-50/90 border-l-4 border-red-600" : "hover:bg-gray-100/80"
+                      className={`p-3.5 flex items-center justify-between cursor-pointer transition-all ${
+                        isSelected
+                          ? "bg-red-50/90 border-l-4 border-red-600 shadow-sm"
+                          : "hover:bg-gray-100/80"
                       }`}
                     >
-                      <div>
-                        <p className="font-semibold text-sm text-gray-900">{c.name || "—"}</p>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-base text-gray-900">{c.name || "—"}</p>
+                          {c.visit_count >= 5 && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-amber-300 text-amber-700 bg-amber-50">
+                              {c.visit_count} visits
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 font-mono">{c.phone}</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                        <span className="text-sm font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200 shadow-2xs">
                           {c.points_balance.toLocaleString("en-IN")} pts
                         </span>
                       </div>
@@ -735,7 +761,7 @@ export function CustomersContent({
                   );
                 })
               ) : (
-                <div className="p-6 text-center text-xs text-gray-400">
+                <div className="p-8 text-center text-sm text-gray-400">
                   {modalSearch.trim() ? "No customers found matching search" : "No customers available"}
                 </div>
               )}
@@ -743,38 +769,57 @@ export function CustomersContent({
 
             {/* Editing Selected Customer section */}
             {selectedCustomer && (
-              <div className="bg-red-50/60 border border-red-200 rounded-xl p-4 space-y-3 animate-in fade-in-50 duration-200">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-gray-900">
+              <div className="bg-red-50/80 border border-red-200 rounded-2xl p-4 space-y-3 animate-in fade-in-50 duration-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm text-gray-900">
                     Selected: {selectedCustomer.name || selectedCustomer.phone}
                   </span>
-                  <span className="text-gray-500 font-mono">
-                    Current: {selectedCustomer.points_balance} pts
+                  <span className="text-xs font-semibold text-gray-600 bg-white/80 px-2.5 py-1 rounded-lg border border-red-100 font-mono">
+                    Current: {selectedCustomer.points_balance.toLocaleString("en-IN")} pts
                   </span>
                 </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-gray-700 mb-1 block">
-                    Number of Points
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-700 block">
+                    Number of Loyalty Points
                   </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={newPointsInput}
-                    onChange={(e) => setNewPointsInput(e.target.value)}
-                    placeholder="Enter points..."
-                    className="bg-white border-red-300 focus:border-red-600 font-bold text-gray-900 text-base"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={newPointsInput}
+                      onChange={(e) => setNewPointsInput(e.target.value)}
+                      placeholder="Enter points..."
+                      className="bg-white border-red-300 focus:border-red-600 font-bold text-gray-900 text-lg h-11 rounded-xl flex-1"
+                    />
+                    <div className="flex items-center gap-1">
+                      {[+50, +100, +500].map((addVal) => (
+                        <Button
+                          key={addVal}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const cur = parseInt(newPointsInput, 10) || 0;
+                            setNewPointsInput(String(cur + addVal));
+                          }}
+                          className="h-11 px-2.5 text-xs font-bold border-red-200 hover:bg-red-100 text-red-700 bg-white rounded-xl"
+                        >
+                          +{addVal}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+          <DialogFooter className="flex items-center justify-end gap-3 pt-3">
             <Button
               variant="outline"
               onClick={() => setIsManageModalOpen(false)}
               disabled={isSavingPoints}
-              className="rounded-xl border-gray-200 text-xs"
+              className="rounded-xl border-gray-200 text-sm h-10 px-4"
             >
               Cancel
             </Button>
@@ -782,17 +827,17 @@ export function CustomersContent({
               <Button
                 onClick={handleConfirmSave}
                 disabled={isSavingPoints || !newPointsInput.trim()}
-                className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-yellow-300 hover:text-yellow-200 font-bold rounded-xl text-xs flex items-center gap-1.5 border-none"
+                className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-yellow-300 hover:text-yellow-200 font-bold rounded-xl text-sm h-10 px-5 flex items-center gap-2 border-none shadow-sm cursor-pointer"
               >
                 {isSavingPoints ? (
                   <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Saving...
                   </>
                 ) : (
                   <>
-                    <Check className="h-3.5 w-3.5 text-yellow-300" />
-                    Confirm
+                    <Check className="h-4 w-4 text-yellow-300" />
+                    Confirm & Save
                   </>
                 )}
               </Button>

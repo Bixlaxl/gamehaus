@@ -30,21 +30,29 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const q = (searchParams.get("q") ?? "").trim();
 
-    if (!q) {
-      return NextResponse.json(ok([]));
-    }
-
     const admin = createAdminClient();
 
-    // Escape special wildcard characters
-    const escaped = q.replace(/[%_]/g, "\\$&");
+    if (!q) {
+      // Return top 20 recent/frequent customers if no search query provided
+      const { data, error } = await admin
+        .from("customer_profiles")
+        .select("id, phone, name, visit_count, total_spent, points_balance, last_visit_at")
+        .order("last_visit_at", { ascending: false, nullsFirst: false })
+        .limit(20);
+
+      if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+      return NextResponse.json(ok(data ?? []));
+    }
+
+    // Sanitize query string for Supabase ilike
+    const sanitized = q.replace(/[%_,\\]/g, "");
 
     const { data, error } = await admin
       .from("customer_profiles")
       .select("id, phone, name, visit_count, total_spent, points_balance, last_visit_at")
-      .or(`name.ilike.%${escaped}%,phone.like.%${escaped}%`)
-      .order("last_visit_at", { ascending: false, nullsFirst: false })
-      .limit(20);
+      .or(`name.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`)
+      .order("visit_count", { ascending: false })
+      .limit(30);
 
     if (error) {
       return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
