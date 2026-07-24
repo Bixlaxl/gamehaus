@@ -140,9 +140,10 @@ export function CustomersContent({
         const res = await fetch(`/api/owner/customers/search?q=${encodeURIComponent(query)}`);
         if (res.ok) {
           const json = await res.json();
-          if (json.ok && Array.isArray(json.data) && json.data.length > 0) {
+          const results = json.data || [];
+          if (Array.isArray(results) && results.length > 0) {
             const existingIds = new Set(combined.map((c) => c.id));
-            for (const item of json.data) {
+            for (const item of results) {
               if (!existingIds.has(item.id)) {
                 combined.push(item);
               }
@@ -182,7 +183,7 @@ export function CustomersContent({
       });
 
       const data = await res.json();
-      if (!res.ok || !data.ok) {
+      if (!res.ok || (!data.success && !data.ok)) {
         throw new Error(data.error || "Failed to update points");
       }
 
