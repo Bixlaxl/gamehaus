@@ -303,11 +303,14 @@ function RunningCardImpl({ table, item, order, locationId, isSelected, onClick }
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ order_item_id: item.id, extend_mins: mins }),
     });
-    if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.success === false) {
       patchOrderItem(item.id, { expected_end: prevEnd });
-      toast.error("Failed to extend");
+      toast.error(body.error || "Failed to extend");
     } else {
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
     }
     setExtending(null);
   }

@@ -102,6 +102,8 @@ function ExtendModalInner({ item }: { item: NonNullable<ReturnType<typeof usePOS
     } else {
       patchOrderItem(extendModalItem.id, { expected_end: body.data.new_expected_end });
       qc.invalidateQueries({ queryKey: ["pos-orders"] });
+      qc.invalidateQueries({ queryKey: ["pos-tables"] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings"] });
     }
     setLoading(false);
   }

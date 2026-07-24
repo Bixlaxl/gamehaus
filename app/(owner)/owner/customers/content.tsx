@@ -7,11 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Users, TrendingUp, Star, Award, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Search, Users, TrendingUp, Star, Award, ChevronLeft, ChevronRight, Download, Coins, Check, Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { CustomerProfile } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { jsPDF } from "jspdf";
+import { toast } from "sonner";
 
 type Customer = Pick<
   CustomerProfile,
@@ -86,12 +95,97 @@ export function CustomersContent({
   const [minVisits,        setMinVisits]        = useState(currentMinVisits);
   const [minPoints,        setMinPoints]        = useState(currentMinPoints);
 
+  // Modal State for Manage Loyalty Points
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [modalSearch, setModalSearch] = useState("");
+  const [modalResults, setModalResults] = useState<Customer[]>([]);
+  const [isSearchingModal, setIsSearchingModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [newPointsInput, setNewPointsInput] = useState("");
+  const [isSavingPoints, setIsSavingPoints] = useState(false);
+
   // Sync state with URL when back button or external route changes occur
   useEffect(() => { setSelectedLocation(currentLocation); }, [currentLocation]);
   useEffect(() => { setSearch(currentQ); }, [currentQ]);
   useEffect(() => { setSortBy(currentSortBy); }, [currentSortBy]);
   useEffect(() => { setMinVisits(currentMinVisits); }, [currentMinVisits]);
   useEffect(() => { setMinPoints(currentMinPoints); }, [currentMinPoints]);
+
+  // Debounced search for Manage Loyalty Points modal
+  useEffect(() => {
+    if (!isManageModalOpen) return;
+
+    const trimmed = modalSearch.trim();
+    if (!trimmed) {
+      setModalResults(initialCustomers.slice(0, 15));
+      setIsSearchingModal(false);
+      return;
+    }
+
+    setIsSearchingModal(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/owner/customers/search?q=${encodeURIComponent(trimmed)}`);
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.data)) {
+          setModalResults(json.data);
+        } else {
+          setModalResults([]);
+        }
+      } catch (e) {
+        console.error("Failed to search customers:", e);
+      } finally {
+        setIsSearchingModal(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [modalSearch, isManageModalOpen, initialCustomers]);
+
+  const handleConfirmSave = async () => {
+    if (!selectedCustomer) return;
+    const pts = parseInt(newPointsInput, 10);
+    if (isNaN(pts) || pts < 0) {
+      toast.error("Please enter a valid non-negative number for points");
+      return;
+    }
+
+    setIsSavingPoints(true);
+    try {
+      const res = await fetch("/api/owner/customers/loyalty", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: selectedCustomer.id,
+          phone: selectedCustomer.phone,
+          points: pts,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to update points");
+      }
+
+      toast.success(
+        `Loyalty points updated to ${pts} pts for ${selectedCustomer.name || selectedCustomer.phone}`
+      );
+
+      // Update local state in modal results
+      setModalResults((prev) =>
+        prev.map((c) => (c.id === selectedCustomer.id ? { ...c, points_balance: pts } : c))
+      );
+      setSelectedCustomer(null);
+      setNewPointsInput("");
+
+      // Refresh router for server data sync
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update points");
+    } finally {
+      setIsSavingPoints(false);
+    }
+  };
 
   const updateFilters = (newParams: {
     page?: number;
@@ -421,6 +515,21 @@ export function CustomersContent({
             ))}
           </SelectContent>
         </Select>
+
+        {/* Manage Loyalty Points Button */}
+        <Button
+          onClick={() => {
+            setIsManageModalOpen(true);
+            setModalSearch("");
+            setModalResults(initialCustomers.slice(0, 15));
+            setSelectedCustomer(null);
+            setNewPointsInput("");
+          }}
+          className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-yellow-300 hover:text-yellow-200 font-bold shadow-sm transition-colors flex items-center gap-2 border-none h-9 px-4 rounded-xl cursor-pointer"
+        >
+          <Coins className="h-4 w-4 text-yellow-300" />
+          <span>manage loyalty points</span>
+        </Button>
       </div>
 
       {/* Pagination bar (Top) */}
@@ -566,6 +675,131 @@ export function CustomersContent({
           </Button>
         </div>
       )}
+
+      {/* Manage Loyalty Points Popup Window */}
+      <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
+        <DialogContent className="sm:max-w-lg bg-white rounded-2xl p-6 border border-gray-100 shadow-xl">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <div className="bg-red-100 p-2 rounded-xl text-red-600">
+                <Coins className="h-5 w-5" />
+              </div>
+              Manage Customer Loyalty Points
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500">
+              Search for a customer by name or phone number, edit their loyalty points, and confirm.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 my-2">
+            {/* Search input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search name or phone number…"
+                value={modalSearch}
+                onChange={(e) => setModalSearch(e.target.value)}
+                className="pl-9 bg-gray-50 border-gray-200 focus:bg-white text-sm"
+              />
+              {isSearchingModal && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+              )}
+            </div>
+
+            {/* Results List */}
+            <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-xl bg-gray-50/50">
+              {modalResults.length > 0 ? (
+                modalResults.map((c) => {
+                  const isSelected = selectedCustomer?.id === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedCustomer(c);
+                        setNewPointsInput(String(c.points_balance));
+                      }}
+                      className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${
+                        isSelected ? "bg-red-50/90 border-l-4 border-red-600" : "hover:bg-gray-100/80"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">{c.name || "—"}</p>
+                        <p className="text-xs text-gray-500 font-mono">{c.phone}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                          {c.points_balance.toLocaleString("en-IN")} pts
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-6 text-center text-xs text-gray-400">
+                  {modalSearch.trim() ? "No customers found matching search" : "No customers available"}
+                </div>
+              )}
+            </div>
+
+            {/* Editing Selected Customer section */}
+            {selectedCustomer && (
+              <div className="bg-red-50/60 border border-red-200 rounded-xl p-4 space-y-3 animate-in fade-in-50 duration-200">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-gray-900">
+                    Selected: {selectedCustomer.name || selectedCustomer.phone}
+                  </span>
+                  <span className="text-gray-500 font-mono">
+                    Current: {selectedCustomer.points_balance} pts
+                  </span>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-700 mb-1 block">
+                    Number of Points
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={newPointsInput}
+                    onChange={(e) => setNewPointsInput(e.target.value)}
+                    placeholder="Enter points..."
+                    className="bg-white border-red-300 focus:border-red-600 font-bold text-gray-900 text-base"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsManageModalOpen(false)}
+              disabled={isSavingPoints}
+              className="rounded-xl border-gray-200 text-xs"
+            >
+              Cancel
+            </Button>
+            {selectedCustomer && (
+              <Button
+                onClick={handleConfirmSave}
+                disabled={isSavingPoints || !newPointsInput.trim()}
+                className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-yellow-300 hover:text-yellow-200 font-bold rounded-xl text-xs flex items-center gap-1.5 border-none"
+              >
+                {isSavingPoints ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-yellow-300" />
+                    Confirm
+                  </>
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

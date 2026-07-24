@@ -1196,6 +1196,8 @@ function PanelSession({
     } else {
       patchOrderItem(finishedItem.id, { expected_end: body.data.new_expected_end });
       qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-tables", locationId] });
+      qc.invalidateQueries({ queryKey: ["pos-bookings", locationId] });
     }
   }
 

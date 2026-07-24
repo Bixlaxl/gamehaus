@@ -131,7 +131,7 @@ export const stopSessionSchema = z.object({
 // Session extend
 export const extendSessionSchema = z.object({
   order_item_id: z.string().uuid(),
-  extend_mins: z.number().int().positive().max(240),
+  extend_mins: z.coerce.number().int().positive().max(240),
 });
 
 // Change player / controller count mid-session — rate_per_hour is re-resolved
