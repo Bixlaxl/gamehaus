@@ -218,15 +218,26 @@ export function calculateBill(
   const remainingScheduledAfterFree = Math.max(0, remainingScheduledAfterPublic - freeHoursDiscountAmount);
 
   // Member discount applies to session (scheduled + overtime) AND extra items
-  const memberDiscountableBase = remainingScheduledAfterFree + overtimeTotal + extraTotal;
-  const memberDiscountAmount = memberDiscountPct > 0
-    ? Math.round(memberDiscountableBase * (memberDiscountPct / 100) * 100) / 100
+  const sessionNetBase = remainingScheduledAfterFree + overtimeTotal;
+  const sessionMemberDiscount = memberDiscountPct > 0
+    ? Math.round(sessionNetBase * (memberDiscountPct / 100) * 100) / 100
     : 0;
+  const tableNet = Math.max(0, sessionNetBase - sessionMemberDiscount);
 
-  const grossNet = Math.max(0, remainingScheduledAfterFree + overtimeTotal + extraTotal - memberDiscountAmount);
-  const totalDue = advancePaid > 0
-    ? Math.max(0, grossNet - advancePaid)
-    : grossNet;
+  const extraMemberDiscount = memberDiscountPct > 0
+    ? Math.round(extraTotal * (memberDiscountPct / 100) * 100) / 100
+    : 0;
+  const extraNet = Math.max(0, extraTotal - extraMemberDiscount);
+
+  const memberDiscountAmount = sessionMemberDiscount + extraMemberDiscount;
+
+  // Online advance paid (advancePaid) covers table session charges.
+  // Excess online table advance does not swallow beverage/extra sales.
+  const tableDue = advancePaid > 0
+    ? Math.max(0, tableNet - advancePaid)
+    : tableNet;
+
+  const totalDue = tableDue + extraNet;
 
   return {
     tableLines,

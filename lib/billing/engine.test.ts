@@ -288,5 +288,23 @@ describe("billing engine", () => {
     expect(resultFullFree.discountAmount).toBe(0);
     expect(resultFullFree.totalDue).toBe(90); // Only extras!
   });
+
+  it("online prepaid table booking with beverage extras — advance paid covers table session, extras remain due", () => {
+    // Customer prepaid ₹250 online for a 1hr pool session (rate = ₹250/hr).
+    // Session stopped at 45m = ₹187.50. Customer ordered ₹100 of beverages (extras).
+    // Online advance paid (₹250) covers the table (tableNet = ₹187.50, tableDue = 0).
+    // Beverages remain due = ₹100. Total due must be ₹100, NOT ₹0.
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      actual_end: new Date("2024-01-01T10:45:00Z").toISOString(), // 45m
+      rate_per_hour: 250,
+      status: "finished",
+    });
+    const extra = makeExtra({ price: 100, quantity: 1 });
+    const result = calculateBill([item], [extra], new Date(), null, 250);
+    expect(result.advancePaid).toBe(250);
+    expect(result.subtotal).toBe(287.5);
+    expect(result.totalDue).toBe(100);
+  });
 });
 
