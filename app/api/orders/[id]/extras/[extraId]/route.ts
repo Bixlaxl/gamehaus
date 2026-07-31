@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { syncOrderTotals } from "@/lib/billing/engine";
 
 export const runtime = 'edge';
 
@@ -15,7 +16,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; extraId: string }> }
 ) {
-  const { extraId } = await params;
+  const { id: orderId, extraId } = await params;
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
@@ -74,6 +75,8 @@ export async function PATCH(
     }
   }
 
+  await syncOrderTotals(admin, orderId).catch((e) => console.error("syncOrderTotals error:", e));
+
   return NextResponse.json(ok(data));
 }
 
@@ -81,7 +84,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string; extraId: string }> }
 ) {
-  const { extraId } = await params;
+  const { id: orderId, extraId } = await params;
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
@@ -126,6 +129,8 @@ export async function DELETE(
       ]);
     }
   }
+
+  await syncOrderTotals(admin, orderId).catch((e) => console.error("syncOrderTotals error:", e));
 
   return NextResponse.json(ok({ deleted: true }));
 }

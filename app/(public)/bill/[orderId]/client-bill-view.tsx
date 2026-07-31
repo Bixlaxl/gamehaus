@@ -38,11 +38,14 @@ export function ClientBillView({ order }: ClientBillViewProps) {
   const activeExtras = (order.extras || []).filter((e: any) => !e.is_deleted);
   const activePayments = (order.payments || []).filter((p: any) => p.status === "completed");
 
-  const subtotal = Number(order.subtotal) || 0;
+  const tableItemsSubtotal = (order.items || []).reduce((sum: number, i: any) => sum + (Number(i.final_amount) || 0), 0);
+  const extrasSubtotal = activeExtras.reduce((sum: number, e: any) => sum + (Number(e.price) * Number(e.quantity) || 0), 0);
+  const subtotal = Math.max(Number(order.subtotal) || 0, Math.round((tableItemsSubtotal + extrasSubtotal) * 100) / 100);
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePaid = Number(order.advance_paid) || 0;
   const pointsRedeemed = Number(order.points_redeemed) || 0;
-  const amountDue = Number(order.amount_due) || 0;
+  const computedDue = Math.max(0, Math.round((subtotal - discountAmount - advancePaid - pointsRedeemed) * 100) / 100);
+  const amountDue = advancePaid > 0 && extrasSubtotal > 0 && Number(order.amount_due) === 0 ? computedDue : (Number(order.amount_due) || 0);
   const totalPaid = advancePaid + amountDue;
 
   function handlePrint() {

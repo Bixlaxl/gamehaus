@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addExtraSchema, ok, err } from "@/lib/validators/schemas";
+import { syncOrderTotals } from "@/lib/billing/engine";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -77,10 +78,7 @@ export async function POST(
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  // Auto-deduct stock when the extra is sourced from the catalogue. We
-  // deliberately allow the count to go below zero (toast/badge surfaces it
-  // in the UI) rather than blocking the sale — the floor staff might be
-  // ahead of the restock entry, and we never want to block revenue.
+  // Auto-deduct stock when the extra is sourced from the catalogue.
   if (inventory_item_id && fetchedInvItem) {
     await Promise.all([
       admin
@@ -97,6 +95,9 @@ export async function POST(
       }),
     ]);
   }
+
+  // Re-calculate and update parent order subtotal and amount_due in Supabase
+  await syncOrderTotals(admin, orderId).catch((e) => console.error("syncOrderTotals error:", e));
 
   return NextResponse.json(ok(extra));
 }

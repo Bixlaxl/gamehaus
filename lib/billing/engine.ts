@@ -251,3 +251,47 @@ export function calculateBill(
     totalDue: Math.round(totalDue * 100) / 100,
   };
 }
+
+/**
+ * Helper to recompute and update orders table totals (subtotal, discount_amount, total_amount, amount_due) in Supabase.
+ * Call this whenever order items or extras are added, modified, or deleted.
+ */
+export async function syncOrderTotals(admin: any, orderId: string): Promise<void> {
+  const [{ data: orderRow }, { data: allItems }, { data: allExtras }] = await Promise.all([
+    admin.from("orders").select("*, coupon:coupons(*)").eq("id", orderId).maybeSingle(),
+    admin.from("order_items").select("*, table:tables(*)").eq("order_id", orderId).eq("is_deleted", false),
+    admin.from("order_extras").select("*").eq("order_id", orderId).eq("is_deleted", false),
+  ]);
+
+  if (!orderRow) return;
+
+  const activeItems = (allItems ?? []).filter((i: any) => i.status !== "cancelled");
+  const activeExtras = (allExtras ?? []).filter((e: any) => !e.name.startsWith("[PENDING]"));
+  const pubDisc = (() => {
+    const pub = Number((orderRow as any).public_discount_amount);
+    if (!isNaN(pub) && pub > 0) return pub;
+    const disc = Number(orderRow.discount_amount);
+    if (!isNaN(disc) && disc > 0) return disc;
+    return 0;
+  })();
+
+  const freshBill = calculateBill(
+    activeItems as any,
+    activeExtras as any,
+    new Date(),
+    orderRow.coupon as any,
+    orderRow.advance_paid ?? 0,
+    pubDisc
+  );
+
+  const totalDisc = freshBill.discountAmount + freshBill.memberDiscountAmount;
+  await admin
+    .from("orders")
+    .update({
+      subtotal: freshBill.subtotal,
+      discount_amount: totalDisc,
+      total_amount: Math.max(0, Math.round((freshBill.subtotal - totalDisc) * 100) / 100),
+      amount_due: freshBill.totalDue,
+    })
+    .eq("id", orderId);
+}

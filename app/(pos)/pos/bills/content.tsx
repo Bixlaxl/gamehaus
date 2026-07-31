@@ -1454,39 +1454,42 @@ function BillDetailModal({
           )}
 
           {/* Totals */}
-          <section className="px-5 py-4 border-b dark:border-[#222] text-sm space-y-1.5">
-            <div className="flex justify-between"><span className="opacity-70">Subtotal</span><span className="tabular-nums">{formatCurrency(bill.subtotal)}</span></div>
-            {(() => {
-              const pubDisc = bill.public_discount_amount ?? 0;
-              const memDisc = Math.max(0, bill.discount_amount - pubDisc);
-              return (
-                <>
-                  {pubDisc > 0 && (
-                    <div className="flex justify-between text-emerald-600"><span>Public Discount</span><span className="tabular-nums">−{formatCurrency(pubDisc)}</span></div>
-                  )}
-                  {memDisc > 0 && (
-                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium"><span>Membership Discount</span><span className="tabular-nums">−{formatCurrency(memDisc)}</span></div>
-                  )}
-                  {pubDisc === 0 && memDisc === 0 && bill.discount_amount > 0 && (
-                    <div className="flex justify-between text-emerald-600"><span>Public Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
-                  )}
-                </>
-              );
-            })()}
-            {bill.advance_paid > 0 && (
-              <div className="flex justify-between text-emerald-600"><span>Advance paid</span><span className="tabular-nums">−{formatCurrency(bill.advance_paid)}</span></div>
-            )}
-            {bill.points_redeemed_online > 0 && (
-              <div className="flex justify-between text-amber-600"><span>Points Redeemed (Online) ({bill.points_redeemed_online} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed_online)}</span></div>
-            )}
-            {bill.points_redeemed - (bill.points_redeemed_online ?? 0) > 0 && (
-              <div className="flex justify-between text-amber-600"><span>Points Redeemed (At Venue) ({bill.points_redeemed - (bill.points_redeemed_online ?? 0)} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed - (bill.points_redeemed_online ?? 0))}</span></div>
-            )}
-            <div className="flex justify-between pt-2 border-t dark:border-[#222] font-bold text-base">
-              <span>Collected at venue</span>
-              <span className="tabular-nums text-[#D4541A]">{formatCurrency(bill.amount_due)}</span>
-            </div>
-          </section>
+          {(() => {
+            const tableItemsSubtotal = (bill.items ?? []).reduce((sum: number, i: any) => sum + (Number(i.final_amount) || 0), 0);
+            const extrasSubtotal = (bill.extras ?? []).filter((e: any) => !e.is_deleted).reduce((sum: number, e: any) => sum + (Number(e.price) * Number(e.quantity) || 0), 0);
+            const displaySubtotal = Math.max(bill.subtotal, Math.round((tableItemsSubtotal + extrasSubtotal) * 100) / 100);
+            const pubDisc = bill.public_discount_amount ?? 0;
+            const memDisc = Math.max(0, bill.discount_amount - pubDisc);
+            const computedDue = Math.max(0, Math.round((displaySubtotal - bill.discount_amount - (bill.advance_paid ?? 0) - (bill.points_redeemed ?? 0)) * 100) / 100);
+            const displayDue = (bill.advance_paid ?? 0) > 0 && extrasSubtotal > 0 && bill.amount_due === 0 ? computedDue : bill.amount_due;
+            return (
+              <section className="px-5 py-4 border-b dark:border-[#222] text-sm space-y-1.5">
+                <div className="flex justify-between"><span className="opacity-70">Subtotal</span><span className="tabular-nums">{formatCurrency(displaySubtotal)}</span></div>
+                {pubDisc > 0 && (
+                  <div className="flex justify-between text-emerald-600"><span>Public Discount</span><span className="tabular-nums">−{formatCurrency(pubDisc)}</span></div>
+                )}
+                {memDisc > 0 && (
+                  <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium"><span>Membership Discount</span><span className="tabular-nums">−{formatCurrency(memDisc)}</span></div>
+                )}
+                {pubDisc === 0 && memDisc === 0 && bill.discount_amount > 0 && (
+                  <div className="flex justify-between text-emerald-600"><span>Public Discount</span><span className="tabular-nums">−{formatCurrency(bill.discount_amount)}</span></div>
+                )}
+                {bill.advance_paid > 0 && (
+                  <div className="flex justify-between text-emerald-600"><span>Advance paid</span><span className="tabular-nums">−{formatCurrency(bill.advance_paid)}</span></div>
+                )}
+                {bill.points_redeemed_online > 0 && (
+                  <div className="flex justify-between text-amber-600"><span>Points Redeemed (Online) ({bill.points_redeemed_online} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed_online)}</span></div>
+                )}
+                {bill.points_redeemed - (bill.points_redeemed_online ?? 0) > 0 && (
+                  <div className="flex justify-between text-amber-600"><span>Points Redeemed (At Venue) ({bill.points_redeemed - (bill.points_redeemed_online ?? 0)} pts)</span><span className="tabular-nums">−{formatCurrency(bill.points_redeemed - (bill.points_redeemed_online ?? 0))}</span></div>
+                )}
+                <div className="flex justify-between pt-2 border-t dark:border-[#222] font-bold text-base">
+                  <span>Collected at venue</span>
+                  <span className="tabular-nums text-[#D4541A]">{formatCurrency(displayDue)}</span>
+                </div>
+              </section>
+            );
+          })()}
 
           {/* Payments */}
           <section className="px-5 py-4 space-y-2">
