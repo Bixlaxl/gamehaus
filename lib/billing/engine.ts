@@ -203,7 +203,7 @@ export function calculateBill(
   ) / 100;
 
   let publicDiscount = fixedDiscountAmount || 0;
-  if (coupon) {
+  if (!fixedDiscountAmount && coupon) {
     if (coupon.discount_type === "percent") {
       publicDiscount = Math.round((scheduledSubtotal * coupon.discount_value) / 100 * 100) / 100;
     } else {

@@ -29,7 +29,7 @@ export async function GET(
   const [{ data: rawItems }, { data: rawBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("id, table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status")
+      .select("id, table_id, actual_start, actual_end, expected_end, scheduled_start, scheduled_end, status, order:orders(type, status, advance_paid, created_by, created_at)")
       .eq("table_id", tableId)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
@@ -46,7 +46,20 @@ export async function GET(
   const blocked: { start: string; end: string }[] = [];
   const processedItemIds = new Set<string>();
 
-  (rawItems ?? []).forEach((item) => {
+  const fiveMinsAgoMs = Date.now() - 5 * 60 * 1000;
+
+  (rawItems ?? []).forEach((item: any) => {
+    // Ignore order items from cancelled orders or expired unpaid guest drafts
+    const parentOrder = item.order as { type?: string; status?: string; advance_paid?: number; created_by?: string | null; created_at?: string } | null;
+    if (parentOrder) {
+      if (parentOrder.status === "cancelled") return;
+      const isUnpaidGuestDraft = parentOrder.type === "online" && !parentOrder.created_by && (parentOrder.advance_paid ?? 0) === 0;
+      if (isUnpaidGuestDraft) {
+        const orderCreatedMs = new Date(parentOrder.created_at ?? 0).getTime();
+        if (orderCreatedMs < fiveMinsAgoMs) return; // expired hold
+      }
+    }
+
     if (item.id) processedItemIds.add(item.id);
     const startStr = item.status === "running" ? item.actual_start : item.scheduled_start;
     const endStr   = item.status === "running"

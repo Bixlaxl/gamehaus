@@ -774,7 +774,12 @@ export default function CheckoutPage() {
         modal: {
           ondismiss: () => {
             if (paymentSuccess) return;
-            setError("Payment window was closed. You can try again within 10 minutes.");
+            fetch(`/api/orders/${order_id}/cancel`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ emergency: true, silent: true }),
+            }).catch(() => {});
+            setError("Payment window was closed. Your temporary slot hold has been released.");
             setLoading(false);
             submitting.current = false;
           },

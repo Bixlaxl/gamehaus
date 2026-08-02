@@ -203,20 +203,21 @@ export async function POST(
     (item as any).membership_id = coveringMembership.id;
   }
 
+  const publicFixedDiscount = (() => {
+    const pub = Number((order as any).public_discount_amount);
+    if (!isNaN(pub) && pub > 0) return pub;
+    const disc = Number(order.discount_amount);
+    if (!isNaN(disc) && disc > 0) return disc;
+    return 0;
+  })();
+
   const bill = calculateBill(
     activeItems as OrderItem[],
     (extras ?? []) as OrderExtra[],
     now,
-    coupon,
+    publicFixedDiscount > 0 ? null : coupon,
     order.advance_paid,
-    // Use public_discount_amount (coupon-only) if set > 0, otherwise fallback to discount_amount
-    (() => {
-      const pub = Number((order as any).public_discount_amount);
-      if (!isNaN(pub) && pub > 0) return pub;
-      const disc = Number(order.discount_amount);
-      if (!isNaN(disc) && disc > 0) return disc;
-      return 0;
-    })(),
+    publicFixedDiscount,
     membershipDiscountPct,
     totalFreeHoursDiscount
   );

@@ -222,7 +222,7 @@ export async function POST(
     // Skip if: caller explicitly requested silence, OR no payment was ever made
     // (e.g. payment gateway failed before customer even saw checkout — no need to alarm them)
     const neverPaid = amountPaidVal === 0;
-    if (!isSilent && !neverPaid) {
+    if (!isSilent && !neverPaid && !isEmergency) {
       await sendWhatsAppCancellation(orderId, refundPct, refundAmount);
     }
 
