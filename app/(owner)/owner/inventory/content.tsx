@@ -16,8 +16,8 @@ import type { InventoryItem } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 import { compressImage } from "@/lib/image-compress";
 import NextImage from "next/image";
-import { Plus, Pencil, Trash2, Package, Image as ImageIcon } from "lucide-react";
-import { StockBadge, StockControls } from "@/components/inventory/stock-controls";
+import { Plus, Pencil, Trash2, Package, Image as ImageIcon, History, Coffee } from "lucide-react";
+import { StockBadge, StockControls, StockLogDrawer } from "@/components/inventory/stock-controls";
 
 type LocationLite = { id: string; name: string };
 
@@ -60,6 +60,7 @@ export function InventoryContent({
   const [searchQuery,     setSearchQuery]     = useState("");
   const [showDeactivated, setShowDeactivated] = useState(false);
   const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<InventoryItem | null>(null);
+  const [logDrawerMode, setLogDrawerMode] = useState<{ initialType: "all" | "staff" } | null>(null);
 
   const { data: items } = useQuery<InventoryItem[]>({
     queryKey: ["inventory", selectedLocation],
@@ -342,6 +343,25 @@ export function InventoryContent({
               ))}
             </SelectContent>
           </Select>
+
+          <Button
+            variant="outline"
+            className="border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 font-bold"
+            onClick={() => setLogDrawerMode({ initialType: "staff" })}
+          >
+            <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            Staff Intake Logs
+          </Button>
+
+          <Button
+            variant="outline"
+            className="font-bold"
+            onClick={() => setLogDrawerMode({ initialType: "all" })}
+          >
+            <History className="h-4 w-4" />
+            Audit Logs
+          </Button>
+
           <Button onClick={openAdd}>
             <Plus className="h-4 w-4" />
             Add Item
@@ -619,6 +639,15 @@ export function InventoryContent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Global Stock Audit / Staff Intake Drawer */}
+      {logDrawerMode && (
+        <StockLogDrawer
+          itemId="all"
+          initialType={logDrawerMode.initialType}
+          onClose={() => setLogDrawerMode(null)}
+        />
+      )}
     </div>
   );
 }

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CupSoda, Loader2, X } from "lucide-react";
+import { CupSoda, Loader2, X, History } from "lucide-react";
+import { StockLogDrawer } from "@/components/inventory/stock-controls";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -35,6 +36,7 @@ export function StaffConsumeModal({ isOpen, onClose, locationId }: Props) {
   const [itemId, setItemId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [showLogs, setShowLogs] = useState<boolean>(false);
 
   // Load active inventory items for this location
   const { data: items = [], isLoading } = useQuery<InventoryItem[]>({
@@ -78,6 +80,7 @@ export function StaffConsumeModal({ isOpen, onClose, locationId }: Props) {
         queryClient.invalidateQueries({ queryKey: ["inventory", locationId] });
         queryClient.invalidateQueries({ queryKey: ["low-stock-count", locationId] });
         queryClient.invalidateQueries({ queryKey: ["low-stock-list", locationId] });
+        queryClient.invalidateQueries({ queryKey: ["stock-logs-filtered"] });
         onClose();
         setItemId("");
         setQuantity(1);
@@ -94,21 +97,33 @@ export function StaffConsumeModal({ isOpen, onClose, locationId }: Props) {
   const selectedItem = items.find((i) => i.id === itemId);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => !o && !submitting && onClose()}>
-      <DialogContent className="max-w-2xl p-10 overflow-hidden bg-white dark:bg-[#111] border dark:border-[#222] rounded-3xl shadow-2xl">
-        <DialogHeader className="pb-6 border-b dark:border-[#222] flex flex-row items-center gap-5">
-          <div className="p-4 rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
-            <CupSoda className="h-10 w-10" />
-          </div>
-          <div className="min-w-0">
-            <DialogTitle className="text-3xl font-black text-gray-900 dark:text-white">
-              Log Staff Consumption
-            </DialogTitle>
-            <p className="text-base font-semibold text-gray-550 dark:text-gray-400 mt-1">
-              Personal staff intake. Will adjust stock level.
-            </p>
-          </div>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(o) => !o && !submitting && onClose()}>
+        <DialogContent className="max-w-2xl p-10 overflow-hidden bg-white dark:bg-[#111] border dark:border-[#222] rounded-3xl shadow-2xl">
+          <DialogHeader className="pb-6 border-b dark:border-[#222] flex flex-row items-center justify-between gap-5">
+            <div className="flex items-center gap-5 min-w-0">
+              <div className="p-4 rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <CupSoda className="h-10 w-10" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-3xl font-black text-gray-900 dark:text-white">
+                  Log Staff Consumption
+                </DialogTitle>
+                <p className="text-base font-semibold text-gray-550 dark:text-gray-400 mt-1">
+                  Personal staff intake. Will adjust stock level.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowLogs(true)}
+              className="font-bold flex items-center gap-2 text-xs shrink-0 border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              <History className="h-3.5 w-3.5" />
+              View Intake Logs
+            </Button>
+          </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-8 pt-6">
           {/* Select Item */}
@@ -200,5 +215,14 @@ export function StaffConsumeModal({ isOpen, onClose, locationId }: Props) {
         </form>
       </DialogContent>
     </Dialog>
+
+    {showLogs && (
+      <StockLogDrawer
+        itemId="all"
+        initialType="staff"
+        onClose={() => setShowLogs(false)}
+      />
+    )}
+    </>
   );
 }

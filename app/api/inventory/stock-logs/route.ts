@@ -11,26 +11,30 @@ export async function GET(request: Request) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
-  // Authorization check: owner only
-  const { data: viewer } = await supabase
+  const admin = createAdminClient();
+  const { data: viewer } = await admin
     .from("users")
-    .select("role")
+    .select("role, location_id")
     .eq("id", session.user.id)
     .single();
-  if (!viewer || viewer.role !== "owner") {
+
+  if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
   }
 
   const url = new URL(request.url);
-  const locationId = url.searchParams.get("location_id");
+  let locationId = url.searchParams.get("location_id");
+  if (viewer.role === "staff") {
+    locationId = viewer.location_id;
+  }
+
   const createdBy = url.searchParams.get("created_by");
   const itemId = url.searchParams.get("inventory_item_id");
-  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
+  const limit = Math.min(300, Math.max(1, parseInt(url.searchParams.get("limit") ?? "100")));
 
-  const admin = createAdminClient();
   let query = admin
     .from("inventory_stock_logs")
-    .select("*, item:inventory_items(name), actor:users!inventory_stock_logs_created_by_fkey(name)")
+    .select("*, item:inventory_items(id, name, selling_price, cost_price, category), actor:users!inventory_stock_logs_created_by_fkey(name)")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -45,10 +49,15 @@ export async function GET(request: Request) {
   if (itemId && itemId !== "all") {
     query = query.eq("inventory_item_id", itemId);
   }
+
   if (type === "staff") {
-    query = query.eq("reason", "adjustment").ilike("note", "%Staff consumption%");
+    query = query.eq("reason", "adjustment").or("note.ilike.%Staff%,note.ilike.%consumption%,note.ilike.%intake%");
   } else if (type === "customer") {
     query = query.in("reason", ["sale", "reverse"]);
+  } else if (type === "restock") {
+    query = query.eq("reason", "restock");
+  } else if (type === "waste") {
+    query = query.eq("reason", "adjustment").not("note", "ilike", "%Staff%");
   }
 
   const { data, error } = await query;
