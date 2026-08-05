@@ -157,6 +157,8 @@ export interface Database {
           discount_value: number;
           valid_from: string;
           valid_until: string;
+          valid_from_time: string | null;
+          valid_until_time: string | null;
           max_uses: number | null;
           used_count: number;
           is_active: boolean;
@@ -171,6 +173,8 @@ export interface Database {
           discount_value: number;
           valid_from: string;
           valid_until: string;
+          valid_from_time?: string | null;
+          valid_until_time?: string | null;
           max_uses?: number | null;
           used_count?: number;
           is_active?: boolean;
@@ -185,6 +189,8 @@ export interface Database {
           discount_value?: number;
           valid_from?: string;
           valid_until?: string;
+          valid_from_time?: string | null;
+          valid_until_time?: string | null;
           max_uses?: number | null;
           used_count?: number;
           is_active?: boolean;

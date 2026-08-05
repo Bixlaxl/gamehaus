@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { isSlotInCouponTimeWindow, formatFriendlyTime } from "@/lib/coupons";
 
 export const runtime = "edge";
 
 /**
- * Validate a coupon code against all rules (active, date window, usage cap,
+ * Validate a coupon code against all rules (active, date window, time window, usage cap,
  * location scope) and return the resolved discount amount for a given subtotal.
  *
  * Returns ok({ valid: false, reason }) on a known invalid code so the UI can
@@ -16,6 +17,8 @@ export async function GET(request: Request) {
   const code       = searchParams.get("code")?.trim().toUpperCase() ?? "";
   const locationId = searchParams.get("location_id") ?? "";
   const amount     = Number(searchParams.get("amount") ?? 0);
+  const slotStart  = searchParams.get("slot_start") ?? searchParams.get("scheduled_start") ?? "";
+  const slotEnd    = searchParams.get("slot_end") ?? searchParams.get("scheduled_end") ?? "";
 
   if (!code) {
     return NextResponse.json(err("code is required", "VALIDATION_ERROR"), { status: 400 });
@@ -47,6 +50,17 @@ export async function GET(request: Request) {
   }
   if (coupon.location_id && locationId && coupon.location_id !== locationId) {
     return NextResponse.json(ok({ valid: false, reason: "This code isn't valid at this location" }));
+  }
+
+  if (coupon.valid_from_time && coupon.valid_until_time) {
+    if (!isSlotInCouponTimeWindow(slotStart, slotEnd, coupon.valid_from_time, coupon.valid_until_time)) {
+      const fromFmt = formatFriendlyTime(coupon.valid_from_time);
+      const untilFmt = formatFriendlyTime(coupon.valid_until_time);
+      return NextResponse.json(ok({
+        valid: false,
+        reason: `This coupon is only valid for slots booked between ${fromFmt} and ${untilFmt}`
+      }));
+    }
   }
 
   // Compute discount against the provided amount (defensive — caller can pass 0

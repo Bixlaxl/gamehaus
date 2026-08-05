@@ -51,6 +51,8 @@ function makeCoupon(overrides: Partial<Coupon> = {}): Coupon {
     discount_value: 20,
     valid_from: new Date().toISOString(),
     valid_until: new Date(Date.now() + 86400000).toISOString(),
+    valid_from_time: null,
+    valid_until_time: null,
     max_uses: null,
     used_count: 0,
     is_active: true,

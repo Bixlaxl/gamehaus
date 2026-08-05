@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
+import { formatFriendlyTime } from "@/lib/coupons";
 import { useTheme } from "next-themes";
 import type { AppSettings } from "@/lib/settings";
 import Script from "next/script";
@@ -277,7 +278,10 @@ export default function CheckoutPage() {
     }
     setCouponState({ status: "checking" });
     try {
-      const url = `/api/coupons/validate?code=${encodeURIComponent(codeToApply)}&location_id=${encodeURIComponent(cart.locationId ?? "")}&amount=${subtotalForCoupon}`;
+      const firstItem = cart.items[0];
+      const slotStart = firstItem?.scheduledStart ?? "";
+      const slotEnd = firstItem?.scheduledEnd ?? "";
+      const url = `/api/coupons/validate?code=${encodeURIComponent(codeToApply)}&location_id=${encodeURIComponent(cart.locationId ?? "")}&amount=${subtotalForCoupon}&slot_start=${encodeURIComponent(slotStart)}&slot_end=${encodeURIComponent(slotEnd)}`;
       const res = await fetch(url);
       const body = await res.json() as
         | { success: true; data: { valid: true; code: string; discount_amount: number; discount_type: "percent" | "flat"; discount_value: number } }
@@ -1633,7 +1637,8 @@ export default function CheckoutPage() {
                                 <Tag className="h-3.5 w-3.5 text-emerald-600" />
                                 <span className="font-bold text-emerald-900 dark:text-emerald-200">{c.code}</span>
                                 <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                                  ({c.discount_type === "percent" ? `${c.discount_value}% OFF` : `₹${c.discount_value} OFF`})
+                                  ({c.discount_type === "percent" ? `${c.discount_value}% OFF` : `₹${c.discount_value} OFF`}
+                                  {c.valid_from_time && c.valid_until_time ? ` • Happy Hours ${formatFriendlyTime(c.valid_from_time)} - ${formatFriendlyTime(c.valid_until_time)}` : ""})
                                 </span>
                                 <button
                                   type="button"

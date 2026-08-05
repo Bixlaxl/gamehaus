@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/select";
 import type { Coupon, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, Copy, Check } from "lucide-react";
+import { formatFriendlyTime } from "@/lib/coupons";
+import { Plus, Pencil, Copy, Check, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 const supabase = createClient();
@@ -37,6 +38,9 @@ type CouponForm = {
   discount_value: string;
   valid_from: string;
   valid_until: string;
+  time_mode: "full_day" | "time_slot";
+  valid_from_time: string;
+  valid_until_time: string;
   max_uses: string;
   is_public: boolean;
 };
@@ -48,6 +52,9 @@ const defaultForm: CouponForm = {
   discount_value: "",
   valid_from: new Date().toISOString().split("T")[0],
   valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+  time_mode: "full_day",
+  valid_from_time: "13:00",
+  valid_until_time: "18:00",
   max_uses: "",
   is_public: false,
 };
@@ -110,14 +117,16 @@ export function CouponsContent({
   const createMutation = useMutation({
     mutationFn: async (values: CouponForm) => {
       const { error: dbError } = await supabase.from("coupons").insert({
-        location_id:    values.location_id === "all" ? null : values.location_id,
-        code:           values.code.toUpperCase(),
-        discount_type:  values.discount_type,
-        discount_value: parseFloat(values.discount_value),
-        valid_from:     toStartOfDayIST(values.valid_from),
-        valid_until:    toEndOfDayIST(values.valid_until),
-        max_uses:       values.max_uses ? parseInt(values.max_uses) : null,
-        is_public:      values.is_public,
+        location_id:      values.location_id === "all" ? null : values.location_id,
+        code:             values.code.toUpperCase(),
+        discount_type:    values.discount_type,
+        discount_value:   parseFloat(values.discount_value),
+        valid_from:       toStartOfDayIST(values.valid_from),
+        valid_until:      toEndOfDayIST(values.valid_until),
+        valid_from_time:  values.time_mode === "time_slot" && values.valid_from_time ? values.valid_from_time : null,
+        valid_until_time: values.time_mode === "time_slot" && values.valid_until_time ? values.valid_until_time : null,
+        max_uses:         values.max_uses ? parseInt(values.max_uses) : null,
+        is_public:        values.is_public,
       });
       if (dbError) throw new Error(dbError.message);
     },
@@ -149,6 +158,16 @@ export function CouponsContent({
           const formatted = toStartOfDayIST(values.valid_from);
           if (formatted !== editTarget.valid_from) {
             payload.valid_from = formatted;
+            hasChanges = true;
+          }
+        }
+        if (values.time_mode !== undefined || values.valid_from_time !== undefined || values.valid_until_time !== undefined) {
+          const mode = values.time_mode ?? (editTarget.valid_from_time ? "time_slot" : "full_day");
+          const fromT = mode === "time_slot" ? (values.valid_from_time ?? editTarget.valid_from_time ?? "13:00") : null;
+          const untilT = mode === "time_slot" ? (values.valid_until_time ?? editTarget.valid_until_time ?? "18:00") : null;
+          if (fromT !== editTarget.valid_from_time || untilT !== editTarget.valid_until_time) {
+            payload.valid_from_time = fromT;
+            payload.valid_until_time = untilT;
             hasChanges = true;
           }
         }
@@ -201,14 +220,16 @@ export function CouponsContent({
           c.id === id
             ? {
                 ...c,
-                valid_until:    values.valid_until ? toEndOfDayIST(values.valid_until) : c.valid_until,
-                valid_from:     values.valid_from  ? toStartOfDayIST(values.valid_from) : c.valid_from,
-                discount_type:  values.discount_type ?? c.discount_type,
-                discount_value: values.discount_value ? parseFloat(values.discount_value) : c.discount_value,
-                max_uses:       values.max_uses !== undefined ? (values.max_uses ? parseInt(values.max_uses) : null) : c.max_uses,
-                location_id:    values.location_id === "all" ? null : (values.location_id ?? c.location_id),
-                location:       values.location_id !== undefined ? (loc ? { name: loc.name } : null) : c.location,
-                is_public:      values.is_public !== undefined ? values.is_public : c.is_public,
+                valid_until:      values.valid_until ? toEndOfDayIST(values.valid_until) : c.valid_until,
+                valid_from:       values.valid_from  ? toStartOfDayIST(values.valid_from) : c.valid_from,
+                valid_from_time:  values.time_mode === "full_day" ? null : (values.valid_from_time ?? c.valid_from_time),
+                valid_until_time: values.time_mode === "full_day" ? null : (values.valid_until_time ?? c.valid_until_time),
+                discount_type:    values.discount_type ?? c.discount_type,
+                discount_value:   values.discount_value ? parseFloat(values.discount_value) : c.discount_value,
+                max_uses:         values.max_uses !== undefined ? (values.max_uses ? parseInt(values.max_uses) : null) : c.max_uses,
+                location_id:      values.location_id === "all" ? null : (values.location_id ?? c.location_id),
+                location:         values.location_id !== undefined ? (loc ? { name: loc.name } : null) : c.location,
+                is_public:        values.is_public !== undefined ? values.is_public : c.is_public,
               }
             : c
         )
@@ -218,14 +239,11 @@ export function CouponsContent({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["coupons"] });
-      toast.success("Coupon updated");
+      setEditTarget(null);
       setEditError(null);
+      toast.success("Coupon updated");
     },
-    onError: (err, __, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
-      setEditError((err as Error).message);
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
+    onError: (e: Error) => setEditError(e.message),
   });
 
   // ── Toggle active ────────────────────────────────────────────────────────
@@ -270,15 +288,19 @@ export function CouponsContent({
   });
 
   function openEdit(c: CouponRow) {
+    const hasTimeSlot = !!(c.valid_from_time && c.valid_until_time);
     setEditTarget(c);
     setEditForm({
-      location_id:    c.location_id ?? "all",
-      discount_type:  c.discount_type,
-      discount_value: String(c.discount_value),
-      valid_from:     c.valid_from.split("T")[0],
-      valid_until:    c.valid_until.split("T")[0],
-      max_uses:       c.max_uses !== null ? String(c.max_uses) : "",
-      is_public:      c.is_public,
+      location_id:      c.location_id ?? "all",
+      discount_type:    c.discount_type,
+      discount_value:   String(c.discount_value),
+      valid_from:       c.valid_from.split("T")[0],
+      valid_until:      c.valid_until.split("T")[0],
+      time_mode:        hasTimeSlot ? "time_slot" : "full_day",
+      valid_from_time:  c.valid_from_time ?? "13:00",
+      valid_until_time: c.valid_until_time ?? "18:00",
+      max_uses:         c.max_uses !== null ? String(c.max_uses) : "",
+      is_public:        c.is_public,
     });
     setEditError(null);
   }
@@ -353,7 +375,15 @@ export function CouponsContent({
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-gray-500">
-                    {new Date(coupon.valid_until).toLocaleDateString("en-IN")}
+                    <div>{new Date(coupon.valid_until).toLocaleDateString("en-IN")}</div>
+                    {coupon.valid_from_time && coupon.valid_until_time ? (
+                      <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium mt-0.5">
+                        <Clock className="h-3 w-3" />
+                        <span>{formatFriendlyTime(coupon.valid_from_time)} - {formatFriendlyTime(coupon.valid_until_time)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 block mt-0.5">Full Day</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {coupon.used_count}
@@ -473,6 +503,41 @@ export function CouponsContent({
               </div>
             </div>
             <div className="space-y-2">
+              <Label>Time Availability</Label>
+              <Select
+                value={createForm.time_mode}
+                onValueChange={(v) => setCreateForm({ ...createForm, time_mode: v as "full_day" | "time_slot" })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full_day">Full Day (No time restrictions)</SelectItem>
+                  <SelectItem value="time_slot">Specific Time Slot (Happy Hours)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {createForm.time_mode === "time_slot" && (
+              <div className="grid grid-cols-2 gap-4 bg-amber-500/5 p-3 rounded-xl border border-amber-500/20">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">From Time</Label>
+                  <Input
+                    type="time"
+                    value={createForm.valid_from_time}
+                    onChange={(e) => setCreateForm({ ...createForm, valid_from_time: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">Until Time</Label>
+                  <Input
+                    type="time"
+                    value={createForm.valid_until_time}
+                    onChange={(e) => setCreateForm({ ...createForm, valid_until_time: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
               <Label>Max uses (blank = unlimited)</Label>
               <Input
                 type="number"
@@ -580,6 +645,41 @@ export function CouponsContent({
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Time Availability</Label>
+              <Select
+                value={editForm.time_mode ?? "full_day"}
+                onValueChange={(v) => setEditForm({ ...editForm, time_mode: v as "full_day" | "time_slot" })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full_day">Full Day (No time restrictions)</SelectItem>
+                  <SelectItem value="time_slot">Specific Time Slot (Happy Hours)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {(editForm.time_mode ?? (editTarget?.valid_from_time ? "time_slot" : "full_day")) === "time_slot" && (
+              <div className="grid grid-cols-2 gap-4 bg-amber-500/5 p-3 rounded-xl border border-amber-500/20">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">From Time</Label>
+                  <Input
+                    type="time"
+                    value={editForm.valid_from_time ?? editTarget?.valid_from_time ?? "13:00"}
+                    onChange={(e) => setEditForm({ ...editForm, valid_from_time: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">Until Time</Label>
+                  <Input
+                    type="time"
+                    value={editForm.valid_until_time ?? editTarget?.valid_until_time ?? "18:00"}
+                    onChange={(e) => setEditForm({ ...editForm, valid_until_time: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Max uses (blank = unlimited)</Label>
               <Input
