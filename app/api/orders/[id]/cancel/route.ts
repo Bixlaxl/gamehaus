@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAppSettings, computeRefund } from "@/lib/settings";
 import { sendWhatsAppCancellation } from "@/lib/whatsapp";
+import { getRazorpayCredentialsForOrder } from "@/lib/razorpay";
 import { err, ok } from "@/lib/validators/schemas";
 
 export const runtime = 'nodejs';
@@ -137,8 +138,9 @@ export async function POST(
       if (paymentRow?.razorpay_payment_id) {
         // Live Razorpay payment -> call Razorpay refund API
         const refundAmountPaise = Math.round(refundAmount * 100);
-        const keyId = (process.env.RAZORPAY_KEY_ID || "").trim();
-        const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+        const creds = await getRazorpayCredentialsForOrder(admin, orderId);
+        const keyId = creds.keyId;
+        const keySecret = creds.keySecret;
         const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
 
         const targetUrl = `https://api.razorpay.com/v1/payments/${paymentRow.razorpay_payment_id}/refund`;

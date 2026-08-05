@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRazorpayCredentialsForOrder } from "@/lib/razorpay";
 
 export const runtime = 'nodejs';
 
@@ -20,11 +21,13 @@ export async function POST(request: Request) {
   }
 
   const { amount, currency, receipt, order_id } = parsed.data;
+  const admin = createAdminClient();
+  const creds = await getRazorpayCredentialsForOrder(admin, order_id);
 
   let rpOrder: { id: string; amount: number };
   try {
-    const keyId = (process.env.RAZORPAY_KEY_ID || "").trim();
-    const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    const keyId = creds.keyId;
+    const keySecret = creds.keySecret;
     const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
     const res = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
@@ -48,16 +51,15 @@ export async function POST(request: Request) {
   } catch (e) {
     console.error("[Create Order API Error]", e);
     console.log("[Create Order Debug Info]", {
-      hasKeyId: !!process.env.RAZORPAY_KEY_ID,
-      keyIdStart: process.env.RAZORPAY_KEY_ID ? process.env.RAZORPAY_KEY_ID.substring(0, 8) : "none",
-      hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET,
-      secretLength: process.env.RAZORPAY_KEY_SECRET ? process.env.RAZORPAY_KEY_SECRET.length : 0,
+      hasKeyId: !!creds.keyId,
+      keyIdStart: creds.keyId ? creds.keyId.substring(0, 8) : "none",
+      hasKeySecret: !!creds.keySecret,
+      secretLength: creds.keySecret ? creds.keySecret.length : 0,
     });
     const msg = e instanceof Error ? e.message : "Razorpay error";
     return NextResponse.json(err(msg, "RAZORPAY_ERROR"), { status: 502 });
   }
 
-  const admin = createAdminClient();
   await admin.from("payments").insert({
     order_id,
     amount: amount / 100,
@@ -66,5 +68,5 @@ export async function POST(request: Request) {
     status: "pending",
   });
 
-  return NextResponse.json(ok({ razorpay_order_id: rpOrder.id, amount: rpOrder.amount }));
+  return NextResponse.json(ok({ razorpay_order_id: rpOrder.id, amount: rpOrder.amount, key_id: creds.keyId }));
 }

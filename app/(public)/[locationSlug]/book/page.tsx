@@ -732,7 +732,7 @@ export default function CheckoutPage() {
     });
 
     const rpBody = await rpRes.json() as
-      | { success: true; data: { razorpay_order_id: string; amount: number } }
+      | { success: true; data: { razorpay_order_id: string; amount: number; key_id?: string } }
       | { success: false; error: string };
 
     if (!rpBody.success) {
@@ -753,12 +753,14 @@ export default function CheckoutPage() {
       if (typeof window === "undefined" || !window.Razorpay) {
         throw new Error("Payment gateway script is still loading. Please wait a few seconds and try again.");
       }
-      if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
-        throw new Error("Razorpay Client Key (NEXT_PUBLIC_RAZORPAY_KEY_ID) is not configured.");
+
+      const activeKey = rpBody.data.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!activeKey) {
+        throw new Error("Razorpay Client Key is not configured.");
       }
 
       const options: RazorpayOptions = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: activeKey,
         amount: rpBody.data.amount,
         currency: "INR",
         order_id: rpBody.data.razorpay_order_id,

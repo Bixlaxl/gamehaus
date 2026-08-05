@@ -16,9 +16,20 @@ async function verifyHmac(secret: string, body: string, signature: string): Prom
 export async function POST(request: Request) {
   const body = await request.text();
   const signature = request.headers.get("x-razorpay-signature") ?? "";
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET!;
+  const secrets = [
+    (process.env.RAZORPAY_WEBHOOK_SECRET || "").trim(),
+    (process.env.NERFTURF_RAZORPAY_WEBHOOK_SECRET || "").trim(),
+  ].filter(Boolean);
 
-  if (!(await verifyHmac(secret, body, signature))) {
+  let verified = false;
+  for (const s of secrets) {
+    if (await verifyHmac(s, body, signature)) {
+      verified = true;
+      break;
+    }
+  }
+
+  if (!verified) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateBill } from "@/lib/billing/engine";
 import { ok, err } from "@/lib/validators/schemas";
+import { getRazorpayCredentialsForOrder } from "@/lib/razorpay";
 import type { OrderItem, OrderExtra } from "@/lib/supabase/types";
 
 export const runtime = "edge";
@@ -139,8 +140,9 @@ export async function POST(
   let whatsappNotificationPromise: PromiseLike<any> = Promise.resolve();
 
   if (body.payment_id) {
-    const keyId = (process.env.RAZORPAY_KEY_ID || "").trim();
-    const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    const creds = await getRazorpayCredentialsForOrder(admin, orderId);
+    const keyId = creds.keyId;
+    const keySecret = creds.keySecret;
     const credentials = btoa(`${keyId}:${keySecret}`);
 
     const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${body.payment_id}`, {
