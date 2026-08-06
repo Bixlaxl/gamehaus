@@ -67,3 +67,74 @@ export function formatFriendlyTime(timeStr?: string | null): string {
   h = h % 12 || 12;
   return `${h}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
+
+/**
+ * Returns the day of the week (0 = Sunday, 1 = Monday, etc.) for a slot start in Asia/Kolkata timezone.
+ */
+export function getSlotDayOfWeek(slotStartIso: string): number | null {
+  try {
+    const d = new Date(slotStartIso);
+    if (isNaN(d.getTime())) return null;
+    const dayName = d.toLocaleDateString("en-US", {
+      timeZone: "Asia/Kolkata",
+      weekday: "long",
+    });
+    const daysMap: Record<string, number> = {
+      Sunday: 0,
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+    };
+    return daysMap[dayName] ?? null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Checks if a slot's date falls on one of the coupon's valid days.
+ * If validDays is null or empty, returns true (valid every day).
+ */
+export function isSlotOnCouponDays(
+  slotStartIso?: string | null,
+  validDays?: number[] | null
+): boolean {
+  if (!validDays || validDays.length === 0) return true; // Valid all days
+  if (!slotStartIso) return true; // Fallback if slot start is not provided
+  
+  const dayOfWeek = getSlotDayOfWeek(slotStartIso);
+  if (dayOfWeek === null) return true; // Fallback
+  
+  return validDays.includes(dayOfWeek);
+}
+
+/**
+ * Formats valid days array into friendly display string e.g. "Monday to Thursday" or "Monday, Wednesday".
+ */
+export function formatFriendlyDays(validDays?: number[] | null): string {
+  if (!validDays || validDays.length === 0) return "All Days";
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  
+  // Sort days: Monday (1) to Sunday (0) by converting 0 to 7 temporarily for clean sorting if desired,
+  // but standard ascending is fine.
+  const sorted = [...validDays].sort((a, b) => a - b);
+  
+  // Check if it's a consecutive range (e.g. 1, 2, 3, 4)
+  let consecutive = true;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] !== sorted[i-1] + 1) {
+      consecutive = false;
+      break;
+    }
+  }
+  
+  if (consecutive && sorted.length > 2) {
+    return `${dayNames[sorted[0]]} to ${dayNames[sorted[sorted.length - 1]]}`;
+  }
+  
+  return sorted.map(d => dayNames[d]).join(", ");
+}
+

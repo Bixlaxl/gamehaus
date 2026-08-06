@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import type { Coupon, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
-import { formatFriendlyTime } from "@/lib/coupons";
+import { formatFriendlyTime, formatFriendlyDays } from "@/lib/coupons";
 import { Plus, Pencil, Copy, Check, Clock } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,6 +43,7 @@ type CouponForm = {
   valid_until_time: string;
   max_uses: string;
   is_public: boolean;
+  valid_days: number[];
 };
 
 const defaultForm: CouponForm = {
@@ -57,6 +58,7 @@ const defaultForm: CouponForm = {
   valid_until_time: "18:00",
   max_uses: "",
   is_public: false,
+  valid_days: [],
 };
 
 // Convert a local YYYY-MM-DD date string to end-of-day IST (UTC+5:30)
@@ -66,6 +68,16 @@ function toEndOfDayIST(dateStr: string): string {
 function toStartOfDayIST(dateStr: string): string {
   return new Date(dateStr + "T00:00:00+05:30").toISOString();
 }
+
+const WEEKDAYS = [
+  { label: "M", value: 1, fullName: "Monday" },
+  { label: "T", value: 2, fullName: "Tuesday" },
+  { label: "W", value: 3, fullName: "Wednesday" },
+  { label: "T", value: 4, fullName: "Thursday" },
+  { label: "F", value: 5, fullName: "Friday" },
+  { label: "S", value: 6, fullName: "Saturday" },
+  { label: "S", value: 0, fullName: "Sunday" },
+];
 
 export function CouponsContent({
   initialLocations,
@@ -127,6 +139,7 @@ export function CouponsContent({
         valid_until_time: values.time_mode === "time_slot" && values.valid_until_time ? values.valid_until_time : null,
         max_uses:         values.max_uses ? parseInt(values.max_uses) : null,
         is_public:        values.is_public,
+        valid_days:       values.valid_days.length > 0 ? values.valid_days : null,
       });
       if (dbError) throw new Error(dbError.message);
     },
@@ -200,6 +213,15 @@ export function CouponsContent({
           payload.is_public = values.is_public;
           hasChanges = true;
         }
+        if (values.valid_days !== undefined) {
+          const oldDays = editTarget.valid_days || [];
+          const newDays = values.valid_days || [];
+          const same = oldDays.length === newDays.length && oldDays.every(d => newDays.includes(d));
+          if (!same) {
+            payload.valid_days = newDays.length > 0 ? newDays : null;
+            hasChanges = true;
+          }
+        }
       }
 
       if (!hasChanges) {
@@ -230,6 +252,7 @@ export function CouponsContent({
                 location_id:      values.location_id === "all" ? null : (values.location_id ?? c.location_id),
                 location:         values.location_id !== undefined ? (loc ? { name: loc.name } : null) : c.location,
                 is_public:        values.is_public !== undefined ? values.is_public : c.is_public,
+                valid_days:       values.valid_days !== undefined ? (values.valid_days.length > 0 ? values.valid_days : null) : c.valid_days,
               }
             : c
         )
@@ -301,6 +324,7 @@ export function CouponsContent({
       valid_until_time: c.valid_until_time ?? "18:00",
       max_uses:         c.max_uses !== null ? String(c.max_uses) : "",
       is_public:        c.is_public,
+      valid_days:       c.valid_days || [],
     });
     setEditError(null);
   }
@@ -376,6 +400,11 @@ export function CouponsContent({
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     <div>{new Date(coupon.valid_until).toLocaleDateString("en-IN")}</div>
+                    {coupon.valid_days && coupon.valid_days.length > 0 && (
+                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-0.5">
+                        {formatFriendlyDays(coupon.valid_days)}
+                      </div>
+                    )}
                     {coupon.valid_from_time && coupon.valid_until_time ? (
                       <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium mt-0.5">
                         <Clock className="h-3 w-3" />
@@ -538,6 +567,37 @@ export function CouponsContent({
               </div>
             )}
             <div className="space-y-2">
+              <Label>Day Availability</Label>
+              <div className="flex gap-1.5 flex-wrap">
+                {WEEKDAYS.map((d) => {
+                  const active = createForm.valid_days.includes(d.value);
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => {
+                        const updated = active
+                          ? createForm.valid_days.filter((v) => v !== d.value)
+                          : [...createForm.valid_days, d.value];
+                        setCreateForm({ ...createForm, valid_days: updated });
+                      }}
+                      className={`h-9 w-9 rounded-full text-xs font-bold transition-all border ${
+                        active
+                          ? "bg-[#D4541A] border-[#D4541A] text-white"
+                          : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      }`}
+                      title={d.fullName}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Leave all unselected to make valid on all days.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label>Max uses (blank = unlimited)</Label>
               <Input
                 type="number"
@@ -680,6 +740,38 @@ export function CouponsContent({
                 </div>
               </div>
             )}
+            <div className="space-y-2">
+              <Label>Day Availability</Label>
+              <div className="flex gap-1.5 flex-wrap">
+                {WEEKDAYS.map((d) => {
+                  const active = (editForm.valid_days ?? editTarget?.valid_days ?? []).includes(d.value);
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => {
+                        const currentDays = editForm.valid_days ?? editTarget?.valid_days ?? [];
+                        const updated = active
+                          ? currentDays.filter((v) => v !== d.value)
+                          : [...currentDays, d.value];
+                        setEditForm({ ...editForm, valid_days: updated });
+                      }}
+                      className={`h-9 w-9 rounded-full text-xs font-bold transition-all border ${
+                        active
+                          ? "bg-[#D4541A] border-[#D4541A] text-white"
+                          : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      }`}
+                      title={d.fullName}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Leave all unselected to make valid on all days.
+              </p>
+            </div>
             <div className="space-y-2">
               <Label>Max uses (blank = unlimited)</Label>
               <Input

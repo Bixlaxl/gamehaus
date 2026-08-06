@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { isSlotInCouponTimeWindow, formatFriendlyTime } from "@/lib/coupons";
+import { isSlotInCouponTimeWindow, formatFriendlyTime, isSlotOnCouponDays, formatFriendlyDays } from "@/lib/coupons";
 
 export const runtime = "edge";
 
@@ -50,6 +50,16 @@ export async function GET(request: Request) {
   }
   if (coupon.location_id && locationId && coupon.location_id !== locationId) {
     return NextResponse.json(ok({ valid: false, reason: "This code isn't valid at this location" }));
+  }
+
+  if (coupon.valid_days && coupon.valid_days.length > 0) {
+    if (!isSlotOnCouponDays(slotStart, coupon.valid_days)) {
+      const daysFmt = formatFriendlyDays(coupon.valid_days);
+      return NextResponse.json(ok({
+        valid: false,
+        reason: `This coupon is only valid on: ${daysFmt}`
+      }));
+    }
   }
 
   if (coupon.valid_from_time && coupon.valid_until_time) {

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
 import { cancelExpiredUnpaidOrders } from "@/lib/booking-cleanup";
-import { isSlotInCouponTimeWindow, formatFriendlyTime } from "@/lib/coupons";
+import { isSlotInCouponTimeWindow, formatFriendlyTime, isSlotOnCouponDays, formatFriendlyDays } from "@/lib/coupons";
 
 export const runtime = 'edge';
 
@@ -278,6 +278,17 @@ export async function POST(request: Request) {
     }
     if (coupon.location_id && coupon.location_id !== location_id) {
       return NextResponse.json(err("Coupon is not valid at this location", "INVALID_COUPON"), { status: 400 });
+    }
+    if (coupon.valid_days && coupon.valid_days.length > 0) {
+      const firstItem = items[0];
+      const slotStart = firstItem?.scheduled_start;
+      if (!isSlotOnCouponDays(slotStart, coupon.valid_days)) {
+        const daysFmt = formatFriendlyDays(coupon.valid_days);
+        return NextResponse.json(
+          err(`Coupon is only valid on: ${daysFmt}`, "INVALID_COUPON"),
+          { status: 400 }
+        );
+      }
     }
     if (coupon.valid_from_time && coupon.valid_until_time) {
       const firstItem = items[0];

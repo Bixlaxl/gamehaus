@@ -163,6 +163,7 @@ export interface Database {
           used_count: number;
           is_active: boolean;
           is_public: boolean;
+          valid_days: number[] | null;
           created_at: string;
         };
         Insert: {
@@ -179,6 +180,7 @@ export interface Database {
           used_count?: number;
           is_active?: boolean;
           is_public?: boolean;
+          valid_days?: number[] | null;
           created_at?: string;
         };
         Update: {
@@ -195,6 +197,7 @@ export interface Database {
           used_count?: number;
           is_active?: boolean;
           is_public?: boolean;
+          valid_days?: number[] | null;
           created_at?: string;
         };
         Relationships: [
