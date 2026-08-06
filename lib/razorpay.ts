@@ -16,7 +16,7 @@ export function getRazorpayCredentialsForSlug(slug?: string | null): RazorpayCre
   const defaultKeySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
   const defaultWebhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || "").trim();
 
-  if (cleanSlug.includes("nerfturf")) {
+  if (cleanSlug.includes("nerfturf") || cleanSlug.includes("nerf-turf")) {
     const nerfKeyId = (process.env.NERFTURF_RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_NERFTURF_RAZORPAY_KEY_ID || "").trim();
     const nerfKeySecret = (process.env.NERFTURF_RAZORPAY_KEY_SECRET || "").trim();
     const nerfWebhookSecret = (process.env.NERFTURF_RAZORPAY_WEBHOOK_SECRET || "").trim();
