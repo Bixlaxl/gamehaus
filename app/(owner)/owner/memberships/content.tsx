@@ -147,14 +147,13 @@ export function MembershipsContent({
 
   // ─── Plan mutations ───────────────────────────────────────────────
   const planMutation = useMutation({
-    mutationFn: async (values: PlanForm & { editId?: string; _selectedTableId?: string; _planCategory?: "pct" | "hours" }) => {
+    mutationFn: async (values: PlanForm & { editId?: string; _planCategory?: "pct" | "hours" }) => {
       const cat = values._planCategory ?? planCategory;
-      const tid = values._selectedTableId ?? "";
       const newPrice = parseFloat(values.price);
       const newDuration = parseInt(values.duration_days);
       const newDiscountPct = cat === "pct" ? parseFloat(values.discount_pct) || 0 : 0;
       const newFreeHrs = cat === "hours" ? parseFloat(values.free_hrs) || 0 : 0;
-      const newBoundTableIds = cat === "hours" ? (tid ? [tid] : values.bound_table_ids || []) : [];
+      const newBoundTableIds = cat === "hours" ? (values.bound_table_ids || []) : [];
 
       if (values.editId && editingPlan) {
         const patchPayload: any = {};
@@ -180,7 +179,9 @@ export function MembershipsContent({
           patchPayload.free_hrs = newFreeHrs;
           hasChanges = true;
         }
-        if (JSON.stringify(newBoundTableIds) !== JSON.stringify(editingPlan.bound_table_ids || [])) {
+        const currentSorted = [...(editingPlan.bound_table_ids || [])].sort().join(",");
+        const newSorted = [...newBoundTableIds].sort().join(",");
+        if (currentSorted !== newSorted) {
           patchPayload.bound_table_ids = newBoundTableIds;
           hasChanges = true;
         }
@@ -189,7 +190,6 @@ export function MembershipsContent({
           setPlanDialogOpen(false);
           setEditingPlan(null);
           setPlanForm(defaultPlanForm);
-          setSelectedTableId("");
           return;
         }
 
@@ -222,7 +222,6 @@ export function MembershipsContent({
       setPlanDialogOpen(false);
       setEditingPlan(null);
       setPlanForm(defaultPlanForm);
-      setSelectedTableId("");
       if (values.editId) {
         const prev = qc.getQueryData<MembershipPlan[]>(["membership-plans"]);
         qc.setQueryData<MembershipPlan[]>(["membership-plans"], (old) =>
@@ -235,7 +234,7 @@ export function MembershipsContent({
                   duration_days:   parseInt(values.duration_days),
                   discount_pct:    (values._planCategory ?? planCategory) === "pct" ? parseFloat(values.discount_pct) || 0 : 0,
                   free_hrs:        (values._planCategory ?? planCategory) === "hours" ? parseFloat(values.free_hrs) || 0 : 0,
-                  bound_table_ids: (values._planCategory ?? planCategory) === "hours" ? ((values._selectedTableId ?? "") ? [values._selectedTableId!] : values.bound_table_ids || []) : [],
+                  bound_table_ids: (values._planCategory ?? planCategory) === "hours" ? (values.bound_table_ids || []) : [],
                 }
               : p
           )
@@ -354,7 +353,6 @@ export function MembershipsContent({
     setEditingPlan(null);
     setPlanForm(defaultPlanForm);
     setPlanCategory("pct");
-    setSelectedTableId("");
     setPlanDialogOpen(true);
   }
 
@@ -362,8 +360,6 @@ export function MembershipsContent({
     setEditingPlan(p);
     const isHours = Number(p.free_hrs) > 0;
     setPlanCategory(isHours ? "hours" : "pct");
-    const tId = p.bound_table_ids?.[0] ?? "";
-    setSelectedTableId(tId);
     setPlanForm({
       name:            p.name,
       price:           String(p.price),
@@ -479,14 +475,18 @@ export function MembershipsContent({
                     <Clock className="h-3 w-3 text-green-500" />
                     Free Hours: <span className="font-semibold text-green-600">{plan.free_hrs} hrs</span>
                   </p>
-                  {plan.bound_table_ids && plan.bound_table_ids.length > 0 && (() => {
-                    const matchedTable = tables.find(t => t.id === plan.bound_table_ids[0]);
+                  {plan.bound_table_ids && plan.bound_table_ids.length > 0 ? (() => {
+                    const boundNames = plan.bound_table_ids
+                      .map(id => tables.find(t => t.id === id)?.name)
+                      .filter(Boolean);
                     return (
-                      <p className="font-semibold text-purple-600 pl-4">
-                        Bound to: {matchedTable ? `${matchedTable.name} (${matchedTable.location?.name || "Gamehaus"})` : "Unknown table"}
+                      <p className="font-semibold text-purple-600 pl-4 text-xs">
+                        Applicable to: {boundNames.length > 0 ? boundNames.join(", ") : "Selected tables"}
                       </p>
                     );
-                  })()}
+                  })() : (
+                    <p className="text-gray-400 pl-4 text-xs">Applicable to: All Tables</p>
+                  )}
                 </div>
               )}
             </div>
@@ -658,16 +658,9 @@ export function MembershipsContent({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (planCategory === "hours" && !selectedTableId) {
-                alert("Please select an asset/table to bind to this template.");
-                return;
-              }
-              // Snapshot selectedTableId and planCategory at submit time so onMutate
-              // resetting these states doesn't corrupt the in-flight mutationFn.
               planMutation.mutate({
                 ...planForm,
                 editId: editingPlan?.id,
-                _selectedTableId: selectedTableId,
                 _planCategory: planCategory,
               });
             }}
@@ -788,19 +781,70 @@ export function MembershipsContent({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Asset / Table</Label>
-                  <Select value={selectedTableId} onValueChange={setSelectedTableId}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select an asset/table" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tables.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name} ({t.type}) {t.location ? `— ${t.location.name}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center justify-between">
+                    <Label>Applicable Assets / Tables</Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (planForm.bound_table_ids.length === tables.length) {
+                          setPlanForm({ ...planForm, bound_table_ids: [] });
+                        } else {
+                          setPlanForm({ ...planForm, bound_table_ids: tables.map(t => t.id) });
+                        }
+                      }}
+                      className="text-xs text-purple-600 hover:underline font-semibold"
+                    >
+                      {planForm.bound_table_ids.length === 0
+                        ? "Select All Tables"
+                        : planForm.bound_table_ids.length === tables.length
+                        ? "Clear Restrictions (All Tables)"
+                        : "Select All"}
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-gray-50 rounded-xl border border-gray-100">
+                    {tables.map((t) => {
+                      const isSelected = planForm.bound_table_ids.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs font-semibold ${
+                            isSelected ? "bg-purple-50 text-purple-900 border border-purple-200" : "bg-white text-gray-700 hover:bg-gray-100 border border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setPlanForm({
+                                    ...planForm,
+                                    bound_table_ids: [...planForm.bound_table_ids, t.id],
+                                  });
+                                } else {
+                                  setPlanForm({
+                                    ...planForm,
+                                    bound_table_ids: planForm.bound_table_ids.filter(id => id !== t.id),
+                                  });
+                                }
+                              }}
+                              className="rounded text-purple-600 focus:ring-purple-500 h-4 w-4"
+                            />
+                            <span>{t.name}</span>
+                            <span className="text-[10px] text-gray-400 uppercase">({t.type})</span>
+                          </div>
+                          {t.location && (
+                            <span className="text-[10px] text-gray-400 font-normal">{t.location.name}</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    {planForm.bound_table_ids.length === 0
+                      ? "No tables selected = free hours can be redeemed on ANY table."
+                      : `Free hours can only be redeemed on the ${planForm.bound_table_ids.length} selected table(s).`}
+                  </p>
                 </div>
               </div>
             )}
