@@ -47,8 +47,9 @@ export async function POST(request: Request) {
     };
   };
 
-  if (event.event === "payment.captured") {
-    const payment = event.payload.payment.entity;
+  if (event.event === "payment.captured" || event.event === "order.paid") {
+    const payment = event.payload.payment?.entity;
+    if (!payment) return NextResponse.json({ received: true });
     const admin = createAdminClient();
 
     // Find our payment row by razorpay_order_id

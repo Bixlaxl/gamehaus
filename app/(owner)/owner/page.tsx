@@ -359,6 +359,46 @@ export default async function OwnerDashboard({
     ? [...sortedHours].reverse().slice(0, 3).filter((b) => b.count >= 0)
     : [];
 
+  // Day-of-week Activity (0 = Sun, 1 = Mon, ..., 6 = Sat)
+  const istDayOf = (iso: string) => {
+    const ms = new Date(iso).getTime() + 5.5 * 60 * 60 * 1000;
+    return new Date(ms).getUTCDay();
+  };
+
+  const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayBuckets: Record<number, { count: number; revenue: number }> = {
+    0: { count: 0, revenue: 0 },
+    1: { count: 0, revenue: 0 },
+    2: { count: 0, revenue: 0 },
+    3: { count: 0, revenue: 0 },
+    4: { count: 0, revenue: 0 },
+    5: { count: 0, revenue: 0 },
+    6: { count: 0, revenue: 0 },
+  };
+
+  for (const item of filteredInsightItems) {
+    if (!item.actual_start) continue;
+    const dayIdx = istDayOf(item.actual_start);
+    if (dayIdx in dayBuckets) {
+      dayBuckets[dayIdx].count++;
+      dayBuckets[dayIdx].revenue += item.final_amount ?? 0;
+    }
+  }
+
+  const dayOrder = [0, 1, 2, 3, 4, 5, 6];
+  const sessionsByDay = dayOrder.map((d) => ({
+    dayIndex: d,
+    label: DAY_LABELS[d],
+    count: dayBuckets[d].count,
+    revenue: dayBuckets[d].revenue,
+  }));
+
+  const maxDayCount = Math.max(...sessionsByDay.map((d) => d.count), 1);
+  const hasDayData  = sessionsByDay.some((d) => d.count > 0);
+  const sortedDays  = [...sessionsByDay].sort((a, b) => b.count - a.count || b.revenue - a.revenue);
+  const busiestDays = hasDayData ? sortedDays.slice(0, 2).filter((d) => d.count > 0) : [];
+  const quietDays   = hasDayData ? [...sortedDays].reverse().slice(0, 2).filter((d) => d.count >= 0) : [];
+
   // Best-selling items — group by name (same item name across locations rolls up).
   // The join shape confuses Supabase's inferred row type when !inner is in
   // play; explicit shape here keeps the rest of the pipeline typed cleanly.
@@ -547,10 +587,11 @@ export default async function OwnerDashboard({
         </div>
       </div>
 
-      {/* ── 30-day insights: peak/slow hours + hourly distribution ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      {/* ── 30-day insights: peak/slow hours + day-of-week activity ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        {/* Hourly Activity */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
@@ -618,11 +659,83 @@ export default async function OwnerDashboard({
           )}
         </div>
 
-        {/* Most-profitable tables — vertical list on the right of the hour chart */}
+        {/* Day-of-week Activity */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-gray-500" /> Day-of-week activity
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Traffic & sessions by day · last 30 days
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center justify-end gap-1">
+                  <Flame className="h-2.5 w-2.5" style={{ color: "#ef4444" }} /> Busiest
+                </p>
+                <p className="text-sm font-bold tabular-nums text-gray-900 mt-0.5">
+                  {busiestDays.length > 0
+                    ? busiestDays.map((d) => d.label).join(" · ")
+                    : "—"}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center justify-end gap-1">
+                  <Snowflake className="h-2.5 w-2.5" style={{ color: "#6366f1" }} /> Quiet
+                </p>
+                <p className="text-sm font-bold tabular-nums text-gray-900 mt-0.5">
+                  {quietDays.length > 0
+                    ? quietDays.map((d) => d.label).join(" · ")
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+          {!hasDayData ? (
+            <div className="py-10 text-center text-sm text-gray-400">
+              No session history yet — busy days show up here.
+            </div>
+          ) : (
+            <div className="flex items-end gap-2" style={{ height: 110 }}>
+              {sessionsByDay.map((d) => {
+                const pct = d.count / maxDayCount;
+                const h   = Math.max(Math.round(pct * 90), d.count > 0 ? 6 : 0);
+                const isBusy = busiestDays.some((b) => b.dayIndex === d.dayIndex) && d.count > 0;
+                const isQuiet = quietDays.some((q) => q.dayIndex === d.dayIndex) && d.count === 0;
+                return (
+                  <div key={d.dayIndex} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                    <span className="text-[9px] font-semibold text-gray-400 tabular-nums leading-none">
+                      {d.count > 0 ? `${d.count}` : ""}
+                    </span>
+                    <div
+                      className="w-full rounded-t-md transition-all"
+                      style={{
+                        height: h,
+                        minHeight: d.count > 0 ? 6 : 0,
+                        background: isBusy ? "#ef4444" : isQuiet ? "#e5e7eb" : "#D4541A",
+                      }}
+                      title={`${d.label} — ${d.count} session${d.count === 1 ? "" : "s"} (${formatCurrency(d.revenue)})`}
+                    />
+                    <span className={`text-[10px] font-extrabold leading-none ${isBusy ? "text-red-500" : "text-gray-500"}`}>
+                      {d.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Most-profitable tables & Best-selling items ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Most-profitable tables */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4.5 border-b border-gray-100 flex items-center gap-2">
             <Crown className="h-5 w-5 text-amber-500" />
-            <p className="text-base font-black text-gray-900">Most profitable</p>
+            <p className="text-base font-black text-gray-900">Most profitable tables</p>
             <span className="ml-auto text-xs font-black uppercase tracking-widest text-gray-400">
               30 days
             </span>
@@ -659,63 +772,63 @@ export default async function OwnerDashboard({
             </div>
           )}
         </div>
-      </div>
 
-      {/* ── Best selling items ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-gray-100 flex items-center gap-2">
-          <Package className="h-5 w-5 text-emerald-600" />
-          <p className="text-base font-black text-gray-900">Best-selling items</p>
-          <span className="ml-auto text-xs font-black uppercase tracking-widest text-gray-400">
-            By revenue · 30 days
-          </span>
-        </div>
-        {topSellers.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-400">
-            No catalogue sales yet — once staff adds extras to orders, the top sellers appear here.
+        {/* Best selling items */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4.5 border-b border-gray-100 flex items-center gap-2">
+            <Package className="h-5 w-5 text-emerald-600" />
+            <p className="text-base font-black text-gray-900">Best-selling items</p>
+            <span className="ml-auto text-xs font-black uppercase tracking-widest text-gray-400">
+              By revenue · 30 days
+            </span>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {topSellers.map((s, i) => {
-              const maxRev = topSellers[0].revenue;
-              const pct    = (s.revenue / maxRev) * 100;
-              return (
-                <div key={s.name + i} className="px-6 py-4">
-                  <div className="flex items-center gap-4">
-                    <span
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0"
-                      style={{
-                        background: i === 0 ? "rgba(16,185,129,0.12)" : "rgba(0,0,0,0.04)",
-                        color:      i === 0 ? "#10b981" : "#6b7280",
-                      }}
-                    >
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-base font-black text-gray-900 truncate">{s.name}</p>
-                        <p className="text-base font-black tabular-nums text-gray-900 shrink-0">
-                          {formatCurrency(s.revenue)}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 mt-1.5">
-                        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${pct}%`, background: "#10b981" }}
-                          />
+          {topSellers.length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-gray-400">
+              No catalogue sales yet — once staff adds extras to orders, the top sellers appear here.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {topSellers.map((s, i) => {
+                const maxRev = topSellers[0].revenue;
+                const pct    = (s.revenue / maxRev) * 100;
+                return (
+                  <div key={s.name + i} className="px-6 py-4">
+                    <div className="flex items-center gap-4">
+                      <span
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0"
+                        style={{
+                          background: i === 0 ? "rgba(16,185,129,0.12)" : "rgba(0,0,0,0.04)",
+                          color:      i === 0 ? "#10b981" : "#6b7280",
+                        }}
+                      >
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-base font-black text-gray-900 truncate">{s.name}</p>
+                          <p className="text-base font-black tabular-nums text-gray-900 shrink-0">
+                            {formatCurrency(s.revenue)}
+                          </p>
                         </div>
-                        <p className="text-xs font-extrabold text-gray-500 tabular-nums shrink-0 w-20 text-right">
-                          {s.units} sold
-                        </p>
+                        <div className="flex items-center justify-between gap-3 mt-1.5">
+                          <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${pct}%`, background: "#10b981" }}
+                            />
+                          </div>
+                          <p className="text-xs font-extrabold text-gray-500 tabular-nums shrink-0 w-20 text-right">
+                            {s.units} sold
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Recent orders ── */}
