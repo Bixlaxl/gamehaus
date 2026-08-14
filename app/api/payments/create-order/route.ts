@@ -24,6 +24,19 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const creds = await getRazorpayCredentialsForOrder(admin, order_id);
 
+  // Single Source of Truth: Fetch exact backend total_amount from database
+  const { data: dbOrder } = await admin
+    .from("orders")
+    .select("total_amount, advance_paid")
+    .eq("id", order_id)
+    .maybeSingle();
+
+  const resolvedAmountInRupees = dbOrder?.total_amount
+    ? Math.max(0, (dbOrder.total_amount ?? 0) - (dbOrder.advance_paid ?? 0))
+    : (amount / 100);
+
+  const finalAmountInPaise = Math.round(resolvedAmountInRupees * 100);
+
   let rpOrder: { id: string; amount: number };
   try {
     const keyId = creds.keyId;
@@ -36,7 +49,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
         "Accept": "application/json",
       },
-      body: JSON.stringify({ amount, currency, receipt, notes: { order_id } }),
+      body: JSON.stringify({ amount: finalAmountInPaise, currency, receipt, notes: { order_id } }),
     });
     if (!res.ok) {
       const errBody = await res.text();
@@ -62,7 +75,7 @@ export async function POST(request: Request) {
 
   await admin.from("payments").insert({
     order_id,
-    amount: amount / 100,
+    amount: finalAmountInPaise / 100,
     method: "razorpay",
     razorpay_order_id: rpOrder.id,
     status: "pending",
