@@ -128,7 +128,7 @@ export function CouponsContent({
   // ── Create ──────────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: async (values: CouponForm) => {
-      const { error: dbError } = await supabase.from("coupons").insert({
+      const payload: any = {
         location_id:      values.location_id === "all" ? null : values.location_id,
         code:             values.code.toUpperCase(),
         discount_type:    values.discount_type,
@@ -139,8 +139,11 @@ export function CouponsContent({
         valid_until_time: values.time_mode === "time_slot" && values.valid_until_time ? values.valid_until_time : null,
         max_uses:         values.max_uses ? parseInt(values.max_uses) : null,
         is_public:        values.is_public,
-        valid_days:       values.valid_days.length > 0 ? values.valid_days : null,
-      });
+      };
+      if (values.valid_days && values.valid_days.length > 0) {
+        payload.valid_days = values.valid_days;
+      }
+      const { error: dbError } = await supabase.from("coupons").insert(payload);
       if (dbError) throw new Error(dbError.message);
     },
     onSuccess: () => {
@@ -218,7 +221,9 @@ export function CouponsContent({
           const newDays = values.valid_days || [];
           const same = oldDays.length === newDays.length && oldDays.every(d => newDays.includes(d));
           if (!same) {
-            payload.valid_days = newDays.length > 0 ? newDays : null;
+            if (newDays.length > 0) {
+              payload.valid_days = newDays;
+            }
             hasChanges = true;
           }
         }

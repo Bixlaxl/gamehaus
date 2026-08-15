@@ -60,12 +60,23 @@ export async function GET(request: Request) {
     }
     return true;
   });
+
+  // Deduplicate by order_item_id so identical booking entries never show double
+  const seenItemIds = new Set<string>();
+  const deduplicatedRows: typeof rows = [];
+  for (const b of rows) {
+    const itemId = (b.order_item as { id?: string } | null)?.id || b.order_item_id || b.id;
+    if (seenItemIds.has(itemId)) continue;
+    seenItemIds.add(itemId);
+    deduplicatedRows.push(b);
+  }
+
   const filtered = viewer.role === "staff" && viewer.location_id
-    ? rows.filter((b) => {
+    ? deduplicatedRows.filter((b) => {
         const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;
         return t?.location?.id === viewer.location_id;
       })
-    : rows;
+    : deduplicatedRows;
 
   return NextResponse.json(ok(filtered));
 }

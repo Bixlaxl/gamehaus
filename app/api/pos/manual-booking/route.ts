@@ -201,7 +201,7 @@ export async function POST(request: Request) {
     .from("orders")
     .insert({
       location_id,
-      type:           "online" as const,   // reuses the online schema — staff creating on behalf of caller
+      type:           "online" as const,   // reuses online schema for staff creating on behalf of caller
       customer_name,
       customer_phone,
       created_by:     session.user.id,
