@@ -147,7 +147,13 @@ export function addOneDay(dateStr: string): string {
   ].join("-");
 }
 
-export function getActualSlotDate(baseDate: string, timeStr: string, opening: string = "10:00", closing: string = "23:00"): string {
+export function getActualSlotDate(
+  baseDate: string,
+  timeStr: string,
+  opening: string = "10:00",
+  closing: string = "23:00",
+  nowInput: Date = new Date()
+): string {
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
   const openMins  = oh * 60 + om;
@@ -158,6 +164,14 @@ export function getActualSlotDate(baseDate: string, timeStr: string, opening: st
   const slotMins = sh * 60 + sm;
 
   if (crossesMidnight && slotMins < openMins) {
+    const curRaw = nowInput.getHours() * 60 + nowInput.getMinutes();
+    const y = nowInput.getFullYear();
+    const mo = String(nowInput.getMonth() + 1).padStart(2, "0");
+    const d = String(nowInput.getDate()).padStart(2, "0");
+    const todayStr = `${y}-${mo}-${d}`;
+    if (baseDate === todayStr && curRaw < closeMins) {
+      return baseDate;
+    }
     return addOneDay(baseDate);
   }
   return baseDate;

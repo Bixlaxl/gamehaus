@@ -114,20 +114,16 @@ function visibleSlots(opening: string, closing: string, dateStr: string, timezon
 }
 
 /* 7-day date strip */
-function buildDays(timezone: string, openingTime: string = "10:00") {
+function buildDays(timezone: string) {
   const days = [];
   const now = new Date();
-  const baseIso = getOperatingDate(now, openingTime);
-  const [y, m, d] = baseIso.split("-").map(Number);
-  const anchorDate = new Date(y, m - 1, d);
-
   for (let i = 0; i < 7; i++) {
-    const dayObj = new Date(anchorDate);
-    dayObj.setDate(anchorDate.getDate() + i);
-    const iso = getLocalDateString(timezone, dayObj);
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+    const iso = getLocalDateString(timezone, d);
     days.push({
       iso,
-      label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayObj.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" }),
+      label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" }),
     });
   }
   return days;
@@ -249,7 +245,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const open      = isOpen(location.opening_time, location.closing_time);
   const types     = ["all", ...new Set(tables.map(t => t.type))];
   const shown     = filter === "all" ? tables : tables.filter(t => t.type === filter);
-  const days      = useMemo(() => buildDays(location.timezone, location.opening_time), [location.timezone, location.opening_time]);
+  const days      = useMemo(() => buildDays(location.timezone), [location.timezone]);
   const cartCount = cart.items.length;
 
   /* All slots for the current sheet date */
