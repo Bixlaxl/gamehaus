@@ -919,15 +919,6 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                 );
                               }
 
-                              const [oh, om] = location.opening_time.split(":").map(Number);
-                              const [ch, cm] = location.closing_time.split(":").map(Number);
-                              const openMins = oh * 60 + om;
-                              const closeMins = ch * 60 + cm;
-                              const crossesMidnight = closeMins < openMins;
-                              const [sh, sm] = s.split(":").map(Number);
-                              const slotMins = sh * 60 + sm;
-                              const isNextDay = crossesMidnight && slotMins < openMins;
-
                               const bg = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? middleBg : (dark ? "#18181b" : "#ffffff");
                               const borderColor = isStartSlot ? startBg : isStopSlot ? stopBg : isInterior ? (dark ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)") : (dark ? "#27272a" : "#f1f5f9");
                               const fg = (isStartSlot || isStopSlot) ? "#ffffff" : (dark ? "#f4f4f5" : "#09090b");
@@ -952,11 +943,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
                                   <span className="text-[13px] font-bold tabular-nums leading-tight tracking-tight" style={{ color: fg }}>
                                     {display}
                                   </span>
-                                  {isNextDay && (
-                                    <span className="text-[9px] font-extrabold tracking-tight mt-0.5" style={{ color: (isStartSlot || isStopSlot) ? "rgba(255,255,255,0.9)" : "#D4541A" }}>
-                                      Next Day
-                                    </span>
-                                  )}
+
                                 </button>
                               );
                             })}
