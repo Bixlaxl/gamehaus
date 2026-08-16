@@ -143,7 +143,12 @@ export function CouponsContent({
       if (values.valid_days && values.valid_days.length > 0) {
         payload.valid_days = values.valid_days;
       }
-      const { error: dbError } = await supabase.from("coupons").insert(payload);
+      let { error: dbError } = await supabase.from("coupons").insert(payload);
+      if (dbError && dbError.message.includes("valid_days")) {
+        delete payload.valid_days;
+        const retry = await supabase.from("coupons").insert(payload);
+        dbError = retry.error;
+      }
       if (dbError) throw new Error(dbError.message);
     },
     onSuccess: () => {
@@ -233,7 +238,12 @@ export function CouponsContent({
         return;
       }
 
-      const { error } = await supabase.from("coupons").update(payload).eq("id", id);
+      let { error } = await supabase.from("coupons").update(payload).eq("id", id);
+      if (error && error.message.includes("valid_days")) {
+        delete payload.valid_days;
+        const retry = await supabase.from("coupons").update(payload).eq("id", id);
+        error = retry.error;
+      }
       if (error) throw error;
     },
     onMutate: async ({ id, values }) => {
@@ -271,7 +281,11 @@ export function CouponsContent({
       setEditError(null);
       toast.success("Coupon updated");
     },
-    onError: (e: Error) => setEditError(e.message),
+    onError: (e: Error, __, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+      setEditError(e.message);
+      toast.error(e.message);
+    },
   });
 
   // ── Toggle active ────────────────────────────────────────────────────────
