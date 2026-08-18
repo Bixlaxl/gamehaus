@@ -82,6 +82,9 @@ export async function GET(request: Request) {
       .in("id", danglingIds)
       .then(({ error }) => {
         if (error) console.error("Failed to auto-finalize dangling orders:", error);
+        else {
+          admin.from("order_items").update({ status: "finished" }).in("order_id", danglingIds).then(() => {});
+        }
       });
   }
 

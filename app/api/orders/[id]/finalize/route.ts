@@ -319,6 +319,8 @@ export async function POST(
 
   const itemUpdatePromises = activeItems.map(item =>
     admin.from("order_items").update({
+      status: "finished",
+      actual_end: item.actual_end ?? now.toISOString(),
       free_hours_to_redeem: (item as any).free_hours_to_redeem ?? null,
       membership_id: (item as any).membership_id ?? null,
     }).eq("id", item.id)

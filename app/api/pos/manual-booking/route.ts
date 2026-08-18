@@ -151,7 +151,7 @@ export async function POST(request: Request) {
   const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([
     admin
       .from("order_items")
-      .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status")
+      .select("id, table_id, actual_start, expected_end, scheduled_start, scheduled_end, status, order:orders(status)")
       .eq("table_id", table_id)
       .eq("is_deleted", false)
       .in("status", ["running", "scheduled"]),
@@ -167,6 +167,8 @@ export async function POST(request: Request) {
   let isConflict = false;
 
   for (const ex of (existingItems ?? [])) {
+    const parentStatus = (ex as any).order?.status;
+    if (parentStatus === "cancelled" || parentStatus === "finalized" || parentStatus === "completed" || parentStatus === "closed") continue;
     const exS = ex.status === "running" ? ex.actual_start : ex.scheduled_start;
     const exE = ex.status === "running" ? ex.expected_end : ex.scheduled_end;
     if (exS && exE && overlaps(startMs, endMs, new Date(exS).getTime(), new Date(exE).getTime())) {

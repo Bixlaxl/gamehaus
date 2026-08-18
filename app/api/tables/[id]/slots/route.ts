@@ -52,7 +52,7 @@ export async function GET(
     // Ignore order items from cancelled orders or expired unpaid guest drafts
     const parentOrder = item.order as { type?: string; status?: string; advance_paid?: number; created_by?: string | null; created_at?: string } | null;
     if (parentOrder) {
-      if (parentOrder.status === "cancelled") return;
+      if (parentOrder.status === "cancelled" || parentOrder.status === "finalized" || parentOrder.status === "completed" || parentOrder.status === "closed") return;
       const isUnpaidGuestDraft = parentOrder.type === "online" && !parentOrder.created_by && (parentOrder.advance_paid ?? 0) === 0;
       if (isUnpaidGuestDraft) {
         const orderCreatedMs = new Date(parentOrder.created_at ?? 0).getTime();
