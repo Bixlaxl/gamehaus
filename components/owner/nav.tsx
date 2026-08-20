@@ -10,12 +10,13 @@ import { StockAlertsBell } from "@/components/inventory/stock-alerts-bell";
 import {
   MapPin, Grid3X3, Users, BookOpen, BarChart2,
   Tag, Settings, LogOut, Home, UserRound, Package, CreditCard,
-  Sun, Moon, Receipt,
+  Sun, Moon, Receipt, Trophy
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
 const navItems = [
   { href: "/owner",              label: "Overview",    icon: Home,       exact: true },
+  { href: "/owner/tournaments",  label: "Tournaments", icon: Trophy },
   { href: "/owner/locations",    label: "Locations",   icon: MapPin },
   { href: "/owner/tables",       label: "Tables",      icon: Grid3X3 },
   { href: "/owner/inventory",    label: "Inventory",   icon: Package },

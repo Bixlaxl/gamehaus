@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Clock, ChevronRight, Lock, Loader2 } from "lucide-react";
+import { MapPin, Clock, ChevronRight, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { TournamentModal } from "./tournament-modal";
 
 interface Location {
   id: string;
@@ -107,25 +108,51 @@ function LocationSlideshow({ image_urls, alt, accent }: { image_urls: string[]; 
 }
 
 export function SplashHero({ locations, coupons = [] }: { locations: Location[]; coupons?: Coupon[] }) {
-  const [phase, setPhase] = useState<Phase>("loading");
+  const [phase, setPhase] = useState<Phase>("enter");
   const [adminLoading, setAdminLoading] = useState(false);
+  const [showTournamentModal, setShowTournamentModal] = useState(false);
+  const [claimedCount, setClaimedCount] = useState(0);
   const router = useRouter();
 
-  // Prefetch the location browse routes (RSC + JS chunks) so first tap is instant.
-  // The location page server-fetches today's slot data into the RSC payload,
-  // so router.prefetch covers both the JS chunks and the initial slot data.
+  // Prefetch routes, check tournament slots, & schedule splash curtain transition
   useEffect(() => {
     for (const loc of locations) router.prefetch(`/${loc.slug}`);
     router.prefetch("/login");
+
+    let isFull = false;
+
+    // Fetch real-time tournament slots count
+    fetch("/api/tournament/registrations")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && typeof data.count === "number") {
+          setClaimedCount(data.count);
+          if (data.count >= 32) {
+            isFull = true;
+            setShowTournamentModal(false);
+          }
+        }
+      })
+      .catch(() => {});
+
+    // Splash curtain finishes at 1200ms
+    const splashTimer = setTimeout(() => {
+      setPhase("gone");
+    }, 1200);
+
+    // Pop up tournament modal seamlessly right as curtain lifts (1020ms)
+    const modalTimer = setTimeout(() => {
+      if (!isFull) {
+        setShowTournamentModal(true);
+      }
+    }, 1020);
+
+    return () => {
+      clearTimeout(splashTimer);
+      clearTimeout(modalTimer);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function onImageReady() {
-    setPhase("enter");
-    setTimeout(() => setPhase("hold"),  200);
-    setTimeout(() => setPhase("exit"),  1400);
-    setTimeout(() => setPhase("gone"),  2100);
-  }
 
   const bg        = "#F5F3EE";
   const textPri   = "#1A1A1A";
@@ -135,99 +162,114 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
   return (
     <div className="relative min-h-screen transition-colors duration-300" style={{ background: bg }}>
 
-      {/* ── Curtain splash ─────────────────────────────────────── */}
+      {/* ── Curtain splash (Native GPU Keyframe Animation) ── */}
       {phase !== "gone" && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center"
-          style={{
-            background: "#0A0A0A",
-            transform: phase === "exit" ? "translateY(-100%)" : "translateY(0)",
-            transition: phase === "exit"
-              ? "transform 700ms cubic-bezier(0.22, 1, 0.36, 1)"
-              : "none",
-          }}
-        >
+        <>
+          <style>{`
+            @keyframes curtainSlideUp {
+              0% { transform: translateY(0); }
+              45% { transform: translateY(0); }
+              90% { transform: translateY(-100%); }
+              100% { transform: translateY(-100%); visibility: hidden; }
+            }
+            @keyframes logoScaleEnter {
+              0% { transform: scale(0.8); opacity: 0; }
+              40% { transform: scale(1); opacity: 1; }
+              100% { transform: scale(1); opacity: 1; }
+            }
+            @keyframes textFadeHold {
+              0% { opacity: 0; transform: translateY(8px); }
+              45% { opacity: 1; transform: translateY(0); }
+              100% { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes lineProgress {
+              0% { width: 0%; }
+              70% { width: 100%; }
+              100% { width: 100%; }
+            }
+          `}</style>
           <div
-            className="absolute rounded-full pointer-events-none"
+            className="fixed inset-0 z-[200] flex flex-col items-center justify-center pointer-events-none"
             style={{
-              width: 400, height: 400,
-              background: "radial-gradient(circle, rgba(212,84,26,0.2) 0%, transparent 65%)",
-              opacity: phase === "hold" ? 1 : 0,
-              transition: "opacity 700ms ease-in-out",
-            }}
-          />
-
-          <div
-            style={{
-              opacity:   phase === "loading" ? 0 : 1,
-              transform: phase === "loading" ? "scale(0.78)" : "scale(1)",
-              transition: phase === "enter"
-                ? "opacity 500ms ease-out, transform 650ms cubic-bezier(0.22,1,0.36,1)"
-                : "none",
+              background: "#0A0A0A",
+              animation: "curtainSlideUp 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards",
             }}
           >
-            <Image
-              src="/image.png"
-              alt="Gamehaus"
-              width={190}
-              height={190}
-              priority
-              className="rounded-full w-36 h-36 sm:w-[190px] sm:h-[190px]"
-              onLoad={onImageReady}
+            <div
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                width: 400, height: 400,
+                background: "radial-gradient(circle, rgba(212,84,26,0.25) 0%, transparent 65%)",
+              }}
+            />
+
+            <div style={{ animation: "logoScaleEnter 1.0s ease-out forwards" }}>
+              <Image
+                src="/image.png"
+                alt="Gamehaus"
+                width={190}
+                height={190}
+                priority
+                className="rounded-full w-36 h-36 sm:w-[190px] sm:h-[190px]"
+              />
+            </div>
+
+            <div
+              className="mt-4 sm:mt-5 text-center px-6"
+              style={{ animation: "textFadeHold 1.0s ease-out forwards" }}
+            >
+              <p className="text-[#DDDDDD] text-sm font-bold tracking-[0.2em] sm:tracking-[0.3em] uppercase">
+                Snookers &amp; Gaming
+              </p>
+              <p className="text-[#AAAAAA] text-xs font-bold tracking-[0.15em] sm:tracking-[0.2em] uppercase mt-1">
+                by Nerf Turf
+              </p>
+            </div>
+
+            <div
+              className="absolute bottom-0 left-0 right-0"
+              style={{ height: 3, background: "linear-gradient(90deg, transparent, #D4541A 20%, #FF7A45 50%, #D4541A 80%, transparent)" }}
+            />
+            <div
+              className="absolute bottom-[3px] left-0 h-[1px]"
+              style={{
+                background: "rgba(212,84,26,0.5)",
+                animation: "lineProgress 0.8s ease-out forwards",
+              }}
             />
           </div>
-
-          <div
-            className="mt-4 sm:mt-5 text-center px-6"
-            style={{
-              opacity:   phase === "hold" ? 1 : 0,
-              transform: phase === "hold" ? "translateY(0)" : "translateY(10px)",
-              transition: "opacity 500ms ease-in-out, transform 500ms ease-out",
-            }}
-          >
-            <p className="text-[#DDDDDD] text-sm font-bold tracking-[0.2em] sm:tracking-[0.3em] uppercase">
-              Snookers &amp; Gaming
-            </p>
-            <p className="text-[#AAAAAA] text-xs font-bold tracking-[0.15em] sm:tracking-[0.2em] uppercase mt-1">
-              by Nerf Turf
-            </p>
-          </div>
-
-          <div
-            className="absolute bottom-0 left-0 right-0"
-            style={{ height: 3, background: "linear-gradient(90deg, transparent, #D4541A 20%, #FF7A45 50%, #D4541A 80%, transparent)" }}
-          />
-          <div
-            className="absolute bottom-[3px] left-0 h-[1px]"
-            style={{
-              background: "rgba(212,84,26,0.3)",
-              width: phase === "hold" ? "100%" : "0%",
-              transition: "width 1.2s ease-out",
-            }}
-          />
-        </div>
+        </>
       )}
 
-      {/* ── Main content ───────────────────────────────────────── */}
-      <div>
-        {/* Header */}
-        <header
-          className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-2 max-w-5xl mx-auto"
-        >
-          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full overflow-hidden shrink-0">
-            <Image src="/image.png" alt="Gamehaus" width={80} height={80} className="object-cover w-full h-full" />
-          </div>
+      <div className="min-h-screen pb-16">
 
-          <div className="flex items-center gap-3">
+        {/* Top Navbar */}
+        <header className="px-4 sm:px-5 py-4 border-b border-[#E8E3D9] dark:border-[#242424]">
+          <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Image
+                src="/image.png"
+                alt="Gamehaus"
+                width={40}
+                height={40}
+                className="rounded-full shadow-sm border border-black/10 dark:border-white/10"
+              />
+            </div>
+
             <button
-              onClick={() => { setAdminLoading(true); router.push("/login"); }}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors
-                bg-[#111111] text-white border-[#111111] hover:bg-white hover:text-[#111111]
-                dark:bg-white dark:text-[#111111] dark:border-white dark:hover:bg-[#111111] dark:hover:text-white"
+              onClick={() => {
+                setAdminLoading(true);
+                router.push("/login");
+              }}
+              disabled={adminLoading}
+              type="button"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1A1A1A] hover:bg-[#2A2A2A] dark:bg-[#222222] dark:hover:bg-[#2C2C2C] text-white font-medium text-xs sm:text-sm tracking-wide shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              {adminLoading
-                ? <Loader2 className="h-3 w-3 animate-spin" />
-                : <Lock className="h-3 w-3" />}
+              {adminLoading ? (
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Lock className="h-3.5 w-3.5" />
+              )}
               Admin
             </button>
           </div>
@@ -259,7 +301,6 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
             {locations.map((loc, i) => {
               const open   = isOpenNow(loc.opening_time, loc.closing_time);
               const accent = i === 0 ? "#D4541A" : "#C4893A";
-              const delay  = 180 + i * 120;
 
               return (
                 <Link
@@ -362,6 +403,14 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
           </div>
         </div>
       </div>
+
+      {/* ── Tournament Showcase & Registration Modal ── */}
+      <TournamentModal
+        isOpen={showTournamentModal}
+        claimedSlots={claimedCount}
+        delayOffset={1350}
+        onClose={() => setShowTournamentModal(false)}
+      />
     </div>
   );
 }

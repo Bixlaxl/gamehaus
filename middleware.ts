@@ -108,15 +108,16 @@ export async function middleware(request: NextRequest) {
 function applyCsp(response: NextResponse, nonce: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseHost = supabaseUrl ? new URL(supabaseUrl).host : "";
+  const isDev = process.env.NODE_ENV === "development";
 
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com https://vercel.live;
-    style-src 'self' 'unsafe-inline';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com https://vercel.live${isDev ? " 'unsafe-eval'" : ""};
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     img-src 'self' data: blob: https://${supabaseHost} https://*.supabase.co;
     connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://api.razorpay.com https://vitals.vercel-insights.com;
     frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com;
-    font-src 'self' data:;
+    font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';

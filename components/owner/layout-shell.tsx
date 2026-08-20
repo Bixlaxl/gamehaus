@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { Menu, X, LogOut, Sun, Moon, Home, MapPin, Grid3X3, Package, Users, BookOpen, Receipt, UserRound, CreditCard, Tag, BarChart2, Settings } from "lucide-react";
+import { Menu, X, LogOut, Sun, Moon, Home, MapPin, Grid3X3, Package, Users, BookOpen, Receipt, UserRound, CreditCard, Tag, BarChart2, Settings, Trophy } from "lucide-react";
 import { useTheme } from "next-themes";
 import { StockAlertsBell } from "@/components/inventory/stock-alerts-bell";
 import { LowStockNavBadge } from "@/components/inventory/low-stock-nav-badge";
@@ -13,6 +13,7 @@ import { OwnerNav } from "./nav";
 
 const navItems = [
   { href: "/owner",              label: "Overview",    icon: Home,       exact: true },
+  { href: "/owner/tournaments",  label: "Tournaments", icon: Trophy },
   { href: "/owner/locations",    label: "Locations",   icon: MapPin },
   { href: "/owner/tables",       label: "Tables",      icon: Grid3X3 },
   { href: "/owner/inventory",    label: "Inventory",   icon: Package },

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     if (!payment) return NextResponse.json({ received: true });
     const admin = createAdminClient();
 
-    // Find our payment row by razorpay_order_id
+    // ── Handle booking payments ──────────────────────────────────────────────
     const { data: paymentRow } = await admin
       .from("payments")
       .select("id, order_id, amount, status")
@@ -61,12 +61,11 @@ export async function POST(request: Request) {
 
     if (paymentRow) {
       if (paymentRow.status === "completed") {
-        console.log(`[Webhook] Payment ${paymentRow.id} already completed. Skipping duplicate processing.`);
+        console.log(`[Webhook] Payment ${paymentRow.id} already completed. Skipping.`);
         return NextResponse.json({ received: true });
       }
 
       const now = new Date().toISOString();
-
       const orderId = paymentRow.order_id;
 
       const { data: existingBookings } = await admin
@@ -81,7 +80,7 @@ export async function POST(request: Request) {
             .select("id, scheduled_start, scheduled_end")
             .eq("order_id", orderId)
             .eq("is_deleted", false);
-            
+
           const bookingsToInsert = (items ?? [])
             .filter((item) => item.scheduled_start && item.scheduled_end)
             .map((item) => ({
@@ -96,7 +95,6 @@ export async function POST(request: Request) {
             await admin.from("bookings").insert(bookingsToInsert);
           }
         } else {
-          // Self-heal: if bookings already exist (e.g. cancelled by a race condition), restore them to confirmed!
           await admin.from("bookings").update({ status: "confirmed" }).eq("order_id", orderId);
         }
       })();
@@ -107,17 +105,16 @@ export async function POST(request: Request) {
         .eq("id", orderId)
         .single();
 
-      // All of these are independent — run in parallel
       await Promise.all([
         admin.from("payments").update({
-          status:              "completed",
+          status: "completed",
           razorpay_payment_id: payment.id,
-          collected_at:        now,
+          collected_at: now,
         }).eq("id", paymentRow.id),
         admin.from("orders").update({
           status: "open",
           advance_paid: paymentRow.amount,
-          points_redeemed_online: order?.points_redeemed ?? 0
+          points_redeemed_online: order?.points_redeemed ?? 0,
         }).eq("id", orderId),
         admin.from("order_items").update({ status: "scheduled" }).eq("order_id", orderId).eq("status", "cancelled"),
         bookingsPromise,
@@ -126,7 +123,7 @@ export async function POST(request: Request) {
       if (order?.customer_phone) {
         const settings = await getAppSettings(admin);
         const pointsEarned = Math.floor(paymentRow.amount / settings.loyalty.earn_rupees_per_point);
-        const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
+        const netPoints = pointsEarned - (order.points_redeemed ?? 0);
 
         const { data: profile } = await admin
           .from("customer_profiles")
@@ -137,22 +134,48 @@ export async function POST(request: Request) {
         if (profile) {
           await admin.from("customer_profiles").update({
             points_balance: Math.max(0, profile.points_balance + netPoints),
-            last_visit_at:  now,
+            last_visit_at: now,
           }).eq("phone", order.customer_phone);
         } else {
           await admin.from("customer_profiles").insert({
-            phone:          order.customer_phone,
-            name:           order.customer_name,
+            phone: order.customer_phone,
+            name: order.customer_name,
             points_balance: Math.max(0, netPoints),
-            visit_count:    0,
-            total_spent:    0,
-            last_visit_at:  now,
+            visit_count: 0,
+            total_spent: 0,
+            last_visit_at: now,
           });
         }
       }
 
-      // Trigger WhatsApp booking confirmation notification
       await sendWhatsAppConfirmation(paymentRow.order_id);
+      return NextResponse.json({ received: true });
+    }
+
+    // ── Handle tournament payments (webhook fallback) ─────────────────────────
+    // Fires when Razorpay captures payment but the client callback failed
+    // (browser closed, network drop). Ensures no paid player is left unregistered.
+    try {
+      const { data: tournamentReg } = await (admin
+        .from("tournament_registrations" as any) as any)
+        .select("id, pass_id, status")
+        .eq("razorpay_order_id", payment.order_id)
+        .maybeSingle();
+
+      if (tournamentReg && tournamentReg.status !== "paid") {
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        let suffix = "";
+        for (let i = 0; i < 6; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
+        const passId = tournamentReg.pass_id || `GH-POOL-${suffix}`;
+
+        await (admin.from("tournament_registrations" as any) as any)
+          .update({ status: "paid", payment_id: payment.id, pass_id: passId })
+          .eq("id", tournamentReg.id);
+
+        console.log(`[Webhook] Tournament ${tournamentReg.id} confirmed via webhook fallback. Pass: ${passId}`);
+      }
+    } catch (err) {
+      console.error("[Webhook] Tournament fallback check failed:", err);
     }
   }
 
