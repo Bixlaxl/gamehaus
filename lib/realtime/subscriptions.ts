@@ -35,9 +35,9 @@ export function subscribeToPOS(
       (payload) => handlers.handleOrderChange(payload as Parameters<typeof handlers.handleOrderChange>[0])
     )
     .on(
-      // No direct handler for bookings — invalidate only the bookings query.
+      // Invalidate bookings on any booking state change (INSERT, UPDATE, DELETE)
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "bookings" },
+      { event: "*", schema: "public", table: "bookings" },
       () => handlers.onBookingsChange?.()
     )
     .on(

@@ -737,114 +737,6 @@ function PanelWalkIn({
   );
 }
 
-// ─── Inline player / controller picker for a running session ────────────────
-// Optimistic: store updates the moment a chip is tapped (so the bill in the
-// header recomputes instantly), reverts if the API call fails.
-function PeoplePicker({
-  item, locationId,
-}: {
-  item: POSOrder["items"][number];
-  locationId: string;
-}) {
-  const patchOrderItem = usePOSStore((s) => s.patchOrderItem);
-  const qc = useQueryClient();
-  const [saving, setSaving] = useState<number | null>(null);
-
-  const isSimulator = item.table ? isSimulatorTable(item.table) : false;
-  const pricing = useMemo(() => {
-    if (item.selected_mode_name && item.table?.modes && Array.isArray(item.table.modes)) {
-      const mode = (item.table.modes as any[]).find(m => m.name === item.selected_mode_name);
-      if (mode?.people_pricing) {
-        return mode.people_pricing as Record<string, number>;
-      }
-    }
-    return (item.table?.people_pricing ?? {}) as Record<string, number>;
-  }, [item.table, item.selected_mode_name]);
-
-  const options  = useMemo(() => {
-    const dbKeys = Object.keys(pricing).filter(k => Boolean(pricing[k])).sort((a, b) => Number(a) - Number(b));
-    if (dbKeys.length === 0 && isSimulator) {
-      return ["1", "2"];
-    }
-    return dbKeys;
-  }, [pricing, isSimulator]);
-
-  const baseRate = useMemo(() => {
-    if (item.selected_mode_name && item.table?.modes && Array.isArray(item.table.modes)) {
-      const mode = (item.table.modes as any[]).find(m => m.name === item.selected_mode_name);
-      if (mode && typeof mode.hourly_rate === "number") {
-        return mode.hourly_rate;
-      }
-    }
-    return item.table?.hourly_rate ?? item.rate_per_hour;
-  }, [item.table, item.selected_mode_name, item.rate_per_hour]);
-
-  if (options.length === 0) return null;
-  const label    = isSimulator ? "player" : item.table?.type === "ps5" ? "controller" : "player";
-  const current  = item.num_people ?? null;
-
-  async function pick(n: number) {
-    if (saving) return;
-    const prev = { num_people: item.num_people, rate_per_hour: item.rate_per_hour };
-    let newRate = pricing[String(n)] ?? baseRate;
-    if (isSimulator && !pricing[String(n)] && n === 2) {
-      newRate = baseRate * 2;
-    }
-    setSaving(n);
-    patchOrderItem(item.id, { num_people: n, rate_per_hour: newRate });
-    const res = await fetch("/api/sessions/people", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ order_item_id: item.id, num_people: n }),
-    });
-    if (!res.ok) {
-      patchOrderItem(item.id, prev);
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      toast.error(body.error ?? `Failed to update ${label}s`);
-    } else {
-      qc.invalidateQueries({ queryKey: ["pos-orders", locationId] });
-    }
-    setSaving(null);
-  }
-
-  return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#0a0a0a] border border-gray-200 dark:border-[#222]">
-      <span className="text-[11px] font-bold uppercase tracking-wide text-gray-600 dark:text-[#999] shrink-0">
-        {label}s
-      </span>
-      <div className="flex gap-1 flex-wrap justify-end">
-        {options.map((n: string, idx: number) => {
-          const num = Number(n);
-          let selected = current === num;
-          let labelText = n;
-
-          if (idx === 0 && num > 1) {
-            labelText = `1-${n}`;
-            selected = current !== null && current <= num;
-          }
-
-          return (
-            <button
-              key={n}
-              onClick={() => pick(num)}
-              disabled={saving !== null}
-              className={`min-w-[34px] px-2 py-1 rounded-md text-xs font-bold transition-all disabled:opacity-50 ${
-                selected
-                  ? "text-white"
-                  : "bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] text-gray-700 dark:text-[#ccc]"
-              }`}
-              style={selected ? { background: "#D4541A" } : {}}
-              title={`₹${pricing[n] ?? (isSimulator && n === "2" ? baseRate * 2 : baseRate)}/hr`}
-            >
-              {saving === num ? "…" : labelText}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ─── Session: running or bill-ready order ─────────────────────────────────────
 
 function PanelSession({
@@ -1361,13 +1253,7 @@ function PanelSession({
                 </div>
               </div>
 
-              {/* Players / controllers — only when the table has tiered pricing
-                  AND the session is still adjustable (not yet finalized). */}
-              {(item.status === "running" || item.status === "scheduled") &&
-                ((item.table?.people_pricing && Object.keys(item.table.people_pricing).length > 0) ||
-                 (item.table && isSimulatorTable(item.table))) && (
-                  <PeoplePicker item={item} locationId={locationId} />
-              )}
+
 
 
               {/* Bill-ready: show full session timings (Started → Ended) */}
