@@ -339,7 +339,7 @@ export default function OwnerTournamentsPage() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-gray-500">
-                    No participants found. Click "+ Add Participant" to register walk-ins or reserve spots.
+                    No participants found. Click &quot;+ Add Participant&quot; to register walk-ins or reserve spots.
                   </td>
                 </tr>
               ) : (
