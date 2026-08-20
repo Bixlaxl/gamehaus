@@ -88,14 +88,14 @@ export function BookingsContent({
     const id = setInterval(() => setActionTick((t) => t + 1), 30_000);
     return () => clearInterval(id);
   }, [mode]);
-  const [date, setDate]           = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate]           = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
   // The date this component was first mounted on. Used to decide whether the
   // SSR-passed initialBookings actually applies to the date the user is now
   // viewing. Without this gate, TanStack treats initialData as fresh for
   // every new queryKey, so switching to a previous date showed today's data
   // and never ran the fetch at all.
   const [initialDate]             = useState(date);
-  const [locationFilter, setLoc]  = useState("all");
+  const [locationFilter, setLoc]  = useState(staffLocationId || "all");
   const [typeFilter, setType]     = useState("all");
   const [statusFilter, setStatus] = useState("all");
   const [manualOpen,    setManualOpen] = useState(false);
@@ -146,7 +146,7 @@ export function BookingsContent({
     setDate(d.toISOString().split("T")[0]);
   }
 
-  const isToday      = date === new Date().toISOString().split("T")[0];
+  const isToday      = date === new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const displayDate  = new Date(date + "T12:00:00").toLocaleDateString("en-IN", {
     weekday: "short", day: "numeric", month: "short", year: "numeric",
   });
@@ -165,8 +165,14 @@ export function BookingsContent({
     staleTime: 5 * 60 * 1000,
   });
 
-  const opening = locations?.[0]?.opening_time ?? "10:00";
-  const closing = locations?.[0]?.closing_time ?? "23:00";
+  const effectiveLocation = (mode === "staff" && staffLocationId)
+    ? (locations ?? []).find((l) => l.id === staffLocationId) || (initialLocations ?? []).find((l) => l.id === staffLocationId)
+    : (locationFilter !== "all" ? (locations ?? []).find((l) => l.id === locationFilter) : null) || locations?.[0];
+
+  const rawOpening = effectiveLocation?.opening_time ?? "10:00:00";
+  const rawClosing = effectiveLocation?.closing_time ?? "23:00:00";
+  const opening = rawOpening.length === 5 ? `${rawOpening}:00` : rawOpening;
+  const closing = rawClosing.length === 5 ? `${rawClosing}:00` : rawClosing;
 
   // Staff mode: action buttons are gated by THE STAFF'S OWN location hours.
   // Read the recompute trigger so this re-evaluates every 30s.
@@ -286,9 +292,10 @@ export function BookingsContent({
     return ["all", ...typesSet];
   }, [bookings]);
 
-  const filtered = useMemo(() => (bookings ?? []).filter((b) => {
+  const filtered = useMemo(() => (bookings ?? []).filter((b: any) => {
     const table = b.order_item?.table as TableRef | null;
-    if (locationFilter !== "all" && table?.location?.id !== locationFilter) return false;
+    const itemLocId = table?.location?.id || (table as any)?.location_id || b.order?.location_id;
+    if (locationFilter !== "all" && itemLocId !== locationFilter) return false;
     if (typeFilter     !== "all" && table?.type !== typeFilter) return false;
     if (statusFilter   !== "all" && b.status !== statusFilter) return false;
     return true;

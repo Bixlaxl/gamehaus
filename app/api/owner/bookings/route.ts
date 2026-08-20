@@ -72,9 +72,10 @@ export async function GET(request: Request) {
   }
 
   const filtered = viewer.role === "staff" && viewer.location_id
-    ? deduplicatedRows.filter((b) => {
-        const t = (b.order_item as { table?: { location?: { id?: string } } } | null)?.table;
-        return t?.location?.id === viewer.location_id;
+    ? deduplicatedRows.filter((b: any) => {
+        const t = b.order_item?.table;
+        const locId = t?.location?.id || t?.location_id || b.order?.location_id;
+        return locId === viewer.location_id;
       })
     : deduplicatedRows;
 
