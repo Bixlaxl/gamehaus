@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
-import { isSlotInCouponTimeWindow, formatFriendlyTime, isSlotOnCouponDays, formatFriendlyDays } from "@/lib/coupons";
+import { calculateCouponDiscount } from "@/lib/coupons";
 
 export const runtime = "edge";
 
 /**
  * Validate a coupon code against all rules (active, date window, time window, usage cap,
  * location scope) and return the resolved discount amount for a given subtotal.
- *
- * Returns ok({ valid: false, reason }) on a known invalid code so the UI can
- * show a friendly message without treating it as an error.
+ * Supports pro-rated discounts for slots partially overlapping with Happy Hours.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -52,37 +50,13 @@ export async function GET(request: Request) {
     return NextResponse.json(ok({ valid: false, reason: "This code isn't valid at this location" }));
   }
 
-  if (coupon.valid_days && coupon.valid_days.length > 0) {
-    if (!isSlotOnCouponDays(slotStart, coupon.valid_days)) {
-      const daysFmt = formatFriendlyDays(coupon.valid_days);
-      return NextResponse.json(ok({
-        valid: false,
-        reason: `This coupon is only valid on: ${daysFmt}`
-      }));
-    }
-  }
-
-  if (coupon.valid_from_time && coupon.valid_until_time) {
-    if (!isSlotInCouponTimeWindow(slotStart, slotEnd, coupon.valid_from_time, coupon.valid_until_time)) {
-      const fromFmt = formatFriendlyTime(coupon.valid_from_time);
-      const untilFmt = formatFriendlyTime(coupon.valid_until_time);
-      return NextResponse.json(ok({
-        valid: false,
-        reason: `This coupon is only valid for slots booked between ${fromFmt} and ${untilFmt}`
-      }));
-    }
-  }
-
-  // Compute discount against the provided amount (defensive — caller can pass 0
-  // just to validate the code, then call again with real amount on submit)
-  let discountAmount = 0;
-  if (amount > 0) {
-    if (coupon.discount_type === "percent") {
-      discountAmount = Math.round((amount * coupon.discount_value) / 100 * 100) / 100;
-    } else {
-      discountAmount = coupon.discount_value;
-    }
-    discountAmount = Math.min(discountAmount, amount);
+  // Calculate pro-rated discount and check day/time window
+  const calc = calculateCouponDiscount(coupon, slotStart, slotEnd, amount);
+  if (!calc.valid) {
+    return NextResponse.json(ok({
+      valid: false,
+      reason: calc.reason ?? "Coupon is not applicable to this slot"
+    }));
   }
 
   return NextResponse.json(
@@ -92,7 +66,10 @@ export async function GET(request: Request) {
       code:            coupon.code,
       discount_type:   coupon.discount_type,
       discount_value:  coupon.discount_value,
-      discount_amount: discountAmount,
+      discount_amount: calc.discount_amount,
+      is_prorated:     calc.is_prorated,
+      overlap_minutes: calc.overlap_minutes,
+      total_minutes:   calc.total_minutes,
     })
   );
 }

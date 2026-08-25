@@ -35,7 +35,16 @@ interface CustomerLookup {
 type CouponState =
   | { status: "idle" }
   | { status: "checking" }
-  | { status: "valid"; code: string; discount_amount: number; discount_type: "percent" | "flat"; discount_value: number }
+  | {
+      status: "valid";
+      code: string;
+      discount_amount: number;
+      discount_type: "percent" | "flat";
+      discount_value: number;
+      is_prorated?: boolean;
+      overlap_minutes?: number;
+      total_minutes?: number;
+    }
   | { status: "invalid"; reason: string };
 
 declare global {
@@ -300,6 +309,9 @@ export default function CheckoutPage() {
           discount_amount: body.data.discount_amount,
           discount_type:   body.data.discount_type,
           discount_value:  body.data.discount_value,
+          is_prorated:     (body.data as any).is_prorated,
+          overlap_minutes: (body.data as any).overlap_minutes,
+          total_minutes:   (body.data as any).total_minutes,
         });
       } else {
         setCouponState({ status: "invalid", reason: body.data.reason });
@@ -1572,6 +1584,7 @@ export default function CheckoutPage() {
                             {couponState.discount_type === "percent"
                               ? `${couponState.discount_value}% off`
                               : `${formatCurrency(couponState.discount_value)} off`}
+                            {couponState.is_prorated && couponState.overlap_minutes ? ` (${couponState.overlap_minutes}m in Happy Hours)` : ""}
                             {" "}({formatCurrency(couponState.discount_amount)} saved)
                           </p>
                         </div>
