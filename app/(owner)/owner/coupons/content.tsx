@@ -474,7 +474,7 @@ export function CouponsContent({
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Coupon</DialogTitle>
           </DialogHeader>
@@ -652,7 +652,7 @@ export function CouponsContent({
 
       {/* Edit dialog */}
       <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Coupon — {editTarget?.code}</DialogTitle>
           </DialogHeader>
