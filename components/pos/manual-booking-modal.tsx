@@ -394,14 +394,14 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
     return (
       <Dialog open onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
-          <DialogHeader className="px-6 py-5 border-b border-gray-200 dark:border-[#1F1F1F]">
+        <DialogContent className="max-w-2xl p-0 gap-0 max-h-[90vh] flex flex-col overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+          <DialogHeader className="shrink-0 px-6 py-5 border-b border-gray-200 dark:border-[#1F1F1F]">
             <DialogTitle className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
               <CalendarPlus className="h-5 w-5" style={{ color: "#D4541A" }} /> Confirm Booking Details
             </DialogTitle>
           </DialogHeader>
 
-          <div className="px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 min-h-0">
             <p className="text-base text-gray-500 dark:text-gray-400 font-extrabold">
               Please double check the booking information before sending the WhatsApp confirmation message to the customer:
             </p>
@@ -455,11 +455,11 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             )}
           </div>
 
-          <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
+          <div className="shrink-0 px-6 py-4 border-t flex justify-end gap-3 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
             <button
               type="button"
               onClick={() => { setError(null); setShowConfirm(false); }}
-              className="h-14 px-6 rounded-xl text-base font-extrabold bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
+              className="h-12 px-6 rounded-xl text-base font-extrabold bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
             >
               Back / Edit
             </button>
@@ -471,7 +471,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
                 create.mutate();
               }}
               disabled={create.isPending}
-              className="h-14 px-8 rounded-xl text-base font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity"
+              className="h-12 px-8 rounded-xl text-base font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm"
             >
               {create.isPending ? "Booking..." : "Confirm & Book"}
             </button>
@@ -483,14 +483,14 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-7xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
-        <DialogHeader className="px-10 py-8 border-b border-gray-200 dark:border-[#1F1F1F]">
-          <DialogTitle className="text-3xl font-black text-gray-900 dark:text-white flex items-center gap-3">
-            <CalendarPlus className="h-8 w-8" style={{ color: "#D4541A" }} /> Manual booking
+      <DialogContent className="max-w-5xl p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden bg-white dark:bg-[#111] border border-gray-200 dark:border-[#2A2A2A]">
+        <DialogHeader className="shrink-0 px-8 py-5 border-b border-gray-200 dark:border-[#1F1F1F]">
+          <DialogTitle className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white flex items-center gap-3">
+            <CalendarPlus className="h-7 w-7" style={{ color: "#D4541A" }} /> Manual booking
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-10 py-8 space-y-8 max-h-[80vh] overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 min-h-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -743,56 +743,55 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
             </div>
           </div>
 
-          {/* Optional advance */}
-          <div className="rounded-2xl border border-dashed border-gray-300 dark:border-[#333] p-6 space-y-5">
-            <Label className="text-lg font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Advance taken now (optional)</span>
-              <span className="font-extrabold text-gray-400 text-lg">Estimated total ₹{estimatedTotal}</span>
-            </Label>
-            <div className="flex gap-4 items-center">
-              <span className="text-2xl font-black text-gray-400">₹</span>
+          <div className="space-y-2 p-4 rounded-2xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#222]">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Advance taken now (optional)</Label>
+              <span className="font-extrabold text-gray-400 text-sm">Estimated total ₹{estimatedTotal}</span>
+            </div>
+            <div className="flex gap-3 items-center">
+              <span className="text-xl font-black text-gray-400">₹</span>
               <Input
                 type="number"
                 min={0}
                 value={advanceAmount}
                 onChange={(e) => setAdvanceAmount(e.target.value)}
                 placeholder="0"
-                className="flex-1 h-20 text-3xl px-6 rounded-2xl font-bold"
+                className="flex-1 h-12 text-xl px-4 rounded-xl font-bold"
               />
               <button
                 type="button"
                 onClick={() => setAdvanceMethod((m) => m === "cash" ? null : "cash")}
-                className={`h-20 px-8 rounded-xl text-lg font-black flex items-center gap-2 transition-all ${
+                className={`h-12 px-5 rounded-xl text-sm font-black flex items-center gap-1.5 transition-all ${
                   advanceMethod === "cash" ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
-                <Banknote className="h-6 w-6" /> Cash
+                <Banknote className="h-4 w-4" /> Cash
               </button>
               <button
                 type="button"
                 onClick={() => setAdvanceMethod((m) => m === "upi" ? null : "upi")}
-                className={`h-20 px-8 rounded-xl text-lg font-black flex items-center gap-2 transition-all ${
+                className={`h-12 px-5 rounded-xl text-sm font-black flex items-center gap-1.5 transition-all ${
                   advanceMethod === "upi" ? "bg-indigo-100 text-indigo-700 ring-2 ring-indigo-300" : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-700 dark:text-[#ccc]"
                 }`}
               >
-                <Smartphone className="h-6 w-6" /> UPI
+                <Smartphone className="h-4 w-4" /> UPI
               </button>
             </div>
           </div>
 
           {error && (
-            <p className="text-sm rounded-md px-3 py-2"
+            <p className="text-sm rounded-xl px-3.5 py-2.5"
               style={{ background: "rgba(239,68,68,0.07)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.2)" }}>
               {error}
             </p>
           )}
         </div>
 
-        <div className="px-10 py-6 border-t flex justify-end gap-4 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
+        <div className="shrink-0 px-8 py-4 border-t flex justify-end gap-3 bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#1F1F1F]">
           <button
             type="button"
             onClick={onClose}
-            className="h-20 px-10 rounded-2xl text-xl font-black bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
+            className="h-12 px-6 rounded-xl text-base font-bold bg-white dark:bg-[#1f1f1f] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-[#333] hover:bg-gray-100 dark:hover:bg-[#252525]"
           >
             Cancel
           </button>
@@ -805,7 +804,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
               }
             }}
             disabled={create.isPending || slotConflict}
-            className="h-20 px-10 rounded-2xl text-xl font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity"
+            className="h-12 px-8 rounded-xl text-base font-black text-white bg-[#D4541A] hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm"
           >
             Create booking
           </button>
