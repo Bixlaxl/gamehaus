@@ -227,21 +227,15 @@ export function BookingsContent({
   }
 
   const { data: bookings, isLoading, refetch } = useQuery({
-    queryKey: ["owner-bookings", date, opening, closing],
+    queryKey: ["owner-bookings", date],
     queryFn: async () => {
-      const [openH, openM]   = opening.split(":").map(Number);
-      const [closeH, closeM] = closing.split(":").map(Number);
-      const crossesMidnight  = closeH < openH || (closeH === openH && closeM < openM);
-      const from = new Date(`${date}T${opening}+05:30`).toISOString();
-      const closeDate = crossesMidnight
-        ? (() => { const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().split("T")[0]; })()
-        : date;
-      const to = new Date(`${closeDate}T${closing}+05:30`).toISOString();
+      // Full operational window: from 00:00 IST on selected date to 06:00 IST next morning
+      const from = new Date(`${date}T00:00:00+05:30`).toISOString();
+      const nextDateObj = new Date(date + "T12:00:00Z");
+      nextDateObj.setUTCDate(nextDateObj.getUTCDate() + 1);
+      const nextDate = nextDateObj.toISOString().split("T")[0];
+      const to = new Date(`${nextDate}T06:00:00+05:30`).toISOString();
 
-      // Server-side admin query — bypasses RLS. Previously this used the
-      // browser Supabase client which silently returned [] on date change
-      // when RLS denied SELECT to the anon role, making it look like the
-      // page needed a reload to update.
       const res = await fetch(
         `/api/owner/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
         { cache: "no-store" }
@@ -251,17 +245,11 @@ export function BookingsContent({
         | { success: false; error: string };
       return body.success ? body.data : [];
     },
-    // Only apply the SSR-passed initialBookings when the visible date actually
-    // matches the date the SSR rendered. Otherwise TanStack treats this static
-    // value as fresh data for the new queryKey too and skips the fetch.
     initialData: date === initialDate ? initialBookings : undefined,
     initialDataUpdatedAt: date === initialDate ? Date.now() : undefined,
-    staleTime: 15 * 1000,
+    staleTime: 10 * 1000,
     placeholderData: keepPreviousData,
-    // Owner has no realtime sub for /owner/bookings the way staff POS does.
-    // 30s safety-net + on-focus refetch keeps the list fresh enough that a
-    // new customer booking shows up almost instantly even if realtime is off.
-    refetchInterval: 30 * 1000,
+    refetchInterval: 20 * 1000,
     refetchOnWindowFocus: true,
   });
 

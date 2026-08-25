@@ -43,8 +43,8 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(`
       *,
-      order:orders(customer_name, customer_phone, advance_paid, type, status, created_by, subtotal, discount_amount, total_amount, points_redeemed, public_discount_amount, points_redeemed_online, order_items(id, status)),
-      order_item:order_items(table:tables(id, name, type, location:locations(name, id)))
+      order:orders(id, customer_name, customer_phone, advance_paid, type, status, created_by, subtotal, discount_amount, total_amount, points_redeemed, public_discount_amount, points_redeemed_online, location_id, order_items(id, status)),
+      order_item:order_items(table:tables(id, name, type, location_id, location:locations(name, id)))
     `)
     .gte("scheduled_start", from)
     .lte("scheduled_start", to)
@@ -52,8 +52,11 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
 
-  // Filter out unpaid online bookings
+  // Filter out truly abandoned unpaid online checkouts (never hide confirmed/checked-in/finished bookings)
   const rows = (data ?? []).filter((b: any) => {
+    if (b.status === "confirmed" || b.status === "checked_in" || b.status === "finished" || b.status === "completed" || b.status === "no_show") {
+      return true;
+    }
     const o = b.order;
     if (o && o.type === "online" && (o.advance_paid ?? 0) === 0 && o.status === "open" && !o.created_by) {
       return false;

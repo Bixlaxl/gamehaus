@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Clock, ChevronRight, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TournamentModal } from "./tournament-modal";
 
 interface Location {
   id: string;
@@ -110,46 +109,20 @@ function LocationSlideshow({ image_urls, alt, accent }: { image_urls: string[]; 
 export function SplashHero({ locations, coupons = [] }: { locations: Location[]; coupons?: Coupon[] }) {
   const [phase, setPhase] = useState<Phase>("enter");
   const [adminLoading, setAdminLoading] = useState(false);
-  const [showTournamentModal, setShowTournamentModal] = useState(false);
-  const [claimedCount, setClaimedCount] = useState(0);
   const router = useRouter();
 
-  // Prefetch routes, check tournament slots, & schedule splash curtain transition
+  // Prefetch routes & schedule splash curtain transition
   useEffect(() => {
     for (const loc of locations) router.prefetch(`/${loc.slug}`);
     router.prefetch("/login");
-
-    let isFull = false;
-
-    // Fetch real-time tournament slots count
-    fetch("/api/tournament/registrations")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && typeof data.count === "number") {
-          setClaimedCount(data.count);
-          if (data.count >= 32) {
-            isFull = true;
-            setShowTournamentModal(false);
-          }
-        }
-      })
-      .catch(() => {});
 
     // Splash curtain finishes at 1200ms
     const splashTimer = setTimeout(() => {
       setPhase("gone");
     }, 1200);
 
-    // Pop up tournament modal seamlessly right as curtain lifts (1020ms)
-    const modalTimer = setTimeout(() => {
-      if (!isFull) {
-        setShowTournamentModal(true);
-      }
-    }, 1020);
-
     return () => {
       clearTimeout(splashTimer);
-      clearTimeout(modalTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -403,14 +376,6 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
           </div>
         </div>
       </div>
-
-      {/* ── Tournament Showcase & Registration Modal ── */}
-      <TournamentModal
-        isOpen={showTournamentModal}
-        claimedSlots={claimedCount}
-        delayOffset={1350}
-        onClose={() => setShowTournamentModal(false)}
-      />
     </div>
   );
 }
