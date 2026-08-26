@@ -6,6 +6,7 @@ import { usePOSStore } from "@/store/pos";
 import { CalendarClock, X, Phone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CancelBookingModal } from "@/components/pos/cancel-booking-modal";
+import { RescheduleBookingModal } from "@/components/pos/reschedule-booking-modal";
 import type { Booking, Order, OrderItem } from "@/lib/supabase/types";
 
 interface UpcomingDrawerProps {
@@ -32,6 +33,7 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
   const now          = usePOSStore((s) => s.now);
   const setSelected  = usePOSStore((s) => s.setSelectedTableId);
   const [cancellingBooking, setCancellingBooking] = useState<BookingRow | null>(null);
+  const [reschedulingBooking, setReschedulingBooking] = useState<BookingRow | null>(null);
 
   // Reuses the same query key as pos-screen's bookings query so the data is
   // shared from cache — no extra request, no extra realtime sub.
@@ -152,14 +154,14 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
               {soon.length > 0 && (
                 <Section title="Next 30 minutes" accent="#f59e0b" count={soon.length}>
                   {soon.map((b) => (
-                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} onCancel={(b) => setCancellingBooking(b)} urgent />
+                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} onCancel={(b) => setCancellingBooking(b)} onReschedule={(b) => setReschedulingBooking(b)} urgent />
                   ))}
                 </Section>
               )}
               {later.length > 0 && (
                 <Section title="Later today" accent="#9ca3af" count={later.length}>
                   {later.map((b) => (
-                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} onCancel={(b) => setCancellingBooking(b)} />
+                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} onCancel={(b) => setCancellingBooking(b)} onReschedule={(b) => setReschedulingBooking(b)} />
                   ))}
                 </Section>
               )}
@@ -179,6 +181,25 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
           onClose={() => setCancellingBooking(null)}
           onSuccess={() => {
             setCancellingBooking(null);
+            qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+            qc.invalidateQueries({ queryKey: ["owner-bookings"] });
+            qc.invalidateQueries({ queryKey: ["tables"] });
+            qc.invalidateQueries({ queryKey: ["manual-table-slots"] });
+          }}
+        />
+      )}
+
+      {reschedulingBooking && (
+        <RescheduleBookingModal
+          booking={{
+            ...reschedulingBooking,
+            order_item: {
+              table: tables.find((t) => t.id === reschedulingBooking.order_item?.table_id) || null,
+            },
+          }}
+          onClose={() => setReschedulingBooking(null)}
+          onSuccess={() => {
+            setReschedulingBooking(null);
             qc.invalidateQueries({ queryKey: ["pos-bookings"] });
             qc.invalidateQueries({ queryKey: ["owner-bookings"] });
             qc.invalidateQueries({ queryKey: ["tables"] });
@@ -220,7 +241,7 @@ function Section({
 }
 
 function Row({
-  booking, tables, fmtTime, minsFromNow, onJump, onCancel, urgent,
+  booking, tables, fmtTime, minsFromNow, onJump, onCancel, onReschedule, urgent,
 }: {
   booking: BookingRow;
   tables: ReturnType<typeof usePOSStore.getState>["tables"];
@@ -228,6 +249,7 @@ function Row({
   minsFromNow: (iso: string) => string;
   onJump: (tableId: string) => void;
   onCancel: (booking: BookingRow) => void;
+  onReschedule: (booking: BookingRow) => void;
   urgent?: boolean;
 }) {
   const oi = booking.order_item;
@@ -299,6 +321,20 @@ function Row({
           </span>
         </button>
       ) : null}
+
+      {/* Reschedule button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onReschedule(booking);
+        }}
+        className="shrink-0 self-center flex items-center justify-center p-2.5 rounded-lg
+          bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400
+          border border-amber-200 dark:border-amber-900/50 transition-colors mr-1"
+        title="Reschedule this booking"
+      >
+        <CalendarClock className="h-4 w-4" />
+      </button>
 
       {/* Cancel button */}
       <button
