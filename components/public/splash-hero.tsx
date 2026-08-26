@@ -43,10 +43,13 @@ function isOpenNow(opening: string, closing: string): boolean {
 }
 
 function formatTime(t: string): string {
-  const [h, m] = t.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
+  if (!t) return "";
+  const [hStr, mStr] = t.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr || "0", 10);
+  const ampm = h >= 12 ? "pm" : "am";
   const hour = h % 12 || 12;
-  return `${hour}${m > 0 ? `:${String(m).padStart(2, "0")}` : ""} ${ampm}`;
+  return `${hour}${m > 0 ? `:${String(m).padStart(2, "0")}` : ""}${ampm}`;
 }
 
 function LocationSlideshow({ image_urls, alt, accent }: { image_urls: string[]; alt: string; accent: string }) {
@@ -362,7 +365,7 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
                                           </span>
                                           {isHappyHours && (
                                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">
-                                              ({coupon.valid_from_time?.slice(0, 5)}–{coupon.valid_until_time?.slice(0, 5)})
+                                              ({formatTime(coupon.valid_from_time!)} – {formatTime(coupon.valid_until_time!)})
                                             </span>
                                           )}
                                         </div>
