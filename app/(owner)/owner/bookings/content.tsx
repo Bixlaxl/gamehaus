@@ -15,6 +15,7 @@ import {
 import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, XCircle, CalendarPlus } from "lucide-react";
 import { ManualBookingModal } from "@/components/pos/manual-booking-modal";
 import { CancelBookingModal } from "@/components/pos/cancel-booking-modal";
+import { RescheduleBookingModal } from "@/components/pos/reschedule-booking-modal";
 import { cn, getShopWindow } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking, Order, Location } from "@/lib/supabase/types";
@@ -123,6 +124,7 @@ export function BookingsContent({
   const [manualOpen,    setManualOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState<BookingRow | null>(null);
+  const [reschedulingBooking, setReschedulingBooking] = useState<BookingRow | null>(null);
   const [tablesList, setTablesList] = useState<any[]>([]);
   const [loadingTables, setLoadingTables] = useState(false);
   const [targetTableId, setTargetTableId] = useState("");
@@ -617,6 +619,16 @@ export function BookingsContent({
                                     {busyBookingId === b.id ? "…" : "No-show"}
                                   </Button>
                                   <Button
+                                    variant="outline"
+                                    size="default"
+                                    className="h-16 text-xl px-8 font-black border-amber-200 hover:bg-amber-50 hover:border-amber-300 text-amber-600 dark:text-amber-400 dark:border-amber-900/50 dark:hover:bg-amber-950/20 rounded-2xl"
+                                    onClick={(e) => { e.stopPropagation(); setReschedulingBooking(b); }}
+                                    disabled={busyBookingId === b.id}
+                                    title="Reschedule this booking"
+                                  >
+                                    Reschedule
+                                  </Button>
+                                  <Button
                                     variant="destructive"
                                     size="default"
                                     className="h-16 text-xl px-8 font-black bg-red-600 hover:bg-red-700 text-white shadow-sm rounded-2xl"
@@ -864,14 +876,27 @@ export function BookingsContent({
                     </Badge>
                   </div>
                   {mode === "staff" && b.status === "confirmed" && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="h-12 px-6 rounded-xl font-bold bg-red-600 hover:bg-red-700 text-white"
-                      onClick={() => setCancellingBooking(b)}
-                    >
-                      Cancel Booking
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-12 px-6 rounded-xl font-bold border-amber-200 hover:bg-amber-50 hover:border-amber-300 text-amber-600 dark:text-amber-400 dark:border-amber-900/50 dark:hover:bg-amber-950/20"
+                        onClick={() => {
+                          setSelectedBooking(null);
+                          setReschedulingBooking(b);
+                        }}
+                      >
+                        Reschedule
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-12 px-6 rounded-xl font-bold bg-red-600 hover:bg-red-700 text-white"
+                        onClick={() => setCancellingBooking(b)}
+                      >
+                        Cancel Booking
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -887,6 +912,23 @@ export function BookingsContent({
           onClose={() => setCancellingBooking(null)}
           onSuccess={() => {
             setCancellingBooking(null);
+            setSelectedBooking(null);
+            void refetch();
+            qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+            qc.invalidateQueries({ queryKey: ["owner-bookings"] });
+            qc.invalidateQueries({ queryKey: ["tables"] });
+            qc.invalidateQueries({ queryKey: ["manual-table-slots"] });
+          }}
+        />
+      )}
+
+      {/* Staff Reschedule Booking Modal */}
+      {reschedulingBooking && (
+        <RescheduleBookingModal
+          booking={reschedulingBooking}
+          onClose={() => setReschedulingBooking(null)}
+          onSuccess={() => {
+            setReschedulingBooking(null);
             setSelectedBooking(null);
             void refetch();
             qc.invalidateQueries({ queryKey: ["pos-bookings"] });
