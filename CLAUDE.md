@@ -1,21 +1,21 @@
 # Gamehaus — Operational Developer Manual (CLAUDE.md)
 
-This document is the authoritative developer reference and operational manual for the Gamehaus project. It contains conventions, abstractions, workflow patterns, and strict constraints designed to keep modifications safe, localized, and consistent.
+This document is the authoritative developer reference and operational manual for the Gamehaus project. It contains conventions, database definitions, API routes, workflow patterns, and strict constraints designed to keep modifications safe, localized, and consistent.
 
 ---
 
 ## 1. Project Overview & Tech Stack
 
-Gamehaus is a booking and POS system for physical snooker/gaming café locations (Gamehaus, NerfTurf). It handles public online table bookings, real-time staff POS check-ins, walk-ins, multi-session tracking, inventory item sales, and loyalty reward points.
+Gamehaus is a booking and POS system for physical snooker/gaming café locations (Gamehaus, NerfTurf). It handles public online table bookings, real-time staff POS check-ins, walk-ins, multi-session tracking, inventory sales, membership benefits, and loyalty reward points.
 
-* **Framework:** Next.js 14 App Router (`app/` directory). All routes run on **Edge Runtime** (`export const runtime = 'edge'`).
+* **Framework:** Next.js 14 App Router (`app/` directory). All routes run on **Edge Runtime** unless nodejs is explicitly required (e.g. for Razorpay cryptographic buffers).
 * **Database & Auth:** Supabase (PostgreSQL + RLS + Realtime). Auth session synchronized between server and browser via `@supabase/ssr` cookies.
 * **State Management:**
   * **Customer Cart:** Zustand persisted to `localStorage` under `"gamehaus-cart"`.
   * **POS UI:** Zustand in-memory store (`store/pos.ts`) synchronized via Supabase Realtime channel `"pos-{locationId}"`.
   * **Server State:** TanStack Query (`staleTime: 60000ms`, `refetchOnWindowFocus: false`).
 * **Payments:** Razorpay Integration (API order creation -> client script checkout -> server webhook capture).
-* **Notifications:** Meta WhatsApp Cloud API (automated booking confirmations and reservations).
+* **Notifications:** Meta WhatsApp Cloud API (automated booking confirmations, check-ins, invoices, and cancellations).
 * **Styling:** Tailwind CSS + shadcn/ui. POS forces dark mode (`className="dark"` on POS wrapper).
 * **Validation:** Zod schemas in `lib/validators/schemas.ts`.
 
@@ -27,7 +27,7 @@ Gamehaus is a booking and POS system for physical snooker/gaming café locations
 * `app/(owner)/owner/` - Owner panels (tables, staff, coupons, reports, memberships, settings).
 * `app/(pos)/pos/` - POS table grid and session context panel.
 * `app/(public)/` - Public landing splash page, location slot-grid browse, checkout, and confirmations.
-* `app/api/` - Backend API endpoints (Edge runtime).
+* `app/api/` - Backend API endpoints (Edge or Node runtime).
 * `components/pos/` - POS interface modules (`pos-screen`, `table-grid`, `context-panel`, overlays).
 * `components/owner/` - Nav sidebar and owner dashboard modules.
 * `components/public/` - Public landing page and booking slot grid.
@@ -40,94 +40,79 @@ Gamehaus is a booking and POS system for physical snooker/gaming café locations
 
 ## 3. Database Table Registry
 
-| Table Name | Primary Key / Indexing | Key Columns | Purpose |
+| Table Name | PK / Unique Constraints | Key Columns | Purpose / Description |
 | :--- | :--- | :--- | :--- |
-| `locations` | `id` (uuid) | name, slug, address, phone, opening_time, closing_time, image_urls | Café location configurations |
-| `users` | `id` (uuid -> auth) | name, email, role (`owner`\|`staff`), location_id | Staff & owner application accounts |
-| `tables` | `id` (uuid) | location_id, name, type (`snooker`\|`pool`\|`ps5`\|`foosball`), hourly_rate, people_pricing (jsonb) | Playable tables/consoles |
-| `orders` | `id` (uuid) | location_id, type (`online`\|`walk_in`), customer_name, customer_phone, status (`open`\|`finalized`\|`cancelled`), advance_paid, points_redeemed | Parent transaction for a visit |
-| `order_items` | `id` (uuid) | order_id, table_id, status (`scheduled`\|`running`\|`finished`\|`cancelled`), expected_end, actual_start, rate_per_hour | Table sessions associated with an order |
-| `order_extras` | `id` (uuid) | order_id, name, price, quantity, cost_price, inventory_item_id, is_deleted | Drinks/snacks sold to an active session |
-| `bookings` | `id` (uuid) | order_id, order_item_id, scheduled_start, scheduled_end, status (`confirmed`\|`checked_in`\|`no_show`\|`cancelled`) | Scheduled online/manual reservations |
-| `payments` | `id` (uuid) | order_id, amount, method (`cash`\|`upi`\|`razorpay`), status (`pending`\|`completed`\|`failed` | Payment records |
-| `customer_profiles` | `phone` (unique) | name, visit_count, total_spent, points_balance, last_visit_at | Loyalty profiles (auto-created on checkout) |
-| `membership_plans` | `id` (uuid) | name, price, duration_days, discount_pct, free_hrs, is_active | Membership definition table |
-| `customer_memberships`| `id` (uuid) | customer_phone, plan_id, starts_at, expires_at, free_hrs_used, is_active | Active customer plans |
-| `inventory_items` | `id` (uuid) | location_id, name, category, selling_price, cost_price, stock_count, low_stock_threshold | Store items catalog |
-| `inventory_stock_logs`| `id` (uuid) | inventory_item_id, change, reason (`sale`\|`restock`\|`adjustment`) | Audit trail of inventory updates |
-| `app_settings` | `id` (always 1) | data (jsonb config blob) | Global system configuration parameters |
+| `locations` | `id` (uuid) | name, slug, address, phone, timezone, opening_time, closing_time, is_active, image_urls | Physical cafe locations |
+| `users` | `id` (uuid -> auth.users) | name, email, role (`owner`\|`staff`), location_id, is_active, login_password | User accounts with app-defined credentials |
+| `tables` | `id` (uuid) | location_id, name, type, hourly_rate, people_pricing (jsonb), modes (jsonb), sort_order, is_active | Gaming tables (snooker, pool, ps5, foosball, etc.) |
+| `coupons` | `id` (uuid), `code` (unique) | location_id (null=global), code, discount_type (`percent`\|`flat`), discount_value, valid_from, valid_until, valid_from_time, valid_until_time, max_uses, used_count, is_active, is_public, valid_days (int[]) | Coupon/Promo code rules, timeslot, and Happy Hours |
+| `orders` | `id` (uuid) | location_id, type (`online`\|`walk_in`), customer_name, customer_phone, status (`open`\|`finalized`\|`cancelled`), coupon_id, subtotal, discount_amount, public_discount_amount, total_amount, advance_paid, amount_due, points_redeemed, points_redeemed_online, membership_id | Primary transactional record for a guest visit |
+| `order_items` | `id` (uuid) | order_id, table_id, status (`scheduled`\|`running`\|`finished`\|`cancelled`), scheduled_start, scheduled_end, actual_start, actual_end, expected_end, extended_mins, rate_per_hour, final_amount, num_people, is_deleted, free_hours_to_redeem, membership_id, selected_mode_name, is_table_released, checked_in_at | Individual table session components of an order |
+| `order_extras` | `id` (uuid) | order_id, name, price, cost_price, quantity, inventory_item_id, is_deleted, added_by | Drinks, snacks, or accessories sold to a session |
+| `bookings` | `id` (uuid) | order_id, order_item_id, scheduled_start, scheduled_end, held_until, status (`confirmed`\|`checked_in`\|`finished`\|`completed`\|`no_show`\|`cancelled`), no_show_marked_by | Online slot reservations blockages |
+| `payments` | `id` (uuid) | order_id, amount, method (`cash`\|`upi`\|`card`\|`razorpay`), razorpay_order_id, razorpay_payment_id, status (`pending`\|`completed`\|`failed`\|`refunded`), collected_by | Audit trail of payments and manual/gateway refunds |
+| `table_availability_overrides` | `id` (uuid) | table_id, date, start_time, end_time, is_blocked, reason | Explicit table slot blockages from Owner panel |
+| `customer_profiles` | `id` (uuid), `phone` (unique) | phone, name, visit_count, total_spent, points_balance, last_visit_at | Loyalty profile tracks history and reward balance |
+| `inventory_items` | `id` (uuid) | location_id, name, category, selling_price, cost_price, is_active, show_at_checkout, stock_count, low_stock_threshold | Catalogue of items for cafe purchase |
+| `inventory_stock_logs` | `id` (uuid) | inventory_item_id, location_id, change, reason (`restock`\|`sale`\|`adjustment`\|`reverse`), order_extra_id, note | Ledger tracks items sold, restocked, or manually adjusted |
+| `app_settings` | `id` (always 1) | data (jsonb), updated_at, updated_by | System variables (loyalty earn/redeem rates, policy tiers) |
+| `membership_plans` | `id` (uuid) | name, price, duration_days, discount_pct, free_hrs, is_active, bound_table_ids (uuid[]) | Membership tier presets |
+| `customer_memberships` | `id` (uuid) | customer_phone, plan_id, starts_at, expires_at, free_hrs_used, is_active, bound_table_ids (uuid[]), free_hours_ledger (jsonb), short_id | Active plan instances assigned to customer profiles |
+| `tournament_registrations` | `id` (text) | name, phone, amount, status (`paid`\|`unpaid`), payment_id, razorpay_order_id, pass_id | Tournaments passes tracker |
 
 ---
 
-## 4. Key Coding Conventions & Core Abstractions
+## 4. Complete API Route Registry
 
-### API Response Contract
-All API routes must return responses in the unified format defined in `lib/validators/schemas.ts`:
-* Success: `NextResponse.json(ok(data))`
-* Error: `NextResponse.json(err(message, errorCode), { status })`
+### POS Operations
+* `GET /api/pos/tables` - Fetches tables with computed statuses, active running items, and upcoming slot bookings.
+* `GET /api/pos/orders` - Lists active open orders at the caller's location.
+* `GET /api/pos/bookings` - Fetches today's bookings for the POS upcoming list.
+* `POST /api/pos/bookings/switch-table` - Swaps table session to another physical table of compatible type.
+* `POST /api/pos/bookings/[id]/cancel` - Cancels manual or online booking, releases table slot, restores loyalty points.
+* `POST /api/pos/manual-booking` - Creates manual reservation slot on the grid.
+* `POST /api/pos/manual-bill` - Generates direct finalization for item sales with no table sessions.
+* `DELETE /api/pos/bills/[id]` - Deletes finalized bills (Owner-only authentication).
+* `POST /api/pos/bills/[id]/send-whatsapp` - Manual re-send of WhatsApp invoice to customer.
 
-### Phone Validation Rules
-Indian mobile numbers must be verified as exactly 10 digits starting with `6`, `7`, `8`, or `9`.
-* Validation pattern: `/^[6-9]\d{9}$/`
+### Session Control
+* `POST /api/sessions/start` - Check-in or start direct walk-in session. Sets `actual_start` and `status = 'running'`.
+* `POST /api/sessions/stop` - Stops active session. Sets `actual_end` and `status = 'finished'`.
+* `POST /api/sessions/extend` - Extends a table session's expected duration. Updates `expected_end` and logs extension mins.
+* `POST /api/sessions/remove-extension` - Reverts previous duration extension.
+* `POST /api/sessions/people` - Updates player count mid-session to adjust pricing rate.
 
-### Billing Engine Logic (`lib/billing/engine.ts`)
-* **Slot-Based Billing:** Charges are strictly calculated based on the booked window (`expected_end - actual_start`). Stopping early or checking in late does not reduce the bill. 
-* **Extension:** Session extensions are added to `expected_end`.
-* **Discounts Sequence:**
-  1. Calculate `subtotal` = table sessions cost + beverages/extras cost.
-  2. Apply `coupon` discount.
-  3. Apply `membership` discount (`discount_pct`) to the remaining balance.
-  4. Apply `points` discount based on dynamic settings (`settings.loyalty.redeem_rupees_per_point`, subtracted outside `calculateBill`).
-  5. Subtract `advance_paid` to determine `finalDue`.
-* **Loyalty Settings Constraint:** Loyalty parameters are dynamically loaded from settings (`earn_rupees_per_point`, `redeem_rupees_per_point`, `min_points_to_redeem`). Customers can only redeem points if their points balance is $\ge$ `min_points_to_redeem`. Enforced on the POS context panel, finalization bill modal, online checkout page, and backend finalization API.
+### Customer & Loyalty
+* `POST /api/customers/lookup` - Checks points balance and active membership during POS billing.
+* `GET /api/customers/search` - Autocomplete matching names/phones on POS slider.
+
+### Inventory & Stock
+* `GET/POST /api/inventory` - Lists or registers items in store inventory.
+* `POST /api/inventory/[id]/stock` - Restocks or adjusts inventory items counts.
+* `POST /api/inventory/staff-consume` - Staff records item damage, spill, or personal consumption.
+* `GET /api/inventory/stock-logs` - Fetches audit log for stock changes.
+
+### Core Billing
+* `POST /api/orders` - Registers public booking orders and creates Razorpay order references.
+* `POST /api/orders/[id]/cancel` - Online cancellation triggering cancellation policy checks and Razorpay refund API.
+* `POST /api/orders/[id]/finalize` - Finalizes open orders, logs split payments, updates customer metrics, increments coupon counts, updates free hours ledger.
+* `POST /api/payments/webhook` - Handles verified Razorpay payload to mark reservations as confirmed.
 
 ---
 
-## 5. Architectural Constraints (Rules Every Future Agent Must Follow)
+## 5. Architectural Constraints & Rules
 
-> [!CRITICAL]
-> **1. RLS Writes Bypass Constraint**
-> Row Level Security (RLS) is enabled on all tables in Supabase. Browser-based client SDK writes will fail due to permission checks. All writes (inserts, updates, deletes) in API routes must be performed using the service role client (`createAdminClient()`).
->
-> **2. Reports Page Security & RLS Bypass**
-> Never fetch `locations` or `orders` directly using the client-side `supabase` client on the Reports page. Authenticated users without JWT claims will receive empty data. All Reports queries must execute server-side via the secure API endpoint `/api/owner/reports` using the admin client.
->
-> **3. UUID Validation Constraint**
-> Before querying the database with `customer_profiles.id`, verify if the variable is a valid UUID using a regex or validator. Short string IDs (e.g., membership short IDs like `"FI2Q28"`) must only be queried against the `short_id` column. Querying non-UUIDs on a UUID column causes database casting errors.
->
-> **4. Safe Timestamps in Cancellations**
-> When calculating refunds or releasing sessions, do not assume `actual_start` is set. If `actual_start` is null (e.g., manual booking not yet checked in), fall back to `created_at` or `now` to avoid `NaN` duration math.
->
-> **5. Multi-Table Bookings Session State**
-> For group walk-ins and multi-table bookings, finished tables must remain marked as occupied in the POS tables grid until the entire order is checked out. The POS store `computeTablesWithStatus` must check if other tables in the same active order are still `running`, preventing double-booking and premature clearing.
->
-> **6. Double-Submit Protection on POS Finalization**
-> To prevent race conditions and duplicate fetch calls returning "Order is not open" errors, checkout finalization modals must guard their API requests using a local component ref (e.g., `submittingRef.current` boolean check) to block subsequent clicks while a request is in flight.
->
-> **7. Owner-Only Finalized Bill Deletion**
-> Deletion of finalized transactions/bills is restricted strictly to owners. The endpoint `DELETE /api/pos/bills/[id]` must authenticate the user and return a `403 Forbidden` error if the role is not 'owner'. POS/Staff screens must not expose deletion controls.
->
-> **8. Walk-in Session Merging & De-duplication**
-> To prevent customers playing sequential tables from facing blocked sessions, `POST /api/walkin` automatically appends new walk-in table items to a customer's existing open order if one is already active under their phone number.
->
-> **9. Idle Table Release**
-> In the global walk-in table slider, tables with active items in `"finished"` status must be considered idle/available so a new customer can occupy the table even if the previous bill remains open under the merged order.
->
-> **10. POS & Owner UI Legibility Constraints**
-> To avoid eye strain on high-resolution iMac displays, typography sizes must be scaled up (table grids use `text-lg` titles, inputs/buttons use `text-base` and height `h-11`, and main table data uses `text-base`). Avoid using `text-xs` for primary readable details.
->
-> **11. Operating Shift Bounds & Grouping**
-> All daily metrics, reports, and bills listing pages must use business operating shift date grouping based on location opening times rather than UTC/local calendar day midnights. Early morning transactions before the opening time must be retroactively grouped into the previous calendar day.
->
-> **12. Tablet Kiosk Orders Confirmation Flow**
-> Orders submitted via customer tablet kiosks are saved in `order_extras` prefixed with `"[PENDING] "`. Staff must explicitly confirm these items on the POS Alerts panel. Accepting calls `PATCH /api/orders/[id]/extras/[extraId]` to remove the prefix; declining calls `DELETE /api/orders/[id]/extras/[extraId]` to soft-delete the item and reverse stock logs.
+1. **Service Role Client for API Writes:** Row Level Security (RLS) is active. Client browser SDK writes fail. API route updates/inserts MUST use `createAdminClient()`.
+2. **Double-Submit Protection:** finalize button must check `submittingRef.current = true` to prevent concurrent execution.
+3. **Reports API Security:** Owner stats fetch must check auth session role and query bypassing RLS via `createAdminClient()` server-side.
+4. **Reschedule Slot Checks:** Moving slot reservations must run availability queries checking overlapping durations on that table.
+5. **No-Show Threshold:** Bookings held for 15 mins past `scheduled_start` transition to `no_show` and are auto-cancelled by cleanup cron.
+6. **Operating Shifts Boundary:** Group report metrics by shifts (e.g. 06:00 to 05:59 next morning) instead of strict UTC midnight.
 
 ---
 
 ## 6. Common Pitfalls & Gotchas
 
-* **POS Store Sampling:** Do not subscribe to the raw Zustand `now` clock in high-level POS components. Subscribe only in the Running Card, or use `Date.now()` inline to prevent tree-wide 1Hz rerendering.
-* **Next.js Caching:** Edge API routes must declare `export const dynamic = "force-dynamic"` to bypass Vercel's URL caching.
-* **Local Time:** Always extract dates using the `getLocalDateString("Asia/Kolkata", date)` helper instead of UTC strings. Early morning bookings can shift dates if UTC is used.
-* **`finalizeOrderId` vs `selectedOrderId`:** In `finalize-bill-modal.tsx`, always look up the order using the store's `finalizeOrderId` rather than `selectedOrderId`. They are separate fields and misaligning them results in incorrect bill displays.
-* **Bookings Categorization:** Bookings list view groups bookings by physical Table rather than orders, sorted in chronological ascending order of timeslot. Ensure queries select the table `id`.
+* **TypeScript UUID cast:** Querying membership short ID (e.g. `"FI2Q28"`) on uuid column errors. Validate UUID format before using `.eq('id', value)`.
+* **Grace Period OT Math:** Billed session uses `expected_end` which includes grace threshold window calculations.
+* **realtime publication:** When creating new tables in DB, run alter publication script to ensure web sockets sync POS grid state.

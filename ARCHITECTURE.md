@@ -12,7 +12,7 @@ Gamehaus uses a modern serverless model optimized for low latency and real-time 
 graph TD
   Client[Browser Clients: Public / POS / Owner]
   Vercel[Vercel Edge Gateway & Routing]
-  NextServer[Next.js Serverless API Routes / Edge Runtime]
+  NextServer[Next.js Serverless API Routes]
   SupabaseDB[Supabase Postgres DB]
   SupabaseRealtime[Supabase Realtime Channel]
   SupabaseAuth[Supabase Auth Service]
@@ -126,68 +126,6 @@ sequenceDiagram
   API->>WhatsApp: Trigger automated WhatsApp invoice notification
 ```
 
-### D. Finalized Bill Deletion (Owner-Only)
-Finalized transactions/bills can only be deleted by the store Owner:
-1. **Client-side Restriction:** The deletion controls are completely removed from the POS/Staff view. Only the Owner dashboard bills panel (`app/(owner)/owner/bills/content.tsx`) renders the destructive `"Delete Bill"` button.
-2. **Server-side Security:** The API endpoint `DELETE /api/pos/bills/[id]` queries the auth session user's role from the database. Non-owner requests return `403 Forbidden` and are rejected before any database modifications occur.
-
-### E. Reports Page Client-to-Server Secure Flow
-The reports analytics dashboard bypasses client-side RLS to prevent empty queries.
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor Owner
-  participant Page as Reports Page (SSR)
-  participant API as /api/owner/reports
-  participant DB as Supabase Database (Admin Bypass)
-
-  Owner->>Page: Visits reports page / changes date range
-  Page->>API: Fetch /api/owner/reports?from=...&to=... (sends session cookies)
-  API->>DB: Verify session user role === 'owner'
-  alt Unauthorized / Staff role
-    API-->>Page: 403 Forbidden
-  else Verified Owner
-    API->>DB: Query locations, orders inside range, and 6-month historical orders (bypassing RLS)
-    DB-->>API: Returns database records
-    API-->>Page: Returns OK { locations, orders, history }
-    Page->>Page: Updates client-side React Query cache & charts
-  end
-```
-
-### F. Tablet Kiosk Orders Confirmation Flow
-Customers sitting at a snooker/pool table can order snacks or drinks via a tablet kiosk app.
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor Customer
-  participant Kiosk as Tablet Kiosk App
-  participant API as /api/orders/[id]/extras
-  participant DB as Supabase Database
-  actor Staff
-  participant POS as Staff POS Screen
-  participant Confirm as /api/orders/[id]/extras/[extraId]
-
-  Customer->>Kiosk: Selects beverage/extras & clicks Order
-  Kiosk->>API: POST { item_id, quantity }
-  API->>DB: Check inventory stock count & write to order_extras prefixed with '[PENDING]'
-  DB-->>POS: Supabase Realtime alerts POS of new pending extra
-  POS->>POS: Triggers audible beep notification
-  POS->>POS: Displays high-visibility "Tablet Kiosk Order" alert panel
-  alt Staff Accepts
-    Staff->>POS: Clicks Accept
-    POS->>Confirm: PATCH { name: cleanName }
-    Confirm->>DB: Strip '[PENDING] ' prefix from extra's name
-    Confirm-->>POS: OK (adds item to bill breakdown)
-  else Staff Declines
-    Staff->>POS: Clicks Decline
-    POS->>Confirm: DELETE
-    Confirm->>DB: Soft-delete extra (is_deleted = true) & reverse stock count in inventory_items
-    Confirm-->>POS: OK (reverts inventory stock log)
-  end
-```
-
 ---
 
 ## 3. Database Layer
@@ -209,12 +147,6 @@ erDiagram
   inventory_items ||--o{ order_extras : "stocks"
   inventory_items ||--o{ inventory_stock_logs : "audits"
 ```
-
-### Key Performance Indexes
-To maintain sub-second response times under active POS usage, the following compound and partial indexes are configured in `MIGRATIONS.sql`:
-* `idx_customer_memberships_active_lookup(customer_phone, is_active, expires_at)`: Speed up lookup for membership discounts during finalization.
-* `idx_inventory_items_location_active`: Partial index (`WHERE is_active = true`) for loading location menus.
-* `idx_customer_profiles_phone_prefix` & `idx_customer_profiles_lower_name`: B-Tree text pattern indexes to support real-time POS customer search-as-you-type.
 
 ---
 
@@ -244,53 +176,23 @@ Real-time POS synchronization is built on top of Supabase Realtime Channels. It 
 
 ## 5. Billing Engine & Loyalty Calculations
 
-The billing engine calculations must follow a deterministic flow to avoid discrepant calculations between customer receipts, profiles, and reports:
+The billing engine calculations follow this sequence to compute final checkout balances:
 
 1. **Subtotal Calculation:**
    $$\text{Subtotal} = \sum (\text{Billed Sessions}) + \sum (\text{Beverages \& Extras})$$
-   *Note: Table sessions are billed strictly on expected duration ($expected\_end - actual\_start$), regardless of actual usage or stopping early.*
 
 2. **Coupon Deduction:**
    $$\text{SubtotalAfterCoupon} = \max(0, \text{Subtotal} - \text{CouponDiscount})$$
 
-3. **Membership Deduction:**
-   $$\text{SubtotalAfterMembership} = \max(0, \text{SubtotalAfterCoupon} \times (1 - \frac{\text{DiscountPct}}{100}))$$
+3. **Free Hours Ledger Deduction:**
+   For members covering running sessions, decrement duration hours directly from table-type buckets in `customer_memberships.free_hours_ledger`.
+   $$\text{SubtotalAfterFreeHrs} = \max(0, \text{SubtotalAfterCoupon} - \text{FreeHoursValue})$$
 
-4. **Loyalty Points Deduction:**
+4. **Membership Percentage Deduction:**
+   $$\text{SubtotalAfterMembership} = \max(0, \text{SubtotalAfterFreeHrs} \times (1 - \frac{\text{DiscountPct}}{100}))$$
+
+5. **Loyalty Points Deduction:**
    $$\text{TotalDue} = \max(0, \text{SubtotalAfterMembership} - (\text{PointsRedeemed} \times \text{RedeemRate}))$$
-   *Where $\text{RedeemRate}$ is settings.loyalty.redeem_rupees_per_point (defaults to ₹1 per point).*
-   *Gate Rule: PointsRedeemed must be $\ge$ settings.loyalty.min_points_to_redeem (defaults to 100 points) to be allowed.*
 
-5. **Final Checkout Balance:**
+6. **Final Checkout Balance:**
    $$\text{finalDue} = \max(0, \text{TotalDue} - \text{advance\_paid})$$
-
-6. **Loyalty Balance Update:**
-   $$\text{New Points Earned} = \lfloor \frac{\text{finalDue}}{\text{EarnRate}} \rfloor$$
-   *Where $\text{EarnRate}$ is settings.loyalty.earn_rupees_per_point (defaults to ₹100 per point).*
-   $$\text{PointsBalance}_{\text{new}} = \max(0, \text{PointsBalance}_{\text{old}} - \text{PointsRedeemed} + \text{New Points Earned})$$
-   $$\text{TotalSpent}_{\text{new}} = \text{TotalSpent}_{\text{old}} + \text{advance\_paid} + \text{finalDue}$$
-
----
-
-## 6. External Integrations
-
-### Razorpay Payments API
-* **Order Creation:** `/api/payments/create-order` creates a Razorpay transaction with `amount` in paise.
-* **Webhook Capture:** `/api/payments/webhook` verifies the signature using `RAZORPAY_WEBHOOK_SECRET`. Once verified, it marks the payment as completed, sets the order's `advance_paid` amount, and credits points to the customer profile.
-
-### Meta WhatsApp Cloud API
-* **Utility Confirmations:** `/lib/whatsapp.ts` integrates with Meta's cloud endpoints using `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID`.
-* **Templates:** Sends `nerfturf_booking_confirmation` or `gamehaus_booking_confirmation` for fully paid bills. Sends `nerfturf_table_reservation` or `gamehaus_table_reservation` for partial advance bookings.
-* **Action Buttons:** Confirmation templates inject the order ID parameter to render a dynamic "Cancel Booking" URL link.
-
----
-
-## 7. Performance & Ergonomic Optimizations
-
-* **Walk-in Order Merging:** Upgraded `POST /api/walkin` to de-duplicate walk-in orders. If the client phone matches an existing open order, the session is appended, eliminating duplicate payments/finalizations.
-* **Idle Table Release:** Tables with finished sessions are marked as idle/available in `components/pos/walk-in-slider.tsx` filters, allowing table reuse without blocking the unpaid parent order.
-* **Throttled Clock Subscriptions:** High-level wrapper components do not listen to the Zustand 1Hz `now` clock. This limits UI updates to only the active `RunningCard` timers, keeping POS page renders fast.
-* **Lazy Overlay Mounting:** Core overlays (modals for Finalize Bill, Stop confirmation, Extend, Walk-In panels) are loaded dynamically using Next.js `next/dynamic`. They only render inside the DOM when triggered.
-* **Path-Change & Tab-Focus Prefetching:** The sidebar navigates owners using `<Link>` components that prefetch the route data. `OwnerNav` refreshes on tab focus to maintain fresh data states without polling.
-* **iMac Legibility Layout:** Standardised text sizes and line spacing (header height `h-16`, table rows using `text-base` minimum, input fields using `py-3 text-base font-semibold`) across Staff POS and Owner dashboards to optimize readability on large iMac displays. Scales up sidebars, notifications, upcoming booking list displays, and visual table fields.
-* **Business Shift Date Grouping:** Daily metrics, reports, and bills listing pages are grouped dynamically using location opening time bounds rather than strict UTC/local calendar day midnights. Early morning transactions before the opening time are retroactively mapped to the previous calendar day's business shift, aligning POS totals, reports, and payment lists.

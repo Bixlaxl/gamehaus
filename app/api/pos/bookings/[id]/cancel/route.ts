@@ -98,25 +98,40 @@ export async function POST(
 
     // If order has no other active items/bookings, mark order cancelled as well
     if (booking.order_id) {
-      await admin.from("orders").update({ status: "cancelled" }).eq("id", booking.order_id);
+      const { data: otherBookings } = await admin
+        .from("bookings")
+        .select("id")
+        .eq("order_id", booking.order_id)
+        .neq("status", "cancelled")
+        .neq("id", bookingId);
 
-      // Restore loyalty points ONLY if they were actually deducted
-      if (order?.customer_phone) {
-        const actuallyDeducted = Number(order.points_redeemed_online || 0);
-        if (actuallyDeducted > 0) {
-          const { data: profile } = await admin
-            .from("customer_profiles")
-            .select("points_balance")
-            .eq("phone", order.customer_phone)
-            .single();
+      const hasOtherActive = otherBookings && otherBookings.length > 0;
 
-          if (profile) {
-            await admin
+      if (!hasOtherActive) {
+        await admin.from("orders").update({ status: "cancelled" }).eq("id", booking.order_id);
+
+        // Restore loyalty points ONLY if they were actually deducted
+        if (order?.customer_phone) {
+          const actuallyDeducted = Number(order.points_redeemed_online || 0);
+          if (actuallyDeducted > 0) {
+            const { data: profile } = await admin
               .from("customer_profiles")
-              .update({ points_balance: (profile.points_balance || 0) + actuallyDeducted })
-              .eq("phone", order.customer_phone);
+              .select("points_balance")
+              .eq("phone", order.customer_phone)
+              .single();
+
+            if (profile) {
+              await admin
+                .from("customer_profiles")
+                .update({ points_balance: (profile.points_balance || 0) + actuallyDeducted })
+                .eq("phone", order.customer_phone);
+            }
           }
         }
+      } else {
+        // Recalculate order totals for the remaining active bookings
+        const { syncOrderTotals } = await import("@/lib/billing/engine");
+        await syncOrderTotals(admin, booking.order_id);
       }
     }
 
