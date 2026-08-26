@@ -45,16 +45,31 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   await autoMarkNoShows(admin, locationId);
 
-  // IST-anchored "today" window. Edge runs UTC, so setHours(0,0,0,0) cuts off
-  // IST traffic at the boundary — late-IST bookings would fall into UTC's
-  // next day. Compute IST today by shifting +5:30 then reading UTC fields.
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-  const nowIst = new Date(Date.now() + IST_OFFSET_MS);
-  const y  = nowIst.getUTCFullYear();
-  const mo = nowIst.getUTCMonth();
-  const d  = nowIst.getUTCDate();
-  const todayMs    = Date.UTC(y, mo, d, 0, 0, 0) - IST_OFFSET_MS;     // IST today 00:00
-  const tomorrowMs = todayMs + 24 * 60 * 60 * 1000;
+  // IST-anchored operational day window (06:00 AM IST to 06:00 AM IST next morning)
+  const nowIST = new Date();
+  const istFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = istFormatter.formatToParts(nowIST);
+  const pMap: Record<string, string> = {};
+  parts.forEach(p => pMap[p.type] = p.value);
+  const hour = parseInt(pMap.hour || "0", 10);
+  const dObj = new Date(Date.UTC(parseInt(pMap.year, 10), parseInt(pMap.month, 10) - 1, parseInt(pMap.day, 10), 12, 0, 0));
+  if (hour < 6) {
+    dObj.setUTCDate(dObj.getUTCDate() - 1);
+  }
+  const todayDate = dObj.toISOString().split("T")[0];
+  const from = new Date(`${todayDate}T06:00:00+05:30`).toISOString();
+  const nextDateObj = new Date(todayDate + "T12:00:00Z");
+  nextDateObj.setUTCDate(nextDateObj.getUTCDate() + 1);
+  const nextDate = nextDateObj.toISOString().split("T")[0];
+  const to = new Date(`${nextDate}T05:59:59+05:30`).toISOString();
 
   const { data, error } = await admin
     .from("bookings")
@@ -64,8 +79,8 @@ export async function GET(request: Request) {
       order_item:order_items!order_item_id(table_id, status, selected_mode_name)
     `)
     .eq("orders.location_id", locationId)
-    .gte("scheduled_start", new Date(todayMs).toISOString())
-    .lt("scheduled_start", new Date(tomorrowMs).toISOString())
+    .gte("scheduled_start", from)
+    .lte("scheduled_start", to)
     .in("status", ["confirmed"])
     // Sort ascending so the buildTableStatus .find() on the client picks the
     // EARLIEST upcoming booking per table — not whichever one Supabase chose
