@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -247,6 +247,17 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   const shown     = filter === "all" ? tables : tables.filter(t => t.type === filter);
   const days      = useMemo(() => buildDays(location.timezone), [location.timezone]);
   const cartCount = cart.items.length;
+  const [animateCart, setAnimateCart] = useState(false);
+  const prevCartCount = useRef(cartCount);
+
+  useEffect(() => {
+    if (cartCount > prevCartCount.current) {
+      setAnimateCart(true);
+      const timer = setTimeout(() => setAnimateCart(false), 600);
+      return () => clearTimeout(timer);
+    }
+    prevCartCount.current = cartCount;
+  }, [cartCount]);
 
   /* All slots for the current sheet date */
   const allSlots = booking
@@ -491,7 +502,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
           </div>
           <Link href={`/${location.slug}/book`} className="shrink-0">
             <button
-              className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white"
+              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white transition-all duration-200 ${
+                animateCart ? "animate-cart-pop" : ""
+              }`}
               style={{ background: "#111111" }}
             >
               <ShoppingCart className="h-4 w-4" />
@@ -503,6 +516,19 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
               )}
             </button>
           </Link>
+          <style>{`
+            @keyframes cartPop {
+              0% { transform: scale(1); }
+              20% { transform: scale(1.2) rotate(-5deg); box-shadow: 0 0 15px rgba(30,107,74,0.6); }
+              40% { transform: scale(0.9) rotate(3deg); }
+              60% { transform: scale(1.05) rotate(-2deg); }
+              80% { transform: scale(0.98); }
+              100% { transform: scale(1); }
+            }
+            .animate-cart-pop {
+              animation: cartPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+          `}</style>
         </div>
       </header>
 
