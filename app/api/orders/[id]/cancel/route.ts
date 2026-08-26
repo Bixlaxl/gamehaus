@@ -33,6 +33,7 @@ export async function POST(
         advance_paid,
         discount_amount,
         points_redeemed,
+        points_redeemed_online,
         location_id,
         customer_name,
         customer_phone,
@@ -199,11 +200,16 @@ export async function POST(
     ]);
 
     // 6.5. Restore redeemed points and revoke earned points on the customer profile
+    // ONLY restore points if they were ACTUALLY deducted during a completed payment
+    // (i.e. order.points_redeemed_online > 0, or order had advance_paid > 0).
+    // Abandoned / unpaid orders never deducted points, so no points should be added back.
     if (order.customer_phone) {
-      const pointsRedeemed = Number(order.points_redeemed) || 0;
+      const actuallyDeducted = (order.points_redeemed_online && order.points_redeemed_online > 0)
+        ? Number(order.points_redeemed_online)
+        : (amountPaidVal > 0 ? Number(order.points_redeemed || 0) : 0);
       const pointsEarned = Math.floor(amountPaidVal / settings.loyalty.earn_rupees_per_point);
 
-      if (pointsRedeemed > 0 || pointsEarned > 0) {
+      if (actuallyDeducted > 0 || pointsEarned > 0) {
         const { data: profile } = await admin
           .from("customer_profiles")
           .select("points_balance")
@@ -211,7 +217,7 @@ export async function POST(
           .single();
 
         if (profile) {
-          const newBalance = Math.max(0, profile.points_balance + pointsRedeemed - pointsEarned);
+          const newBalance = Math.max(0, profile.points_balance + actuallyDeducted - pointsEarned);
           await admin
             .from("customer_profiles")
             .update({ points_balance: newBalance })
