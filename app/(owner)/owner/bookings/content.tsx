@@ -618,26 +618,6 @@ export function BookingsContent({
                                   >
                                     {busyBookingId === b.id ? "…" : "No-show"}
                                   </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="default"
-                                    className="h-16 text-xl px-8 font-black border-amber-200 hover:bg-amber-50 hover:border-amber-300 text-amber-600 dark:text-amber-400 dark:border-amber-900/50 dark:hover:bg-amber-950/20 rounded-2xl"
-                                    onClick={(e) => { e.stopPropagation(); setReschedulingBooking(b); }}
-                                    disabled={busyBookingId === b.id}
-                                    title="Reschedule this booking"
-                                  >
-                                    Reschedule
-                                  </Button>
-                                  <Button
-                                    variant="destructive"
-                                    size="default"
-                                    className="h-16 text-xl px-8 font-black bg-red-600 hover:bg-red-700 text-white shadow-sm rounded-2xl"
-                                    onClick={(e) => { e.stopPropagation(); setCancellingBooking(b); }}
-                                    disabled={busyBookingId === b.id}
-                                    title="Cancel this booking"
-                                  >
-                                    Cancel
-                                  </Button>
                                 </div>
                               )}
                             </div>
