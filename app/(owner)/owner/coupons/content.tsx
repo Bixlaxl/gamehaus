@@ -24,7 +24,7 @@ import {
 import type { Coupon, Location } from "@/lib/supabase/types";
 import { formatCurrency } from "@/lib/utils";
 import { formatFriendlyTime, formatFriendlyDays } from "@/lib/coupons";
-import { Plus, Pencil, Copy, Check, Clock } from "lucide-react";
+import { Plus, Pencil, Copy, Check, Clock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const supabase = createClient();
@@ -91,10 +91,11 @@ export function CouponsContent({
   const [createForm, setCreateForm]   = useState<CouponForm>(defaultForm);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const [copiedCode, setCopiedCode]   = useState<string | null>(null);
-  const [editTarget, setEditTarget]   = useState<CouponRow | null>(null);
-  const [editForm, setEditForm]       = useState<Partial<CouponForm>>({});
-  const [editError, setEditError]     = useState<string | null>(null);
+  const [copiedCode, setCopiedCode]     = useState<string | null>(null);
+  const [editTarget, setEditTarget]     = useState<CouponRow | null>(null);
+  const [editForm, setEditForm]         = useState<Partial<CouponForm>>({});
+  const [editError, setEditError]       = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CouponRow | null>(null);
 
   const { data: locations } = useQuery({
     queryKey: ["locations", "active"],
@@ -139,17 +140,16 @@ export function CouponsContent({
         valid_until_time: values.time_mode === "time_slot" && values.valid_until_time ? values.valid_until_time : null,
         max_uses:         values.max_uses ? parseInt(values.max_uses) : null,
         is_public:        values.is_public,
+        valid_days:       values.valid_days && values.valid_days.length > 0 ? values.valid_days : null,
       };
-      if (values.valid_days && values.valid_days.length > 0) {
-        payload.valid_days = values.valid_days;
-      }
-      let { error: dbError } = await supabase.from("coupons").insert(payload);
-      if (dbError && dbError.message.includes("valid_days")) {
-        delete payload.valid_days;
-        const retry = await supabase.from("coupons").insert(payload);
-        dbError = retry.error;
-      }
-      if (dbError) throw new Error(dbError.message);
+
+      const res = await fetch("/api/owner/coupons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to create coupon");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["coupons"] });
@@ -165,115 +165,28 @@ export function CouponsContent({
   const editMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: Partial<CouponForm> }) => {
       const payload: any = {};
-      let hasChanges = false;
+      if (values.code !== undefined) payload.code = values.code.toUpperCase();
+      if (values.discount_type !== undefined) payload.discount_type = values.discount_type;
+      if (values.discount_value !== undefined) payload.discount_value = parseFloat(values.discount_value);
+      if (values.location_id !== undefined) payload.location_id = values.location_id === "all" ? null : values.location_id;
+      if (values.valid_from !== undefined) payload.valid_from = toStartOfDayIST(values.valid_from);
+      if (values.valid_until !== undefined) payload.valid_until = toEndOfDayIST(values.valid_until);
+      
+      const mode = values.time_mode ?? (editTarget?.valid_from_time ? "time_slot" : "full_day");
+      payload.valid_from_time = mode === "time_slot" ? (values.valid_from_time ?? editTarget?.valid_from_time ?? "13:00") : null;
+      payload.valid_until_time = mode === "time_slot" ? (values.valid_until_time ?? editTarget?.valid_until_time ?? "18:00") : null;
 
-      if (editTarget) {
-        if (values.valid_until !== undefined) {
-          const formatted = toEndOfDayIST(values.valid_until);
-          if (formatted !== editTarget.valid_until) {
-            payload.valid_until = formatted;
-            hasChanges = true;
-          }
-        }
-        if (values.valid_from !== undefined) {
-          const formatted = toStartOfDayIST(values.valid_from);
-          if (formatted !== editTarget.valid_from) {
-            payload.valid_from = formatted;
-            hasChanges = true;
-          }
-        }
-        if (values.time_mode !== undefined || values.valid_from_time !== undefined || values.valid_until_time !== undefined) {
-          const mode = values.time_mode ?? (editTarget.valid_from_time ? "time_slot" : "full_day");
-          const fromT = mode === "time_slot" ? (values.valid_from_time ?? editTarget.valid_from_time ?? "13:00") : null;
-          const untilT = mode === "time_slot" ? (values.valid_until_time ?? editTarget.valid_until_time ?? "18:00") : null;
-          if (fromT !== editTarget.valid_from_time || untilT !== editTarget.valid_until_time) {
-            payload.valid_from_time = fromT;
-            payload.valid_until_time = untilT;
-            hasChanges = true;
-          }
-        }
-        if (values.discount_type !== undefined && values.discount_type !== editTarget.discount_type) {
-          payload.discount_type = values.discount_type;
-          hasChanges = true;
-        }
-        if (values.discount_value !== undefined) {
-          const val = parseFloat(values.discount_value);
-          if (val !== Number(editTarget.discount_value)) {
-            payload.discount_value = val;
-            hasChanges = true;
-          }
-        }
-        if (values.max_uses !== undefined) {
-          const val = values.max_uses ? parseInt(values.max_uses) : null;
-          if (val !== editTarget.max_uses) {
-            payload.max_uses = val;
-            hasChanges = true;
-          }
-        }
-        if (values.location_id !== undefined) {
-          const val = values.location_id === "all" ? null : values.location_id;
-          if (val !== editTarget.location_id) {
-            payload.location_id = val;
-            hasChanges = true;
-          }
-        }
-        if (values.is_public !== undefined && values.is_public !== editTarget.is_public) {
-          payload.is_public = values.is_public;
-          hasChanges = true;
-        }
-        if (values.valid_days !== undefined) {
-          const oldDays = editTarget.valid_days || [];
-          const newDays = values.valid_days || [];
-          const same = oldDays.length === newDays.length && oldDays.every(d => newDays.includes(d));
-          if (!same) {
-            if (newDays.length > 0) {
-              payload.valid_days = newDays;
-            }
-            hasChanges = true;
-          }
-        }
-      }
+      if (values.max_uses !== undefined) payload.max_uses = values.max_uses ? parseInt(values.max_uses) : null;
+      if (values.is_public !== undefined) payload.is_public = values.is_public;
+      if (values.valid_days !== undefined) payload.valid_days = values.valid_days.length > 0 ? values.valid_days : null;
 
-      if (!hasChanges) {
-        return;
-      }
-
-      let { error } = await supabase.from("coupons").update(payload).eq("id", id);
-      if (error && error.message.includes("valid_days")) {
-        delete payload.valid_days;
-        const retry = await supabase.from("coupons").update(payload).eq("id", id);
-        error = retry.error;
-      }
-      if (error) throw error;
-    },
-    onMutate: async ({ id, values }) => {
-      await qc.cancelQueries({ queryKey: ["coupons"] });
-      const prev = qc.getQueryData<CouponRow[]>(["coupons"]);
-      const loc  = values.location_id && values.location_id !== "all"
-        ? locations?.find((l) => l.id === values.location_id)
-        : null;
-      qc.setQueryData<CouponRow[]>(["coupons"], (old) =>
-        (old ?? []).map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                valid_until:      values.valid_until ? toEndOfDayIST(values.valid_until) : c.valid_until,
-                valid_from:       values.valid_from  ? toStartOfDayIST(values.valid_from) : c.valid_from,
-                valid_from_time:  values.time_mode === "full_day" ? null : (values.valid_from_time ?? c.valid_from_time),
-                valid_until_time: values.time_mode === "full_day" ? null : (values.valid_until_time ?? c.valid_until_time),
-                discount_type:    values.discount_type ?? c.discount_type,
-                discount_value:   values.discount_value ? parseFloat(values.discount_value) : c.discount_value,
-                max_uses:         values.max_uses !== undefined ? (values.max_uses ? parseInt(values.max_uses) : null) : c.max_uses,
-                location_id:      values.location_id === "all" ? null : (values.location_id ?? c.location_id),
-                location:         values.location_id !== undefined ? (loc ? { name: loc.name } : null) : c.location,
-                is_public:        values.is_public !== undefined ? values.is_public : c.is_public,
-                valid_days:       values.valid_days !== undefined ? (values.valid_days.length > 0 ? values.valid_days : null) : c.valid_days,
-              }
-            : c
-        )
-      );
-      setEditTarget(null);
-      return { prev };
+      const res = await fetch(`/api/owner/coupons/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to update coupon");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["coupons"] });
@@ -281,8 +194,7 @@ export function CouponsContent({
       setEditError(null);
       toast.success("Coupon updated");
     },
-    onError: (e: Error, __, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
+    onError: (e: Error) => {
       setEditError(e.message);
       toast.error(e.message);
     },
@@ -291,48 +203,60 @@ export function CouponsContent({
   // ── Toggle active ────────────────────────────────────────────────────────
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
-      await supabase.from("coupons").update({ is_active: false }).eq("id", id);
+      const res = await fetch(`/api/owner/coupons/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: false }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to deactivate coupon");
     },
-    onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: ["coupons"] });
-      const prev = qc.getQueryData<CouponRow[]>(["coupons"]);
-      qc.setQueryData<CouponRow[]>(["coupons"], (old) =>
-        (old ?? []).map((c) => c.id === id ? { ...c, is_active: false } : c)
-      );
-      return { prev };
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["coupons"] });
+      toast.success("Coupon deactivated");
     },
-    onSuccess: () => toast.success("Coupon deactivated"),
-    onError: (err, __, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
-      toast.error((err as Error).message);
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const reactivateMutation = useMutation({
     mutationFn: async (id: string) => {
-      await supabase.from("coupons").update({ is_active: true }).eq("id", id);
+      const res = await fetch(`/api/owner/coupons/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: true }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to activate coupon");
     },
-    onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: ["coupons"] });
-      const prev = qc.getQueryData<CouponRow[]>(["coupons"]);
-      qc.setQueryData<CouponRow[]>(["coupons"], (old) =>
-        (old ?? []).map((c) => c.id === id ? { ...c, is_active: true } : c)
-      );
-      return { prev };
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["coupons"] });
+      toast.success("Coupon reactivated");
     },
-    onSuccess: () => toast.success("Coupon reactivated"),
-    onError: (err, __, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["coupons"], ctx.prev);
-      toast.error((err as Error).message);
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/owner/coupons/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to delete coupon");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["coupons"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["coupons"] });
+      setDeleteTarget(null);
+      toast.success("Coupon deleted and code freed up");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   function openEdit(c: CouponRow) {
     const hasTimeSlot = !!(c.valid_from_time && c.valid_until_time);
     setEditTarget(c);
     setEditForm({
+      code:             c.code,
       location_id:      c.location_id ?? "all",
       discount_type:    c.discount_type,
       discount_value:   String(c.discount_value),
@@ -444,7 +368,7 @@ export function CouponsContent({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" size="icon" onClick={() => openEdit(coupon)}>
+                      <Button variant="outline" size="icon" onClick={() => openEdit(coupon)} title="Edit coupon">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       {coupon.is_active ? (
@@ -456,6 +380,15 @@ export function CouponsContent({
                           Activate
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 hover:border-red-200"
+                        onClick={() => setDeleteTarget(coupon)}
+                        title="Delete coupon"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -463,7 +396,7 @@ export function CouponsContent({
             })}
             {coupons?.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   No coupons yet
                 </td>
               </tr>
@@ -471,6 +404,32 @@ export function CouponsContent({
           </tbody>
         </table>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Coupon — {deleteTarget?.code}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Are you sure you want to permanently delete coupon <strong className="font-mono text-gray-900 dark:text-white">{deleteTarget?.code}</strong>?
+            This will remove the coupon and immediately free up the code name so you can reuse it.
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+              }}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Coupon"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -664,6 +623,15 @@ export function CouponsContent({
             }}
             className="space-y-4"
           >
+            <div className="space-y-2">
+              <Label>Code</Label>
+              <Input
+                value={editForm.code ?? editTarget?.code ?? ""}
+                onChange={(e) => setEditForm({ ...editForm, code: e.target.value.toUpperCase() })}
+                placeholder="SUMMER20"
+                required
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Type</Label>

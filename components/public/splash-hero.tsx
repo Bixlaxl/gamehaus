@@ -25,6 +25,8 @@ interface Coupon {
   discount_value: number;
   valid_from: string;
   valid_until: string;
+  valid_from_time?: string | null;
+  valid_until_time?: string | null;
 }
 
 type Phase = "loading" | "enter" | "hold" | "exit" | "gone";
@@ -333,37 +335,48 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
                           </div>
                         </div>
 
-                        {/* Active deal badge */}
+                        {/* Active deal badges */}
                         {(() => {
-                          const locCoupons = coupons.filter(c => c.location_id === loc.id);
-                          const globCoupons = coupons.filter(c => c.location_id === null);
-                          const activeCoupon = locCoupons.length > 0 ? locCoupons[0] : (globCoupons.length > 0 ? globCoupons[0] : null);
-                          if (!activeCoupon) return null;
-                          
-                          const discountText = activeCoupon.discount_type === "percent"
-                            ? `${activeCoupon.discount_value}% OFF`
-                            : `₹${activeCoupon.discount_value} OFF`;
+                          const matchingCoupons = coupons.filter(c => c.location_id === loc.id || c.location_id === null);
+                          if (matchingCoupons.length === 0) return null;
 
                           return (
-                            <div className="mt-3 flex items-center justify-between bg-gradient-to-r from-orange-500/[0.07] to-amber-500/[0.03] border border-dashed border-[#D4541A]/30 rounded-xl p-3 relative overflow-hidden group/deal">
-                              {/* Glowing hover state */}
-                              <div className="absolute inset-0 bg-[#D4541A]/[0.02] opacity-0 group-hover/deal:opacity-100 transition-opacity duration-300" />
-                              
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-lg animate-bounce" style={{ animationDuration: '2.5s' }}>🏷️</span>
-                                <div className="min-w-0">
-                                  <p className="text-[10px] font-extrabold tracking-wider uppercase text-[#D4541A]">
-                                    Special Online Deal
-                                  </p>
-                                  <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
-                                    Pay full online to save instantly
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div className="bg-[#D4541A] text-white font-black text-[10px] px-2.5 py-1.5 rounded-lg tracking-wider shrink-0 shadow-md shadow-orange-500/10 uppercase">
-                                {discountText}
-                              </div>
+                            <div className="mt-3 space-y-2">
+                              {matchingCoupons.map((coupon) => {
+                                const discountText = coupon.discount_type === "percent"
+                                  ? `${coupon.discount_value}% OFF`
+                                  : `₹${coupon.discount_value} OFF`;
+                                const isHappyHours = !!(coupon.valid_from_time && coupon.valid_until_time);
+
+                                return (
+                                  <div
+                                    key={coupon.id}
+                                    className="flex items-center justify-between bg-gradient-to-r from-orange-500/[0.07] to-amber-500/[0.03] border border-dashed border-[#D4541A]/30 rounded-xl p-2.5 sm:p-3 relative overflow-hidden group/deal transition-all"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-base sm:text-lg animate-bounce" style={{ animationDuration: '2.5s' }}>🏷️</span>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-mono text-[11px] font-black tracking-wider uppercase text-[#D4541A] bg-orange-500/10 dark:bg-orange-500/20 px-1.5 py-0.5 rounded">
+                                            {coupon.code}
+                                          </span>
+                                          {isHappyHours && (
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">
+                                              ({coupon.valid_from_time?.slice(0, 5)}–{coupon.valid_until_time?.slice(0, 5)})
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
+                                          Pay full online to save instantly
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="bg-[#D4541A] text-white font-black text-[10px] px-2.5 py-1.5 rounded-lg tracking-wider shrink-0 shadow-md shadow-orange-500/10 uppercase">
+                                      {discountText}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
                         })()}
