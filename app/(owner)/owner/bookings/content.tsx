@@ -37,7 +37,7 @@ type BookingRow = Booking & {
     points_redeemed_online?: number;
     order_items?: Array<{ id: string; status: string }> | null;
   } | null;
-  order_item: { table: TableRef } | null;
+  order_item: { num_people?: number | null; selected_mode_name?: string | null; table: TableRef } | null;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -712,6 +712,23 @@ export function BookingsContent({
                   <p className="text-base font-semibold text-gray-600 dark:text-gray-400">
                     {formatD(b.scheduled_start)} at {formatTime(b.scheduled_start)} – {formatTime(b.scheduled_end)} ({formatDuration(durationMins)})
                   </p>
+                  {(b.order_item?.num_people || b.order_item?.selected_mode_name) && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {b.order_item?.num_people && (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                          {table?.type === "ps5" 
+                            ? `${b.order_item.num_people} ${b.order_item.num_people === 1 ? "Controller" : "Controllers"}`
+                            : `${b.order_item.num_people} ${b.order_item.num_people === 1 ? "Player" : "Players"}`
+                          }
+                        </span>
+                      )}
+                      {b.order_item?.selected_mode_name && (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-orange-50 dark:bg-orange-950/20 text-[#D4541A] dark:text-[#f26e3c] uppercase tracking-wide">
+                          Mode: {b.order_item.selected_mode_name}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Customer Details */}

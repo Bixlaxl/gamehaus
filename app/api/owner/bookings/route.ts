@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     .select(`
       *,
       order:orders(id, customer_name, customer_phone, advance_paid, type, status, created_by, subtotal, discount_amount, total_amount, points_redeemed, public_discount_amount, points_redeemed_online, location_id, order_items(id, status)),
-      order_item:order_items(table:tables(id, name, type, location_id, location:locations(name, id)))
+      order_item:order_items(id, num_people, selected_mode_name, table:tables(id, name, type, location_id, location:locations(name, id)))
     `)
     .gte("scheduled_start", from)
     .lte("scheduled_start", to)
