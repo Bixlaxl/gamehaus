@@ -57,6 +57,27 @@ const TYPE_ICON: Record<string, string> = {
   snooker: "🎱", pool: "🎱", ps5: "🎮", foosball: "⚽",
 };
 
+function getOperationalDateIST(dateObj = new Date()): string {
+  const istFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = istFormatter.formatToParts(dateObj);
+  const pMap: Record<string, string> = {};
+  parts.forEach(p => pMap[p.type] = p.value);
+  const hour = parseInt(pMap.hour || "0", 10);
+  const dObj = new Date(Date.UTC(parseInt(pMap.year, 10), parseInt(pMap.month, 10) - 1, parseInt(pMap.day, 10), 12, 0, 0));
+  if (hour < 6) {
+    dObj.setUTCDate(dObj.getUTCDate() - 1);
+  }
+  return dObj.toISOString().split("T")[0];
+}
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", {
     hour: "2-digit", minute: "2-digit", hour12: true,
@@ -88,7 +109,7 @@ export function BookingsContent({
     const id = setInterval(() => setActionTick((t) => t + 1), 30_000);
     return () => clearInterval(id);
   }, [mode]);
-  const [date, setDate]           = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+  const [date, setDate]           = useState(() => getOperationalDateIST());
   // The date this component was first mounted on. Used to decide whether the
   // SSR-passed initialBookings actually applies to the date the user is now
   // viewing. Without this gate, TanStack treats initialData as fresh for
@@ -229,12 +250,12 @@ export function BookingsContent({
   const { data: bookings, isLoading, refetch } = useQuery({
     queryKey: ["owner-bookings", date],
     queryFn: async () => {
-      // Full operational window: from 00:00 IST on selected date to 06:00 IST next morning
-      const from = new Date(`${date}T00:00:00+05:30`).toISOString();
+      // Operational day window: from 06:00 IST on date to 05:59:59 IST next morning (covers all venue shifts seamlessly)
+      const from = new Date(`${date}T06:00:00+05:30`).toISOString();
       const nextDateObj = new Date(date + "T12:00:00Z");
       nextDateObj.setUTCDate(nextDateObj.getUTCDate() + 1);
       const nextDate = nextDateObj.toISOString().split("T")[0];
-      const to = new Date(`${nextDate}T06:00:00+05:30`).toISOString();
+      const to = new Date(`${nextDate}T05:59:59+05:30`).toISOString();
 
       const res = await fetch(
         `/api/owner/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,

@@ -11,15 +11,33 @@ export default async function BookingsPage() {
     .select("id, name, opening_time, closing_time")
     .eq("is_active", true);
 
-  // Exact Indian local date (IST)
-  const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  // Calculate active operational date in IST (shifts to yesterday if currently before 06:00 AM)
+  const nowIST = new Date();
+  const istFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = istFormatter.formatToParts(nowIST);
+  const pMap: Record<string, string> = {};
+  parts.forEach(p => pMap[p.type] = p.value);
+  const hour = parseInt(pMap.hour || "0", 10);
+  const dObj = new Date(Date.UTC(parseInt(pMap.year, 10), parseInt(pMap.month, 10) - 1, parseInt(pMap.day, 10), 12, 0, 0));
+  if (hour < 6) {
+    dObj.setUTCDate(dObj.getUTCDate() - 1);
+  }
+  const todayDate = dObj.toISOString().split("T")[0];
   
-  // Full operational window: from 00:00 IST today to 06:00 IST tomorrow (covers all venues & midnight crossing)
-  const from = new Date(`${todayDate}T00:00:00+05:30`).toISOString();
+  // Operational day window: from 06:00 IST on date to 05:59:59 IST next morning (covers all venue shifts seamlessly)
+  const from = new Date(`${todayDate}T06:00:00+05:30`).toISOString();
   const nextDateObj = new Date(todayDate + "T12:00:00Z");
   nextDateObj.setUTCDate(nextDateObj.getUTCDate() + 1);
   const nextDate = nextDateObj.toISOString().split("T")[0];
-  const to = new Date(`${nextDate}T06:00:00+05:30`).toISOString();
+  const to = new Date(`${nextDate}T05:59:59+05:30`).toISOString();
 
   const { data: bookings } = await admin
     .from("bookings")
