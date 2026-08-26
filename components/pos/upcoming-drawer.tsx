@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePOSStore } from "@/store/pos";
-import { CalendarClock, X, Phone } from "lucide-react";
+import { CalendarClock, X, Phone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { CancelBookingModal } from "@/components/pos/cancel-booking-modal";
 import type { Booking, Order, OrderItem } from "@/lib/supabase/types";
 
 interface UpcomingDrawerProps {
@@ -11,8 +13,8 @@ interface UpcomingDrawerProps {
 }
 
 type BookingRow = Booking & {
-  order: Pick<Order, "customer_name" | "customer_phone">;
-  order_item: Pick<OrderItem, "table_id" | "status"> | null;
+  order: Pick<Order, "customer_name" | "customer_phone" | "advance_paid" | "type">;
+  order_item: Pick<OrderItem, "table_id" | "status"> & { table?: { name?: string } } | null;
 };
 
 // Outer gate — modal-pattern. Until the drawer is opened, this renders null
@@ -24,10 +26,12 @@ export function UpcomingDrawer({ locationId }: UpcomingDrawerProps) {
 }
 
 function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
+  const qc           = useQueryClient();
   const setOpen      = usePOSStore((s) => s.setUpcomingDrawerOpen);
   const tables       = usePOSStore((s) => s.tables);
   const now          = usePOSStore((s) => s.now);
   const setSelected  = usePOSStore((s) => s.setSelectedTableId);
+  const [cancellingBooking, setCancellingBooking] = useState<BookingRow | null>(null);
 
   // Reuses the same query key as pos-screen's bookings query so the data is
   // shared from cache — no extra request, no extra realtime sub.
@@ -48,75 +52,90 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
     .filter((b) => {
       const oi = b.order_item;
       if (oi?.status !== "scheduled") return false;
-      const key = `${oi.table_id}:${b.scheduled_start}`;
+      const key = `${oi.table_id}_${b.scheduled_start}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
-    .sort((a, b) =>
-      new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
+    .sort(
+      (a, b) =>
+        new Date(a.scheduled_start).getTime() -
+        new Date(b.scheduled_start).getTime()
     );
 
-  // Split into time bands
-  const soon: BookingRow[] = [];   // <= 30 min
-  const later: BookingRow[] = [];  // > 30 min
-  for (const b of upcoming) {
-    const minsAway = (new Date(b.scheduled_start).getTime() - now.getTime()) / 60000;
-    if (minsAway <= 30) soon.push(b);
-    else later.push(b);
+  const nowMs = now.getTime();
+  const THIRTY_MINS = 30 * 60 * 1000;
+
+  const soon = upcoming.filter((b) => {
+    const diff = new Date(b.scheduled_start).getTime() - nowMs;
+    return diff >= 0 && diff <= THIRTY_MINS;
+  });
+
+  const later = upcoming.filter((b) => {
+    const diff = new Date(b.scheduled_start).getTime() - nowMs;
+    return diff > THIRTY_MINS;
+  });
+
+  function minsFromNow(iso: string) {
+    const diff = new Date(iso).getTime() - nowMs;
+    if (diff < 0) return "now";
+    const mins = Math.round(diff / 60000);
+    if (mins === 0) return "now";
+    if (mins < 60) return `in ${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    const rem = mins % 60;
+    return rem === 0 ? `in ${hrs}h` : `in ${hrs}h ${rem}m`;
   }
 
-  function close() { setOpen(false); }
+  function fmtTime(iso: string) {
+    const d = new Date(iso);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const ampm = h >= 12 ? "pm" : "am";
+    const hour = h % 12 || 12;
+    return `${hour}${m > 0 ? `:${String(m).padStart(2, "0")}` : ""}${ampm}`;
+  }
 
   function jumpToTable(tableId: string) {
     setSelected(tableId);
-    close();
+    setOpen(false);
   }
-
-  const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
-
-  const minsFromNow = (iso: string) => {
-    const diff = (new Date(iso).getTime() - now.getTime()) / 60000;
-    if (diff < 0)     return `${Math.abs(Math.ceil(diff))}m late`;
-    if (diff < 1)     return "now";
-    if (diff < 60)    return `in ${Math.ceil(diff)}m`;
-    const hrs = diff / 60;
-    if (hrs < 10)     return `in ${hrs.toFixed(1)}h`;
-    return `in ${Math.round(hrs)}h`;
-  };
 
   return (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-        onClick={close}
+        onClick={() => setOpen(false)}
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
       />
+
       {/* Drawer */}
       <div
-        className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[420px] flex flex-col
-          bg-white dark:bg-[#0e0e0e] border-l border-gray-200 dark:border-[#1f1f1f] shadow-2xl"
-        style={{ animation: "slideInRight 250ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+        role="dialog"
+        aria-modal="true"
+        className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[420px] bg-[#f8f9fb] dark:bg-[#111]
+          border-l border-gray-200 dark:border-[#222] shadow-2xl flex flex-col"
+        style={{
+          animation: "slideInRight 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        }}
       >
         {/* Header */}
-        <div className="shrink-0 flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-[#1f1f1f]">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: "rgba(212,84,26,0.12)" }}
-          >
-            <CalendarClock className="h-4 w-4" style={{ color: "#D4541A" }} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="font-bold text-gray-900 dark:text-white text-base leading-tight">
-              Upcoming today
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-[#888] mt-0.5">
-              {upcoming.length} total · {soon.length} within 30 min
-            </p>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#222] bg-white dark:bg-[#141414]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#D4541A]/10 text-[#D4541A]">
+              <CalendarClock className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white leading-none">
+                Upcoming today
+              </h2>
+              <p className="text-xs text-gray-400 mt-1">
+                {upcoming.length} {upcoming.length === 1 ? "booking" : "bookings"} scheduled
+              </p>
+            </div>
           </div>
           <button
-            onClick={close}
+            onClick={() => setOpen(false)}
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             aria-label="Close"
           >
@@ -133,14 +152,14 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
               {soon.length > 0 && (
                 <Section title="Next 30 minutes" accent="#f59e0b" count={soon.length}>
                   {soon.map((b) => (
-                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} urgent />
+                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} onCancel={(b) => setCancellingBooking(b)} urgent />
                   ))}
                 </Section>
               )}
               {later.length > 0 && (
                 <Section title="Later today" accent="#9ca3af" count={later.length}>
                   {later.map((b) => (
-                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} />
+                    <Row key={b.id} booking={b} tables={tables} fmtTime={fmtTime} minsFromNow={minsFromNow} onJump={jumpToTable} onCancel={(b) => setCancellingBooking(b)} />
                   ))}
                 </Section>
               )}
@@ -148,6 +167,25 @@ function UpcomingDrawerInner({ locationId }: UpcomingDrawerProps) {
           )}
         </div>
       </div>
+
+      {cancellingBooking && (
+        <CancelBookingModal
+          booking={{
+            ...cancellingBooking,
+            order_item: {
+              table: tables.find((t) => t.id === cancellingBooking.order_item?.table_id) || null,
+            },
+          }}
+          onClose={() => setCancellingBooking(null)}
+          onSuccess={() => {
+            setCancellingBooking(null);
+            qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+            qc.invalidateQueries({ queryKey: ["owner-bookings"] });
+            qc.invalidateQueries({ queryKey: ["tables"] });
+            qc.invalidateQueries({ queryKey: ["manual-table-slots"] });
+          }}
+        />
+      )}
 
       <style jsx>{`
         @keyframes slideInRight {
@@ -182,13 +220,14 @@ function Section({
 }
 
 function Row({
-  booking, tables, fmtTime, minsFromNow, onJump, urgent,
+  booking, tables, fmtTime, minsFromNow, onJump, onCancel, urgent,
 }: {
   booking: BookingRow;
   tables: ReturnType<typeof usePOSStore.getState>["tables"];
   fmtTime: (iso: string) => string;
   minsFromNow: (iso: string) => string;
   onJump: (tableId: string) => void;
+  onCancel: (booking: BookingRow) => void;
   urgent?: boolean;
 }) {
   const oi = booking.order_item;
@@ -240,7 +279,7 @@ function Row({
         </div>
       </button>
 
-      {/* Click-to-copy phone — staff is on PC, copies number to dial */}
+      {/* Click-to-copy phone */}
       {phone ? (
         <button
           onClick={() => {
@@ -260,6 +299,20 @@ function Row({
           </span>
         </button>
       ) : null}
+
+      {/* Cancel button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onCancel(booking);
+        }}
+        className="shrink-0 self-center flex items-center justify-center p-2.5 rounded-lg
+          bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400
+          border border-red-200 dark:border-red-900/50 transition-colors"
+        title="Cancel this booking"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </li>
   );
 }

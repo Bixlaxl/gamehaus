@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, XCircle, CalendarPlus } from "lucide-react";
 import { ManualBookingModal } from "@/components/pos/manual-booking-modal";
+import { CancelBookingModal } from "@/components/pos/cancel-booking-modal";
 import { cn, getShopWindow } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking, Order, Location } from "@/lib/supabase/types";
@@ -121,6 +122,7 @@ export function BookingsContent({
   const [statusFilter, setStatus] = useState("all");
   const [manualOpen,    setManualOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
+  const [cancellingBooking, setCancellingBooking] = useState<BookingRow | null>(null);
   const [tablesList, setTablesList] = useState<any[]>([]);
   const [loadingTables, setLoadingTables] = useState(false);
   const [targetTableId, setTargetTableId] = useState("");
@@ -500,23 +502,32 @@ export function BookingsContent({
 
                     {/* Actions */}
                     {mode === "staff" && b.status === "confirmed" && (
-                      <div className="flex gap-2.5 pt-1">
+                      <div className="flex gap-2 pt-1 flex-wrap">
                         <Button
                           size="sm"
                           disabled={busyBookingId === b.id || !actionsAllowed}
                           onClick={(e) => { e.stopPropagation(); void doCheckIn(b); }}
-                          className="flex-1 h-12 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                          className="flex-1 min-w-[90px] h-12 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl"
                         >
                           {busyBookingId === b.id ? "…" : "Check-in"}
                         </Button>
                         <Button
                           size="sm"
-                          variant="destructive"
+                          variant="outline"
                           disabled={busyBookingId === b.id || !actionsAllowed}
                           onClick={(e) => { e.stopPropagation(); void doNoShow(b); }}
-                          className="flex-1 h-12 text-sm font-black rounded-xl"
+                          className="flex-1 min-w-[80px] h-12 text-sm font-bold text-gray-500 hover:text-red-500 hover:border-red-200 rounded-xl"
                         >
                           {busyBookingId === b.id ? "…" : "No-show"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busyBookingId === b.id}
+                          onClick={(e) => { e.stopPropagation(); setCancellingBooking(b); }}
+                          className="flex-1 min-w-[80px] h-12 text-sm font-black rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                        >
+                          Cancel
                         </Button>
                       </div>
                     )}
@@ -604,6 +615,16 @@ export function BookingsContent({
                                     title={!actionsAllowed ? actionsBlockedReason : "Mark as no-show"}
                                   >
                                     {busyBookingId === b.id ? "…" : "No-show"}
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="default"
+                                    className="h-16 text-xl px-8 font-black bg-red-600 hover:bg-red-700 text-white shadow-sm rounded-2xl"
+                                    onClick={(e) => { e.stopPropagation(); setCancellingBooking(b); }}
+                                    disabled={busyBookingId === b.id}
+                                    title="Cancel this booking"
+                                  >
+                                    Cancel
                                   </Button>
                                 </div>
                               )}
@@ -809,26 +830,55 @@ export function BookingsContent({
                   )}
                 </div>
 
-                {/* Footer Status badge */}
+                {/* Footer Status badge & Cancel action */}
                 <div className="pt-4 flex justify-between items-center text-base font-bold text-gray-500 border-t border-gray-100 dark:border-[#222]">
-                  <span>Status</span>
-                  <Badge
-                    className="px-6 py-2.5 text-sm font-black rounded-xl"
-                    variant={
-                      b.status === "confirmed"  ? "success"     :
-                      b.status === "checked_in" ? "outline"     :
-                      (b.status === "finished" || b.status === "completed") ? "secondary" :
-                      b.status === "no_show"    ? "destructive" : "secondary"
-                    }
-                  >
-                    {STATUS_LABELS[b.status] ?? b.status}
-                  </Badge>
+                  <div className="flex items-center gap-3">
+                    <span>Status</span>
+                    <Badge
+                      className="px-6 py-2.5 text-sm font-black rounded-xl"
+                      variant={
+                        b.status === "confirmed"  ? "success"     :
+                        b.status === "checked_in" ? "outline"     :
+                        (b.status === "finished" || b.status === "completed") ? "secondary" :
+                        b.status === "no_show"    ? "destructive" : "secondary"
+                      }
+                    >
+                      {STATUS_LABELS[b.status] ?? b.status}
+                    </Badge>
+                  </div>
+                  {mode === "staff" && b.status === "confirmed" && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-12 px-6 rounded-xl font-bold bg-red-600 hover:bg-red-700 text-white"
+                      onClick={() => setCancellingBooking(b)}
+                    >
+                      Cancel Booking
+                    </Button>
+                  )}
                 </div>
               </div>
             );
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Staff Cancel Booking Modal */}
+      {cancellingBooking && (
+        <CancelBookingModal
+          booking={cancellingBooking}
+          onClose={() => setCancellingBooking(null)}
+          onSuccess={() => {
+            setCancellingBooking(null);
+            setSelectedBooking(null);
+            void refetch();
+            qc.invalidateQueries({ queryKey: ["pos-bookings"] });
+            qc.invalidateQueries({ queryKey: ["owner-bookings"] });
+            qc.invalidateQueries({ queryKey: ["tables"] });
+            qc.invalidateQueries({ queryKey: ["manual-table-slots"] });
+          }}
+        />
+      )}
     </div>
   );
 }
