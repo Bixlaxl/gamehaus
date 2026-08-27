@@ -119,9 +119,10 @@ sequenceDiagram
   API->>API: Apply Membership Discount (discount_pct)
   API->>API: Subtract Redeemed Points (1 point = ₹1)
   API->>API: Subtract advance_paid to calculate finalDue
-  API->>DB: Perform 4 writes in parallel:
-  Note over DB: 1. Update order status = 'finalized'<br/>2. Insert payment row (completed)<br/>3. Increment coupon usage (if any)<br/>4. Fetch customer profile row
-  API->>DB: Update customer_profile (visit_count + 1, total_spent + total_paid, new_points_balance)
+  API->>DB: Perform Stage 1 parallel writes:
+  Note over DB: 1. Update order status = 'finalized'<br/>2. Insert payment split rows (completed)<br/>3. Increment coupons.used_count (+1, if any)<br/>4. Update customer_memberships (free_hours_ledger & free_hrs_used)<br/>5. Update order_items status = 'finished'<br/>6. Update bookings status = 'finished'
+  API->>DB: Perform Stage 2 sequential write:
+  Note over DB: Fetch customer_profile & update (visit_count + 1, total_spent + paid, points_balance)
   API-->>POS: OK (closes bill)
   API->>WhatsApp: Trigger automated WhatsApp invoice notification
 ```

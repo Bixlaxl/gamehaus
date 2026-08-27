@@ -64,55 +64,85 @@ Gamehaus is a booking and POS system for physical snooker/gaming café locations
 
 ## 4. Complete API Route Registry
 
-### POS Operations
+### POS Operations & Management
 * `GET /api/pos/tables` - Fetches tables with computed statuses, active running items, and upcoming slot bookings.
 * `GET /api/pos/orders` - Lists active open orders at the caller's location.
 * `GET /api/pos/bookings` - Fetches today's bookings for the POS upcoming list.
 * `POST /api/pos/bookings/switch-table` - Swaps table session to another physical table of compatible type.
-* `POST /api/pos/bookings/[id]/cancel` - Cancels manual or online booking, releases table slot, restores loyalty points.
+* `POST /api/pos/bookings/[id]/cancel` - Staff cancels manual or online booking, releases table slot, restores loyalty points.
 * `POST /api/pos/manual-booking` - Creates manual reservation slot on the grid.
 * `POST /api/pos/manual-bill` - Generates direct finalization for item sales with no table sessions.
-* `DELETE /api/pos/bills/[id]` - Deletes finalized bills (Owner-only authentication).
+* `DELETE /api/pos/bills/[id]` - Deletes finalized bills (Owner-only authentication, role verified at L27).
 * `POST /api/pos/bills/[id]/send-whatsapp` - Manual re-send of WhatsApp invoice to customer.
+* `POST /api/walkin` - Starts immediate walk-in session on POS grid.
+
+### Booking Slot Operations
+* `GET /api/tables/[id]/slots` - Fetches blocked time ranges for public slot picker; runs lazy cleanup on expired unpaid draft orders.
+* `POST /api/bookings/[id]/checkin` - Checks in confirmed booking. Shifts early arrivals (<45m) or anchors to scheduled start/end for late arrivals.
+* `POST /api/bookings/[id]/noshow` - Marks un-checked-in booking as no-show and cancels associated order item.
+* `POST /api/bookings/[id]/reschedule` - Reschedules booking slot start/end times with overlap validation.
 
 ### Session Control
-* `POST /api/sessions/start` - Check-in or start direct walk-in session. Sets `actual_start` and `status = 'running'`.
-* `POST /api/sessions/stop` - Stops active session. Sets `actual_end` and `status = 'finished'`.
-* `POST /api/sessions/extend` - Extends a table session's expected duration. Updates `expected_end` and logs extension mins.
+* `POST /api/sessions/start` - Starts scheduled session (`actual_start = now`, `status = 'running'`).
+* `POST /api/sessions/stop` - Stops active session (`actual_end = now`, `status = 'finished'`, locks `final_amount`).
+* `POST /api/sessions/extend` - Extends session expected duration (`expected_end` updated, logs `extended_mins`).
 * `POST /api/sessions/remove-extension` - Reverts previous duration extension.
-* `POST /api/sessions/people` - Updates player count mid-session to adjust pricing rate.
+* `POST /api/sessions/people` - Updates player count mid-session and re-resolves hourly rate from `tables.people_pricing`.
 
-### Customer & Loyalty
-* `POST /api/customers/lookup` - Checks points balance and active membership during POS billing.
+### Customer, Loyalty & Memberships
+* `POST /api/customers/lookup` - Checks points balance and active memberships via phone & fuzzy name match.
 * `GET /api/customers/search` - Autocomplete matching names/phones on POS slider.
+* `POST /api/memberships/assign` - Purchases/assigns membership plan to customer phone.
 
 ### Inventory & Stock
-* `GET/POST /api/inventory` - Lists or registers items in store inventory.
-* `POST /api/inventory/[id]/stock` - Restocks or adjusts inventory items counts.
+* `GET/POST /api/inventory` - Lists or registers catalog items.
+* `PATCH/DELETE /api/inventory/[id]` - Updates catalog details or soft-deletes items.
+* `POST /api/inventory/[id]/stock` - Restocks or adjusts inventory stock count (logs change).
 * `POST /api/inventory/staff-consume` - Staff records item damage, spill, or personal consumption.
 * `GET /api/inventory/stock-logs` - Fetches audit log for stock changes.
+* `GET /api/inventory/checkout-addons` - Fetches catalog extras for public booking checkout overlay.
+* `POST /api/orders/[id]/extras` - Adds beverage/food item to order and decrements catalog stock.
+* `DELETE /api/orders/[id]/extras/[extraId]` - Soft-deletes extra (`is_deleted = true`) and reverses inventory stock.
 
-### Core Billing
-* `POST /api/orders` - Registers public booking orders and creates Razorpay order references.
-* `POST /api/orders/[id]/cancel` - Online cancellation triggering cancellation policy checks and Razorpay refund API.
-* `POST /api/orders/[id]/finalize` - Finalizes open orders, logs split payments, updates customer metrics, increments coupon counts, updates free hours ledger.
-* `POST /api/payments/webhook` - Handles verified Razorpay payload to mark reservations as confirmed.
+### Master Administration (Locations, Tables, Coupons, Staff, Settings)
+* `GET/POST /api/locations` & `PATCH/DELETE /api/locations/[id]` - Location branch management.
+* `GET/POST /api/tables` & `PATCH/DELETE /api/tables/[id]` - Gaming table master management.
+* `GET/POST /api/memberships` & `PATCH/DELETE /api/memberships/[id]` - Subscription plan master management.
+* `GET/POST /api/coupons` & `PATCH/DELETE /api/coupons/[id]` - Promo code master management.
+* `GET /api/coupons/active` & `GET /api/coupons/validate` - Active public coupon lookup and rules validator.
+* `GET/POST /api/staff` & `PATCH/DELETE /api/staff/[id]` - Staff profile registration & management.
+* `GET/PATCH /api/settings` - System policies (loyalty rates, cancellation tiers). Owner role enforced on PATCH (L49).
+
+### Tablet Kiosk Companion
+* `POST /api/tablet/login` - Authenticates tablet kiosk via staff credentials, returns JWT token & `location_id`.
+* `GET /api/tablet/status` - Polls live session timer, computes residual owed bill, and returns `max_extend_mins` ceiling.
+
+### Core Billing & Payments
+* `POST /api/orders` - Creates online or walk-in orders with server-side table rate resolution.
+* `POST /api/orders/[id]/confirm-online` - Confirms zero-due or fully-prepaid online bookings.
+* `POST /api/orders/[id]/cancel` - Cancels order, evaluates cancellation policy tiers, triggers Razorpay refund API.
+* `POST /api/orders/[id]/finalize` - Finalizes POS order, logs split payments, updates customer metrics, increments `coupons.used_count`.
+* `POST /api/payments/create-order` - Registers Razorpay payment order for online booking checkout.
+* `POST /api/payments/webhook` - Validates Razorpay HMAC signature, completes payments, promotes items to `scheduled`, inserts bookings, checks for cancelled order state before reviving.
+* `GET /api/owner/reports` - Generates revenue, peak hour, staff performance, and membership analytics.
 
 ---
 
 ## 5. Architectural Constraints & Rules
 
 1. **Service Role Client for API Writes:** Row Level Security (RLS) is active. Client browser SDK writes fail. API route updates/inserts MUST use `createAdminClient()`.
-2. **Double-Submit Protection:** finalize button must check `submittingRef.current = true` to prevent concurrent execution.
-3. **Reports API Security:** Owner stats fetch must check auth session role and query bypassing RLS via `createAdminClient()` server-side.
-4. **Reschedule Slot Checks:** Moving slot reservations must run availability queries checking overlapping durations on that table.
-5. **No-Show Threshold:** Bookings held for 15 mins past `scheduled_start` transition to `no_show` and are auto-cancelled by cleanup cron.
-6. **Operating Shifts Boundary:** Group report metrics by shifts (e.g. 06:00 to 05:59 next morning) instead of strict UTC midnight.
+2. **Server-Side Finalize Idempotency:** `/api/orders/[id]/finalize` enforces `if (order.status !== 'open') return 400 INVALID_STATE` at L59, preventing duplicate payments or double coupon increments on retries.
+3. **Single Source of Coupon Count Increments:** `coupons.used_count` is incremented EXCLUSIVELY inside `/api/orders/[id]/finalize` (L352). Neither `/confirm-online` nor `/payments/webhook` writes to `used_count`.
+4. **Order Resurrection Guard in Webhook:** `/api/payments/webhook` checks `if (order?.status === 'cancelled')` at L106 to prevent delayed Razorpay webhooks from reviving explicitly cancelled orders or no-show bookings.
+5. **Administrative Route Owner Role Gates:** Sensitive endpoints (`/api/settings`, `/api/owner/reports`, `/api/pos/bills/[id]`) enforce `if (viewer?.role !== 'owner') return 403 FORBIDDEN`. *(Note: Admin routes `/api/tables`, `/api/locations`, `/api/inventory`, `/api/memberships`, `/api/coupons` require owner role gate addition).*
+6. **Check-In Anchoring Logic:** Early check-in (<45m) shifts `actual_start = now` and `expected_end = now + duration` if table is free. Late check-in anchors to `scheduled_start` and `scheduled_end` (customer billed for full slot).
+7. **Lazy Booking Cleanup:** Unpaid draft guest bookings (>5m old) are cleaned up lazily during slot fetches (`GET /api/tables/[id]/slots`) and `POST /api/orders` via `cancelExpiredUnpaidOrders()`.
+8. **Operating Shifts Boundary:** All report metrics, overview totals, and bill views group by store operating shift (e.g. 06:00 to 05:59 next morning or store `opening_time` to `closing_time`) rather than UTC midnight.
 
 ---
 
 ## 6. Common Pitfalls & Gotchas
 
-* **TypeScript UUID cast:** Querying membership short ID (e.g. `"FI2Q28"`) on uuid column errors. Validate UUID format before using `.eq('id', value)`.
-* **Grace Period OT Math:** Billed session uses `expected_end` which includes grace threshold window calculations.
-* **realtime publication:** When creating new tables in DB, run alter publication script to ensure web sockets sync POS grid state.
+* **TypeScript UUID Cast:** Querying membership short ID (e.g. `"FI2Q28"`) on uuid column errors. Validate UUID format (`/^[0-9a-f]{8}-.../i`) before querying `.eq('id', value)`.
+* **Read-Modify-Write Stock Count:** `/api/orders/[id]/extras` and `/api/inventory/staff-consume` perform read-modify-write on `stock_count` in JS memory (`stock_count: current - qty`). Handle concurrent updates carefully.
+* **Realtime Publication:** When adding new database tables, execute `ALTER PUBLICATION supabase_realtime ADD TABLE <table_name>;` to ensure WebSocket state sync works.

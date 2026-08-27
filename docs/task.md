@@ -489,4 +489,13 @@ When a staff member simply uses the POS, the following timeline of write operati
 * **Verification performed:**
   - Verified local compilation by executing a Next.js production build (`npm run build`).
   - Verified that all unit tests pass successfully (`npx vitest run`).
-* **Remaining risks:** None identified. The three-phase caching and overwrites mitigation strategy is now fully implemented and verified.
+* **Remaining risks:** Stale-field overwrites during form submission are resolved. However, administrative REST endpoints (`/api/tables`, `/api/locations`, `/api/inventory`, `/api/memberships`, `/api/coupons`) still require an `owner` role check (`viewer.role === 'owner'`) to prevent staff sessions from making direct API modifications (High Priority Issue #1 remains open).
+
+### Phase 4: Razorpay Webhook Order Resurrection Fix [COMPLETED - 2026-08-27]
+* **What changed:** Added an explicit `order.status === "cancelled"` guard inside the Razorpay webhook handler ([app/api/payments/webhook/route.ts:L106-L113](file:///Users/ahmedbilal/Desktop/gamehaus-main/app/api/payments/webhook/route.ts#L106-L113)). If an order or booking was explicitly cancelled (or marked no-show) prior to webhook delivery, the webhook marks the payment completed but refuses to overwrite `order.status` to `"open"` or promote `order_items` back to `"scheduled"`.
+* **Why it changed:** Previously, a delayed Razorpay `payment.captured` event would blindly execute `.eq("status", "cancelled")` to promote items back to `"scheduled"`, resurrecting cancelled orders and creating double-booked physical table slots on the POS grid.
+* **Files modified:** [app/api/payments/webhook/route.ts](file:///Users/ahmedbilal/Desktop/gamehaus-main/app/api/payments/webhook/route.ts)
+* **Verification performed:**
+  - Tested with local `npx tsc --noEmit` build check (passed with 0 errors).
+  - Verified git commit `de9aaf5` pushed to `main`.
+* **Remaining risks:** None for order resurrection. Direct un-transactional `Promise.all` multi-table writes remain under Technical Debt #3.
