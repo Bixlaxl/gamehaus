@@ -188,6 +188,7 @@ export default async function OwnerDashboard({
     { data: allLiveDetail },
     { data: insightItems },
     { data: insightExtras },
+    { data: allMemberships },
   ] = await Promise.all([
     admin.from("orders").select("amount_due, advance_paid, location_id")
       .eq("status", "finalized")
@@ -256,6 +257,11 @@ export default async function OwnerDashboard({
       .eq("is_deleted", false)
       .eq("order.status", "finalized")
       .gte("created_at", thirtyDaysAgo.toISOString()),
+
+    // Upfront membership sales for overall revenue stats (matching Reports page)
+    admin.from("customer_memberships")
+      .select("created_at, plan:membership_plans(price)")
+      .gte("created_at", lastMonthStart.toISOString()),
   ]);
 
   // Rest of the destructure happens after — but since we added 2 elements
@@ -290,10 +296,41 @@ export default async function OwnerDashboard({
   const filteredRecent     = (allRecentOrders  ?? []).filter(filterLoc).slice(0, 8);
   const filteredLiveDetail = (allLiveDetail    ?? []).filter(filterTableLoc).slice(0, 8);
 
-  const todayRevenue     = filteredToday.reduce((s, o)     => s + orderTotal(o), 0);
-  const yesterdayRevenue = filteredYesterday.reduce((s, o) => s + orderTotal(o), 0);
-  const monthRevenue     = filteredMonth.reduce((s, o)     => s + orderTotal(o), 0);
-  const lastMonthRevenue = filteredLastMonth.reduce((s, o) => s + orderTotal(o), 0);
+  // Upfront membership revenue (only included when all locations are selected, matching Reports page)
+  let todayMembershipSales = 0;
+  let yesterdayMembershipSales = 0;
+  let monthMembershipSales = 0;
+  let lastMonthMembershipSales = 0;
+
+  if (!loc && allMemberships) {
+    const todayStartIso = todayStart.toISOString();
+    const todayEndIso = todayEnd.toISOString();
+    const yesterdayStartIso = yesterdayStart.toISOString();
+    const yesterdayEndIso = yesterdayEnd.toISOString();
+    const monthStartIso = monthStart.toISOString();
+
+    for (const m of allMemberships) {
+      if (!m.created_at || !m.plan?.price) continue;
+      const price = m.plan.price;
+      const cat = m.created_at;
+      if (cat >= monthStartIso) {
+        monthMembershipSales += price;
+      } else {
+        lastMonthMembershipSales += price;
+      }
+
+      if (cat >= todayStartIso && cat <= todayEndIso) {
+        todayMembershipSales += price;
+      } else if (cat >= yesterdayStartIso && cat <= yesterdayEndIso) {
+        yesterdayMembershipSales += price;
+      }
+    }
+  }
+
+  const todayRevenue     = filteredToday.reduce((s, o)     => s + orderTotal(o), 0) + todayMembershipSales;
+  const yesterdayRevenue = filteredYesterday.reduce((s, o) => s + orderTotal(o), 0) + yesterdayMembershipSales;
+  const monthRevenue     = filteredMonth.reduce((s, o)     => s + orderTotal(o), 0) + monthMembershipSales;
+  const lastMonthRevenue = filteredLastMonth.reduce((s, o) => s + orderTotal(o), 0) + lastMonthMembershipSales;
   const liveCount        = filteredLive.length;
   const bookingsToday    = filteredBookings.length;
 

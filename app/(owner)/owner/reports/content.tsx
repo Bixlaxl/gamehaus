@@ -38,12 +38,16 @@ type Preset = "7d" | "30d" | "thisMonth" | "lastMonth" | "custom";
 
 function presetDates(preset: Preset): { from: string; to: string } {
   const today = new Date();
-  const pad = (d: Date) => d.toISOString().split("T")[0];
+  const pad = (d: Date) => formatDateLocalStr(d);
   if (preset === "7d") {
-    return { from: pad(new Date(Date.now() - 6 * 86400000)), to: pad(today) };
+    const d = new Date(today);
+    d.setDate(d.getDate() - 6);
+    return { from: pad(d), to: pad(today) };
   }
   if (preset === "30d") {
-    return { from: pad(new Date(Date.now() - 29 * 86400000)), to: pad(today) };
+    const d = new Date(today);
+    d.setDate(d.getDate() - 29);
+    return { from: pad(d), to: pad(today) };
   }
   if (preset === "thisMonth") {
     const s = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -54,7 +58,9 @@ function presetDates(preset: Preset): { from: string; to: string } {
     const e = new Date(today.getFullYear(), today.getMonth(), 0);
     return { from: pad(s), to: pad(e) };
   }
-  return { from: pad(new Date(Date.now() - 29 * 86400000)), to: pad(today) };
+  const d = new Date(today);
+  d.setDate(d.getDate() - 29);
+  return { from: pad(d), to: pad(today) };
 }
 
 const PRESETS: { label: string; value: Preset }[] = [
