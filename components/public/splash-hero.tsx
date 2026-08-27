@@ -111,6 +111,100 @@ function LocationSlideshow({ image_urls, alt, accent }: { image_urls: string[]; 
   );
 }
 
+function AutoCouponCarousel({ coupons }: { coupons: Coupon[] }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    if (!coupons || coupons.length <= 1 || isPaused) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % coupons.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [coupons, isPaused]);
+
+  if (!coupons || coupons.length === 0) return null;
+
+  return (
+    <div
+      className="mt-3 pt-2 border-t border-dashed border-gray-200 dark:border-gray-800/60"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div className="relative overflow-hidden rounded-xl">
+        <div
+          className="flex transition-transform duration-500 ease-in-out w-full"
+          style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+        >
+          {coupons.map((coupon) => {
+            const discountText = coupon.discount_type === "percent"
+              ? `${coupon.discount_value}% OFF`
+              : `₹${coupon.discount_value} OFF`;
+            const isHappyHours = !!(coupon.valid_from_time && coupon.valid_until_time);
+
+            return (
+              <div
+                key={coupon.id}
+                className="w-full shrink-0 flex items-center justify-between bg-gradient-to-r from-orange-500/[0.08] to-amber-500/[0.03] dark:from-orange-500/[0.14] dark:to-amber-500/[0.06] border border-dashed border-[#D4541A]/35 rounded-xl p-2.5 sm:p-3 relative overflow-hidden transition-all shadow-sm"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-base sm:text-lg shrink-0">🏷️</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-[11px] font-black tracking-wider uppercase text-[#D4541A] bg-orange-500/10 dark:bg-orange-500/20 px-1.5 py-0.5 rounded">
+                        {coupon.code}
+                      </span>
+                      {isHappyHours && (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">
+                          ({formatTime(coupon.valid_from_time!)} – {formatTime(coupon.valid_until_time!)})
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
+                      Pay full online to save instantly
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-[#D4541A] text-white font-black text-[10px] sm:text-[11px] px-2.5 py-1.5 rounded-lg tracking-wider shrink-0 shadow-md shadow-orange-500/10 uppercase ml-2">
+                  {discountText}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {coupons.length > 1 && (
+        <div className="flex items-center justify-between mt-2 px-1">
+          <span className="text-[9px] uppercase font-black tracking-wider text-[#D4541A]/90 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#D4541A] animate-pulse" />
+            Offer {currentIndex + 1} of {coupons.length}
+          </span>
+          <div className="flex items-center gap-1">
+            {coupons.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setCurrentIndex(idx);
+                }}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  idx === currentIndex 
+                    ? "w-4 bg-[#D4541A]" 
+                    : "w-1.5 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400"
+                }`}
+                aria-label={`Go to offer ${idx + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SplashHero({ locations, coupons = [] }: { locations: Location[]; coupons?: Coupon[] }) {
   const [phase, setPhase] = useState<Phase>("enter");
   const [adminLoading, setAdminLoading] = useState(false);
@@ -279,6 +373,9 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
             {locations.map((loc, i) => {
               const open   = isOpenNow(loc.opening_time, loc.closing_time);
               const accent = i === 0 ? "#D4541A" : "#C4893A";
+              const matchingCoupons = coupons.filter(
+                (c) => c.location_id === loc.id || c.location_id === null
+              );
 
               return (
                 <Link
@@ -338,74 +435,8 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
                           </div>
                         </div>
 
-                        {/* Active deal badges - Horizontal Sliding Carousel */}
-                        {(() => {
-                          const matchingCoupons = coupons.filter(c => c.location_id === loc.id || c.location_id === null);
-                          if (matchingCoupons.length === 0) return null;
-
-                          const isMultiple = matchingCoupons.length > 1;
-
-                          return (
-                            <div className="mt-3 pt-1 border-t border-dashed border-gray-200 dark:border-gray-800/60">
-                              {isMultiple && (
-                                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-extrabold text-[#D4541A] mb-1.5 px-0.5">
-                                  <span className="flex items-center gap-1">
-                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#D4541A] animate-ping" />
-                                    {matchingCoupons.length} Offers Available
-                                  </span>
-                                  <span className="text-gray-400 font-medium lowercase text-[9px] flex items-center gap-0.5">
-                                    swipe &rarr;
-                                  </span>
-                                </div>
-                              )}
-
-                              <div className={isMultiple 
-                                ? "flex gap-2.5 overflow-x-auto scrollbar-none snap-x snap-mandatory py-1 -mx-1 px-1 touch-pan-x" 
-                                : "w-full"
-                              } style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                {matchingCoupons.map((coupon) => {
-                                  const discountText = coupon.discount_type === "percent"
-                                    ? `${coupon.discount_value}% OFF`
-                                    : `₹${coupon.discount_value} OFF`;
-                                  const isHappyHours = !!(coupon.valid_from_time && coupon.valid_until_time);
-
-                                  return (
-                                    <div
-                                      key={coupon.id}
-                                      className={`${
-                                        isMultiple
-                                          ? "snap-start shrink-0 w-[86%] sm:w-[90%] max-w-[310px]"
-                                          : "w-full"
-                                      } flex items-center justify-between bg-gradient-to-r from-orange-500/[0.08] to-amber-500/[0.03] dark:from-orange-500/[0.14] dark:to-amber-500/[0.06] border border-dashed border-[#D4541A]/35 rounded-xl p-2.5 relative overflow-hidden group/deal transition-all hover:border-[#D4541A]/60 shadow-sm`}
-                                    >
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-base shrink-0">🏷️</span>
-                                        <div className="min-w-0">
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span className="font-mono text-[11px] font-black tracking-wider uppercase text-[#D4541A] bg-orange-500/10 dark:bg-orange-500/20 px-1.5 py-0.5 rounded">
-                                              {coupon.code}
-                                            </span>
-                                            {isHappyHours && (
-                                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">
-                                                ({formatTime(coupon.valid_from_time!)} – {formatTime(coupon.valid_until_time!)})
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate mt-0.5">
-                                            Pay full online to save instantly
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="bg-[#D4541A] text-white font-black text-[10px] px-2.5 py-1.5 rounded-lg tracking-wider shrink-0 shadow-md shadow-orange-500/10 uppercase">
-                                        {discountText}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        {/* Auto-Rotating Coupon Slider */}
+                        <AutoCouponCarousel coupons={matchingCoupons} />
                       </div>
                     </div>
                   </div>
