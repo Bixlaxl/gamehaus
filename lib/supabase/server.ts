@@ -28,6 +28,7 @@ export async function createClient() {
 
       // Reconstruct session from Bearer JWT token since getSession() only reads cookies
       const originalGetSession = client.auth.getSession.bind(client.auth);
+      const originalGetUser = client.auth.getUser.bind(client.auth);
       client.auth.getSession = async () => {
         try {
           const parts = token.split('.');
@@ -55,6 +56,14 @@ export async function createClient() {
           // ignore & fallback
         }
         return originalGetSession();
+      };
+
+      client.auth.getUser = async (jwt?: string) => {
+        const { data, error } = await client.auth.getSession();
+        if (data?.session?.user) {
+          return { data: { user: data.session.user }, error: null };
+        }
+        return originalGetUser(jwt);
       };
 
       return client;

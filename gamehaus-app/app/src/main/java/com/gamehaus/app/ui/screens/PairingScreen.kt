@@ -12,6 +12,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamehaus.app.data.TableItem
@@ -30,6 +34,7 @@ fun PairingScreen(
     var serverUrl by remember { mutableStateOf(viewModel.prefs.serverUrl) }
     var email by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     var step by remember { mutableStateOf(1) } // 1: Server & Auth, 2: Select Table
     var selectedTable by remember { mutableStateOf<TableItem?>(null) }
@@ -118,7 +123,14 @@ fun PairingScreen(
                         onValueChange = { pin = it },
                         label = { Text("Login Password") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val icon = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                            val desc = if (passwordVisible) "Hide password" else "Show password"
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(imageVector = icon, contentDescription = desc, tint = Color.Gray)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,

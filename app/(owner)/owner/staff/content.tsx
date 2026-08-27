@@ -52,6 +52,9 @@ export function StaffContent({
   const [editForm, setEditForm]       = useState({ name: "", email: "", password: "", location_id: "" });
   const [editError, setEditError]     = useState<string | null>(null);
 
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showEditPassword, setShowEditPassword]     = useState(false);
+
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
 
   function toggleReveal(id: string) {
@@ -369,14 +372,26 @@ export function StaffContent({
             </div>
             <div className="space-y-2">
               <Label htmlFor="spwd">Temporary Password</Label>
-              <Input
-                id="spwd"
-                type="password"
-                value={createForm.password}
-                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                required
-                minLength={8}
-              />
+              <div className="relative">
+                <Input
+                  id="spwd"
+                  type={showCreatePassword ? "text" : "password"}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  required
+                  minLength={8}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  tabIndex={-1}
+                  aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                >
+                  {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Location</Label>
@@ -464,13 +479,25 @@ export function StaffContent({
             </div>
             <div className="space-y-2">
               <Label>New Password (optional)</Label>
-              <Input
-                type="password"
-                value={editForm.password}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                placeholder="Leave blank to keep unchanged"
-                minLength={8}
-              />
+              <div className="relative">
+                <Input
+                  type={showEditPassword ? "text" : "password"}
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                  placeholder="Leave blank to keep unchanged"
+                  minLength={8}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowEditPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  tabIndex={-1}
+                  aria-label={showEditPassword ? "Hide password" : "Show password"}
+                >
+                  {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Location</Label>

@@ -19,7 +19,8 @@ export async function GET(request: Request) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return NextResponse.json(err("Unauthorized", "UNAUTHORIZED"), { status: 401 });
 
-  const { data: viewer } = await supabase
+  const admin = createAdminClient();
+  const { data: viewer } = await admin
     .from("users").select("role, location_id").eq("id", session.user.id).single();
   if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
     return NextResponse.json(err("Forbidden", "FORBIDDEN"), { status: 403 });
@@ -34,7 +35,6 @@ export async function GET(request: Request) {
     ? viewer.location_id
     : requestedLocation;
 
-  const admin = createAdminClient();
   let query = admin
     .from("tables")
     .select("*")
