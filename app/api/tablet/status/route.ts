@@ -120,6 +120,7 @@ export async function GET(request: Request) {
       remaining_seconds: remainingSeconds,
       is_overtime: isOvertime,
       current_bill: billResult.totalDue,
+      advance_paid: item.order?.advance_paid ?? 0,
       extras: (extras || []).map(e => ({
         id: e.id,
         name: e.name,

@@ -56,9 +56,7 @@ fun DashboardScreen(
 
     var showAdminDialog by remember { mutableStateOf(false) }
     var showExtendDialog by remember { mutableStateOf(false) }
-    var showPlayerDialog by remember { mutableStateOf(false) }
     var showBeverageDialog by remember { mutableStateOf(false) }
-    var showStopDialog by remember { mutableStateOf(false) }
 
     val status = statusState
     val isSessionActive = status?.session != null && status.session.status == "running"
@@ -188,12 +186,9 @@ fun DashboardScreen(
                         )
 
                         BillAndActions(
-                            status = status,
                             session = session,
                             onExtendClick = { showExtendDialog = true },
                             onBeverageClick = { showBeverageDialog = true },
-                            onPlayerClick = { showPlayerDialog = true },
-                            onStopClick = { showStopDialog = true },
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -217,12 +212,9 @@ fun DashboardScreen(
                         )
 
                         BillAndActions(
-                            status = status,
                             session = session,
                             onExtendClick = { showExtendDialog = true },
                             onBeverageClick = { showBeverageDialog = true },
-                            onPlayerClick = { showPlayerDialog = true },
-                            onStopClick = { showStopDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -240,18 +232,7 @@ fun DashboardScreen(
             )
         }
 
-        // 2. Adjust Players Dialog
-        if (showPlayerDialog && isSessionActive) {
-            val session = status!!.session!!
-            PlayerCountDialog(
-                viewModel = viewModel,
-                table = status.table,
-                currentCount = session.num_people ?: 1,
-                onDismiss = { showPlayerDialog = false }
-            )
-        }
-
-        // 3. Beverages Order Dialog
+        // 2. Beverages Order Dialog
         if (showBeverageDialog && isSessionActive) {
             BeverageOrderDialog(
                 viewModel = viewModel,
@@ -260,15 +241,7 @@ fun DashboardScreen(
             )
         }
 
-        // 4. Stop Confirmation Dialog
-        if (showStopDialog && isSessionActive) {
-            ConfirmStopDialog(
-                viewModel = viewModel,
-                onDismiss = { showStopDialog = false }
-            )
-        }
-
-        // 5. Admin Settings Dialog
+        // 3. Admin Settings Dialog
         if (showAdminDialog) {
             AdminDialog(
                 viewModel = viewModel,
@@ -1124,98 +1097,114 @@ fun CountdownCard(
 
 @Composable
 fun BillAndActions(
-    status: com.gamehaus.app.data.TabletStatus,
     session: com.gamehaus.app.data.SessionData,
     onExtendClick: () -> Unit,
     onBeverageClick: () -> Unit,
-    onPlayerClick: () -> Unit,
-    onStopClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Bill Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             shape = RoundedCornerShape(20.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "CURRENT BILL",
+                        text = "AMOUNT DUE",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray,
                         letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = String.format("₹%.2f", session.current_bill),
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
+                    Icon(
+                        imageVector = Icons.Default.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-                Icon(
-                    imageVector = Icons.Default.ReceiptLong,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
+                Text(
+                    text = String.format("₹%.2f", session.current_bill),
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
                 )
+
+                // Show advance paid if it was collected upfront
+                if (session.advance_paid > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    HorizontalDivider(color = Color(0xFF2A2A2A))
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Extras due row
+                    if (session.extras.isNotEmpty()) {
+                        val extrasTotal = session.extras.sumOf { it.amount }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Snacks & drinks", fontSize = 12.sp, color = Color.Gray)
+                            Text(String.format("₹%.2f", extrasTotal), fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Advance paid", fontSize = 12.sp, color = Color(0xFF4CAF50))
+                        Text(String.format("-₹%.2f", session.advance_paid), fontSize = 12.sp, color = Color(0xFF4CAF50))
+                    }
+                }
+
+                // Extras ordered (if any, always show)
+                if (session.advance_paid == 0.0 && session.extras.isNotEmpty()) {
+                    HorizontalDivider(color = Color(0xFF2A2A2A))
+                    session.extras.forEach { extra ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("${extra.name} ×${extra.quantity}", fontSize = 12.sp, color = Color.Gray)
+                            Text(String.format("₹%.2f", extra.amount), fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
             }
         }
 
-        Column(
+        // Action cards — only Extend Time and Order Snacks
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ActionCard(
-                    title = "Extend Time",
-                    subtitle = "Add more minutes",
-                    icon = Icons.Default.AddAlarm,
-                    modifier = Modifier.weight(1f)
-                ) { onExtendClick() }
+            ActionCard(
+                title = "Extend Time",
+                subtitle = "Add more minutes",
+                icon = Icons.Default.AddAlarm,
+                modifier = Modifier.weight(1f)
+            ) { onExtendClick() }
 
-                ActionCard(
-                    title = "Order Snacks",
-                    subtitle = "Drinks & beverages",
-                    icon = Icons.Default.LocalPizza,
-                    modifier = Modifier.weight(1f)
-                ) { onBeverageClick() }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val hasTiers = status.table.people_pricing != null && status.table.people_pricing.isNotEmpty()
-                ActionCard(
-                    title = if (status.table.type == "ps5") "Controllers" else "Add Players",
-                    subtitle = "Change group count",
-                    icon = Icons.Default.People,
-                    enabled = hasTiers,
-                    modifier = Modifier.weight(1f)
-                ) { onPlayerClick() }
-
-                ActionCard(
-                    title = "Finish Session",
-                    subtitle = "Alert staff to checkout",
-                    icon = Icons.Default.Stop,
-                    modifier = Modifier.weight(1f)
-                ) { onStopClick() }
-            }
+            ActionCard(
+                title = "Order Snacks",
+                subtitle = "Drinks & beverages",
+                icon = Icons.Default.LocalPizza,
+                modifier = Modifier.weight(1f)
+            ) { onBeverageClick() }
         }
     }
 }
