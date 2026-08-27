@@ -33,12 +33,19 @@ export async function createClient() {
         try {
           const parts = token.split('.');
           if (parts.length === 3) {
-            const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-            const payload = JSON.parse(atob(base64));
+            // Convert base64url → base64 with proper padding (required for atob in edge runtime)
+            const base64url = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const padded = base64url + '==='.slice((base64url.length + 3) % 4);
+            const payload = JSON.parse(atob(padded));
+            const now = Math.floor(Date.now() / 1000);
+            // Reject obviously expired tokens rather than forwarding them
+            if (payload.exp && payload.exp < now) {
+              return { data: { session: null }, error: null };
+            }
             const session = {
               access_token: token,
               token_type: "bearer",
-              expires_in: payload.exp ? Math.max(0, payload.exp - Math.floor(Date.now() / 1000)) : 3600,
+              expires_in: payload.exp ? Math.max(0, payload.exp - now) : 3600,
               refresh_token: "",
               user: {
                 id: payload.sub,
