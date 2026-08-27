@@ -228,6 +228,7 @@ fun DashboardScreen(
         if (showExtendDialog && isSessionActive) {
             ExtendDialog(
                 viewModel = viewModel,
+                maxExtendMins = status!!.session!!.max_extend_mins,
                 onDismiss = { showExtendDialog = false }
             )
         }
@@ -308,12 +309,22 @@ fun ActionCard(
 @Composable
 fun ExtendDialog(
     viewModel: MainViewModel,
+    maxExtendMins: Int,
     onDismiss: () -> Unit
 ) {
+    val allPresets = listOf(15, 30, 45, 60, 90, 120)
+    // Only show presets that fit within the available window
+    val availablePresets = allPresets.filter { it <= maxExtendMins }
+    val blockedByNext = maxExtendMins <= 0
+
+    // Default selection: largest available preset, or smallest if none fit
+    var selectedPreset by remember {
+        mutableStateOf(
+            if (availablePresets.isNotEmpty()) availablePresets.last() else allPresets.first()
+        )
+    }
     var errorMsg by remember { mutableStateOf<String?>(null) }
-    var selectedPreset by remember { mutableStateOf(30) }
     var isSubmitting by remember { mutableStateOf(false) }
-    val presets = listOf(15, 30, 45, 60, 90, 120)
 
     Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
         Card(
@@ -329,35 +340,63 @@ fun ExtendDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text("Extend Session", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Choose how many minutes you want to add to your current session:", fontSize = 13.sp, color = Color.Gray)
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(presets) { mins ->
-                        val active = selectedPreset == mins
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
-                                .clickable(enabled = !isSubmitting) { selectedPreset = mins },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (active) MaterialTheme.colorScheme.primary else Color(0xFF2A2A2A)
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "+${mins}m",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (active) Color.White else Color(0xFFCCCCCC)
-                                )
+                if (blockedByNext) {
+                    // Fully blocked — next booking starts immediately
+                    Text(
+                        text = "Extension not available — the next booking starts imminently.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    Text(
+                        text = if (maxExtendMins < 120)
+                            "Up to $maxExtendMins min available (next booking or closing time):"
+                        else
+                            "Choose how many minutes to add:",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(allPresets) { mins ->
+                            val isAvailable = mins <= maxExtendMins
+                            val active = selectedPreset == mins && isAvailable
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clickable(enabled = isAvailable && !isSubmitting) {
+                                        selectedPreset = mins
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when {
+                                        active       -> MaterialTheme.colorScheme.primary
+                                        !isAvailable -> Color(0xFF1A1A1A)
+                                        else         -> Color(0xFF2A2A2A)
+                                    }
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "+${mins}m",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when {
+                                            active       -> Color.White
+                                            !isAvailable -> Color(0xFF444444)
+                                            else         -> Color(0xFFCCCCCC)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -383,7 +422,7 @@ fun ExtendDialog(
 
                     Button(
                         onClick = {
-                            if (isSubmitting) return@Button
+                            if (isSubmitting || blockedByNext) return@Button
                             isSubmitting = true
                             errorMsg = null
                             viewModel.extendSession(
@@ -395,7 +434,7 @@ fun ExtendDialog(
                                 }
                             )
                         },
-                        enabled = !isSubmitting,
+                        enabled = !isSubmitting && !blockedByNext && availablePresets.isNotEmpty(),
                         modifier = Modifier.weight(1.2f),
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

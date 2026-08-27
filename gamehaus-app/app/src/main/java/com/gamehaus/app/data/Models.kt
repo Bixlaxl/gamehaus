@@ -57,6 +57,7 @@ data class SessionData(
     val is_overtime: Boolean = false,
     val current_bill: Double,
     val advance_paid: Double = 0.0,
+    val max_extend_mins: Int = 240,
     val extras: List<ExtraItem>
 )
 
