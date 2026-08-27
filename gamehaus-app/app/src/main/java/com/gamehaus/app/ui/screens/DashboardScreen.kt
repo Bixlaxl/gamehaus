@@ -1147,7 +1147,7 @@ fun BillAndActions(
                 // Show advance paid if it was collected upfront
                 if (session.advance_paid > 0) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    HorizontalDivider(color = Color(0xFF2A2A2A))
+                    Divider(color = Color(0xFF2A2A2A))
                     Spacer(modifier = Modifier.height(4.dp))
 
                     // Extras due row
@@ -1173,7 +1173,7 @@ fun BillAndActions(
 
                 // Extras ordered (if any, always show)
                 if (session.advance_paid == 0.0 && session.extras.isNotEmpty()) {
-                    HorizontalDivider(color = Color(0xFF2A2A2A))
+                    Divider(color = Color(0xFF2A2A2A))
                     session.extras.forEach { extra ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
