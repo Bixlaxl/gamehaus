@@ -12,7 +12,8 @@ class ApiClient(private val prefs: PreferencesHelper) {
 
     fun getService(): ApiService {
         val rawUrl = prefs.serverUrl.trim()
-        val url = if (rawUrl.endsWith("/")) rawUrl else "$rawUrl/"
+        val cleanUrl = rawUrl.removeSuffix("/").removeSuffix("/api").removeSuffix("/api/").trimEnd('/')
+        val url = "$cleanUrl/"
 
         if (url != currentUrl || cachedService == null) {
             currentUrl = url
