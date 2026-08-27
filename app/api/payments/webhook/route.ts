@@ -101,9 +101,19 @@ export async function POST(request: Request) {
 
       const { data: order } = await admin
         .from("orders")
-        .select("customer_phone, customer_name, points_redeemed")
+        .select("customer_phone, customer_name, points_redeemed, status")
         .eq("id", orderId)
         .single();
+
+      if (order?.status === "cancelled") {
+        console.warn(`[Webhook] Order ${orderId} is marked cancelled. Marking payment as completed but skipping order/booking revival.`);
+        await admin.from("payments").update({
+          status: "completed",
+          razorpay_payment_id: payment.id,
+          collected_at: now,
+        }).eq("id", paymentRow.id);
+        return NextResponse.json({ received: true });
+      }
 
       await Promise.all([
         admin.from("payments").update({
