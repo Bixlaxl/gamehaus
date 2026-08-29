@@ -860,7 +860,19 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      get_revenue_summary: {
+        Args: {
+          from_ts: string;
+          to_ts?: string | null;
+          loc_id?: string | null;
+        };
+        Returns: {
+          revenue: number;
+          order_count: number;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
   };
 }

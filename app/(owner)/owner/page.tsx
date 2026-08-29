@@ -175,39 +175,62 @@ export default async function OwnerDashboard({
   const thirtyDaysAgo = new Date(todayStart);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
 
-  // All queries fetch location_id so we can filter in JS
+  // ── Paginated fetch helper ─────────────────────────────────────────────────
+  // Supabase PostgREST returns at most 1000 rows by default. For row-level
+  // queries that could exceed that as the business scales, paginate.
+  async function fetchAll<T>(
+    query: ReturnType<ReturnType<typeof admin.from>["select"]>
+  ): Promise<T[]> {
+    const PAGE = 1000;
+    const rows: T[] = [];
+    let page = 0;
+    while (true) {
+      const { data, error } = await query.range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error || !data || data.length === 0) break;
+      rows.push(...(data as T[]));
+      if (data.length < PAGE) break;
+      page++;
+    }
+    return rows;
+  }
+
+  // ── Revenue stats via RPC (returns 1 row each, not 1000+) ────────────────
+  const locParam = selectedLocId || null;
+
   const [
-    { data: todayOrders },
-    { data: yesterdayOrders },
-    { data: monthOrders },
-    { data: lastMonthOrders },
+    { data: todayRevData },
+    { data: yesterdayRevData },
+    { data: monthRevData },
+    { data: lastMonthRevData },
     { data: allLiveSessions },
     { data: allTodayBookings },
     { data: allRecentOrders },
-    { data: weekOrders },
     { data: allLiveDetail },
-    { data: insightItems },
-    { data: insightExtras },
     { data: allMemberships },
   ] = await Promise.all([
-    admin.from("orders").select("amount_due, advance_paid, location_id")
-      .eq("status", "finalized")
-      .gte("finalized_at", todayStart.toISOString())
-      .lte("finalized_at", todayEnd.toISOString()),
+    admin.rpc("get_revenue_summary", {
+      from_ts: todayStart.toISOString(),
+      to_ts: todayEnd.toISOString(),
+      loc_id: locParam,
+    }).single(),
 
-    admin.from("orders").select("amount_due, advance_paid, location_id")
-      .eq("status", "finalized")
-      .gte("finalized_at", yesterdayStart.toISOString())
-      .lte("finalized_at", yesterdayEnd.toISOString()),
+    admin.rpc("get_revenue_summary", {
+      from_ts: yesterdayStart.toISOString(),
+      to_ts: yesterdayEnd.toISOString(),
+      loc_id: locParam,
+    }).single(),
 
-    admin.from("orders").select("amount_due, advance_paid, location_id")
-      .eq("status", "finalized")
-      .gte("finalized_at", monthStart.toISOString()),
+    admin.rpc("get_revenue_summary", {
+      from_ts: monthStart.toISOString(),
+      to_ts: null,
+      loc_id: locParam,
+    }).single(),
 
-    admin.from("orders").select("amount_due, advance_paid, location_id")
-      .eq("status", "finalized")
-      .gte("finalized_at", lastMonthStart.toISOString())
-      .lt("finalized_at", monthStart.toISOString()),
+    admin.rpc("get_revenue_summary", {
+      from_ts: lastMonthStart.toISOString(),
+      to_ts: monthStart.toISOString(),
+      loc_id: locParam,
+    }).single(),
 
     // Live sessions — join tables to get location
     admin.from("order_items")
@@ -228,35 +251,11 @@ export default async function OwnerDashboard({
       .order("finalized_at", { ascending: false })
       .limit(20),
 
-    admin.from("orders").select("amount_due, advance_paid, location_id, finalized_at")
-      .eq("status", "finalized")
-      .gte("finalized_at", sevenDaysAgo.toISOString()),
-
     admin.from("order_items")
       .select("id, actual_start, rate_per_hour, order:orders(customer_name), table:tables(name, type, location_id)")
       .eq("status", "running")
       .order("actual_start", { ascending: true })
       .limit(20),
-
-    // ── Insights window (last 30 days) — all 3 read from the same join shape
-    //    so we filter by location in JS without an extra round trip ─────────
-    // Finished order_items → drives Peak/Slow hours AND Most-profitable table.
-    // We include table because Most-profitable groups by it, and we filter by
-    // table.location_id to honour the location tab.
-    admin.from("order_items")
-      .select("actual_start, final_amount, table_id, table:tables(name, type, location_id)")
-      .eq("status", "finished")
-      .gte("actual_start", thirtyDaysAgo.toISOString()),
-
-    // Sold extras → drives Best-selling items. Join order for location
-    // scoping AND inventory_item for the LIVE catalogue name (the row's
-    // own `name` column is a snapshot from sale time, so renaming a drink
-    // in inventory wouldn't otherwise reflect on the dashboard).
-    admin.from("order_extras")
-      .select("name, price, quantity, order:orders!inner(location_id, status), inventory_item:inventory_items(name)")
-      .eq("is_deleted", false)
-      .eq("order.status", "finalized")
-      .gte("created_at", thirtyDaysAgo.toISOString()),
 
     // Upfront membership sales for overall revenue stats (matching Reports page)
     admin.from("customer_memberships")
@@ -264,10 +263,40 @@ export default async function OwnerDashboard({
       .gte("created_at", lastMonthStart.toISOString()),
   ]);
 
-  // Rest of the destructure happens after — but since we added 2 elements
-  // we need to pull them off the result array manually below.
+  // ── Row-level queries that need per-row data (paginated) ─────────────────
+  type WeekOrder = { amount_due: number | null; advance_paid: number | null; location_id: string | null; finalized_at: string };
+  type InsightItem = { actual_start: string | null; final_amount: number | null; table_id: string; table: { name: string; type: string; location_id: string } | null };
+  type InsightExtra = { name: string; price: number; quantity: number; order: { location_id: string | null; status: string } | { location_id: string | null; status: string }[] | null; inventory_item: { name: string } | { name: string }[] | null };
 
-  // ── Location filters (applied in JS) ─────────────────────────────────────────
+  const [weekOrders, insightItems, insightExtras] = await Promise.all([
+    fetchAll<WeekOrder>(
+      admin.from("orders").select("amount_due, advance_paid, location_id, finalized_at")
+        .eq("status", "finalized")
+        .gte("finalized_at", sevenDaysAgo.toISOString())
+        .order("finalized_at", { ascending: true })
+    ),
+
+    // Finished order_items → drives Peak/Slow hours AND Most-profitable table.
+    fetchAll<InsightItem>(
+      admin.from("order_items")
+        .select("actual_start, final_amount, table_id, table:tables(name, type, location_id)")
+        .eq("status", "finished")
+        .gte("actual_start", thirtyDaysAgo.toISOString())
+        .order("actual_start", { ascending: true })
+    ),
+
+    // Sold extras → drives Best-selling items.
+    fetchAll<InsightExtra>(
+      admin.from("order_extras")
+        .select("name, price, quantity, order:orders!inner(location_id, status), inventory_item:inventory_items(name)")
+        .eq("is_deleted", false)
+        .eq("order.status", "finalized")
+        .gte("created_at", thirtyDaysAgo.toISOString())
+        .order("created_at", { ascending: true })
+    ),
+  ]);
+
+  // ── Location filters (applied in JS for row-level data) ──────────────────
   const loc = selectedLocId;
   const filterLoc      = (o: { location_id?: string | null })  => !loc || o.location_id === loc;
   const filterTableLoc = (s: { table?: unknown })               =>
@@ -278,11 +307,15 @@ export default async function OwnerDashboard({
   const orderTotal = (o: { amount_due?: number | null; advance_paid?: number | null }) =>
     (o.amount_due ?? 0) + (o.advance_paid ?? 0);
 
-  const filteredToday      = (todayOrders      ?? []).filter(filterLoc);
-  const filteredYesterday  = (yesterdayOrders  ?? []).filter(filterLoc);
-  const filteredMonth      = (monthOrders      ?? []).filter(filterLoc);
-  const filteredLastMonth  = (lastMonthOrders  ?? []).filter(filterLoc);
-  const filteredWeek       = (weekOrders       ?? []).filter(filterLoc);
+  // Revenue from RPC (already location-filtered by the SQL function)
+  const todayOrderRevenue     = Number(todayRevData?.revenue ?? 0);
+  const todayOrderCount       = Number(todayRevData?.order_count ?? 0);
+  const yesterdayOrderRevenue = Number(yesterdayRevData?.revenue ?? 0);
+  const monthOrderRevenue     = Number(monthRevData?.revenue ?? 0);
+  const monthOrderCount       = Number(monthRevData?.order_count ?? 0);
+  const lastMonthOrderRevenue = Number(lastMonthRevData?.revenue ?? 0);
+
+  const filteredWeek       = weekOrders.filter(filterLoc);
   const filteredLive       = (allLiveSessions  ?? []).filter(filterTableLoc);
   const filteredBookings   = (allTodayBookings ?? [])
     .filter(filterOrderLoc)
@@ -327,10 +360,10 @@ export default async function OwnerDashboard({
     }
   }
 
-  const todayRevenue     = filteredToday.reduce((s, o)     => s + orderTotal(o), 0) + todayMembershipSales;
-  const yesterdayRevenue = filteredYesterday.reduce((s, o) => s + orderTotal(o), 0) + yesterdayMembershipSales;
-  const monthRevenue     = filteredMonth.reduce((s, o)     => s + orderTotal(o), 0) + monthMembershipSales;
-  const lastMonthRevenue = filteredLastMonth.reduce((s, o) => s + orderTotal(o), 0) + lastMonthMembershipSales;
+  const todayRevenue     = todayOrderRevenue + todayMembershipSales;
+  const yesterdayRevenue = yesterdayOrderRevenue + yesterdayMembershipSales;
+  const monthRevenue     = monthOrderRevenue + monthMembershipSales;
+  const lastMonthRevenue = lastMonthOrderRevenue + lastMonthMembershipSales;
   const liveCount        = filteredLive.length;
   const bookingsToday    = filteredBookings.length;
 
@@ -529,7 +562,7 @@ export default async function OwnerDashboard({
         <StatCard
           label="Today's Revenue"
           value={formatCurrency(todayRevenue)}
-          sub={`${filteredToday.length} orders closed`}
+          sub={`${todayOrderCount} orders closed`}
           accent="#D4541A"
           icon={<TrendingUp className="h-5 w-5" style={{ color: "#D4541A" }} />}
           trend={revenueTrend}
@@ -551,7 +584,7 @@ export default async function OwnerDashboard({
         <StatCard
           label="Month Revenue"
           value={formatCurrency(monthRevenue)}
-          sub={`${filteredMonth.length} orders this month`}
+          sub={`${monthOrderCount} orders this month`}
           accent="#f59e0b"
           icon={<Receipt className="h-5 w-5" style={{ color: "#f59e0b" }} />}
           trend={monthTrend}
