@@ -662,6 +662,7 @@ export interface Database {
           image_url: string | null;
           is_active: boolean;
           show_at_checkout: boolean;
+          show_in_tab_app: boolean;
           sort_order: number;
           stock_count: number;
           low_stock_threshold: number;
@@ -677,6 +678,7 @@ export interface Database {
           image_url?: string | null;
           is_active?: boolean;
           show_at_checkout?: boolean;
+          show_in_tab_app?: boolean;
           sort_order?: number;
           stock_count?: number;
           low_stock_threshold?: number;
@@ -692,6 +694,7 @@ export interface Database {
           image_url?: string | null;
           is_active?: boolean;
           show_at_checkout?: boolean;
+          show_in_tab_app?: boolean;
           sort_order?: number;
           stock_count?: number;
           low_stock_threshold?: number;

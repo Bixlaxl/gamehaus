@@ -25,6 +25,7 @@ export async function GET(request: Request) {
     .select("id, name, category, selling_price, image_url, stock_count")
     .eq("location_id", locationId)
     .eq("is_active", true)
+    .eq("show_in_tab_app", true)
     .gt("stock_count", 0)
     .order("category")
     .order("sort_order")

@@ -41,21 +41,42 @@ export async function POST(
   let finalName = name;
   let finalPrice = price;
   let finalCostPrice = cost_price ?? 0;
-  let fetchedInvItem: { name: string; selling_price: number; cost_price: number | null; location_id: string; stock_count: number } | null = null;
+  let fetchedInvItem: { name: string; selling_price: number; cost_price: number | null; location_id: string; stock_count: number; is_active: boolean; show_in_tab_app: boolean } | null = null;
 
   if (inventory_item_id) {
     const { data: invItem } = await admin
       .from("inventory_items")
-      .select("name, selling_price, cost_price, location_id, stock_count")
+      .select("name, selling_price, cost_price, location_id, stock_count, is_active, show_in_tab_app")
       .eq("id", inventory_item_id)
       .single();
 
-    if (invItem) {
-      finalName = invItem.name;
-      finalPrice = Number(invItem.selling_price);
-      finalCostPrice = Number(invItem.cost_price ?? 0);
-      fetchedInvItem = invItem as any;
+    if (!invItem) {
+      return NextResponse.json(err("Item not found", "NOT_FOUND"), { status: 404 });
     }
+
+    // Tablet app requests must only order items explicitly enabled for the tab app
+    if (source === "tablet" && !invItem.show_in_tab_app) {
+      return NextResponse.json(err("This item is not available on the tab", "NOT_AVAILABLE"), { status: 403 });
+    }
+
+    // Item must be active
+    if (!invItem.is_active) {
+      return NextResponse.json(err("This item is currently unavailable", "NOT_AVAILABLE"), { status: 409 });
+    }
+
+    // Enforce stock limit — prevents going below zero
+    if (invItem.stock_count < quantity) {
+      const remaining = invItem.stock_count;
+      const msg = remaining <= 0
+        ? `${invItem.name} is out of stock`
+        : `Only ${remaining} ${invItem.name} left in stock`;
+      return NextResponse.json(err(msg, "OUT_OF_STOCK"), { status: 409 });
+    }
+
+    finalName = invItem.name;
+    finalPrice = Number(invItem.selling_price);
+    finalCostPrice = Number(invItem.cost_price ?? 0);
+    fetchedInvItem = invItem as any;
   }
 
   if (source !== "pos") {

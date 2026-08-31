@@ -176,6 +176,7 @@ export const inventoryItemSchema = z.object({
   sort_order: z.number().int().optional(),
   is_active: z.boolean().optional(),
   show_at_checkout: z.boolean().optional(),
+  show_in_tab_app: z.boolean().optional(),
 });
 
 export const updateInventoryItemSchema = inventoryItemSchema.partial();

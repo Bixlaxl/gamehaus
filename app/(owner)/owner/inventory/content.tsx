@@ -29,6 +29,7 @@ type ItemForm = {
   cost_price: string;
   sort_order: string;
   show_at_checkout: boolean;
+  show_in_tab_app: boolean;
   image_file: File | null;
 };
 
@@ -40,6 +41,7 @@ const defaultForm: ItemForm = {
   cost_price: "",
   sort_order: "0",
   show_at_checkout: false,
+  show_in_tab_app: false,
   image_file: null,
 };
 
@@ -151,6 +153,10 @@ export function InventoryContent({
           patchPayload.show_at_checkout = values.show_at_checkout;
           hasChanges = true;
         }
+        if (values.show_in_tab_app !== editing.show_in_tab_app) {
+          patchPayload.show_in_tab_app = values.show_in_tab_app;
+          hasChanges = true;
+        }
 
         if (values.image_file) {
           hasChanges = true;
@@ -184,6 +190,7 @@ export function InventoryContent({
           cost_price:       parseFloat(values.cost_price) || 0,
           sort_order:       parseInt(values.sort_order) || 0,
           show_at_checkout: values.show_at_checkout,
+          show_in_tab_app:  values.show_in_tab_app,
         };
         const res = await fetch("/api/inventory", {
           method: "POST",
@@ -311,6 +318,7 @@ export function InventoryContent({
       cost_price:       String(item.cost_price),
       sort_order:       String(item.sort_order),
       show_at_checkout: Boolean(item.show_at_checkout),
+      show_in_tab_app:  Boolean(item.show_in_tab_app),
       image_file:       null,
     });
     setDialogOpen(true);
@@ -437,6 +445,11 @@ export function InventoryContent({
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <p className="font-black text-gray-900 dark:text-white text-2xl truncate">{item.name}</p>
                       <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                        {item.show_in_tab_app && (
+                          <Badge variant="outline" className="text-xs font-bold text-blue-600 border-blue-200 bg-blue-50">
+                            Tab App
+                          </Badge>
+                        )}
                         {item.show_at_checkout && (
                           <Badge variant="outline" className="text-xs font-bold text-purple-600 border-purple-200 bg-purple-50">
                             Online Checkout
@@ -582,6 +595,19 @@ export function InventoryContent({
               />
               <Label htmlFor="show_at_checkout" className="cursor-pointer text-sm font-semibold text-gray-900">
                 Offer as Add-on at Online Checkout
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 pb-1">
+              <input
+                type="checkbox"
+                id="show_in_tab_app"
+                checked={form.show_in_tab_app}
+                onChange={(e) => setForm({ ...form, show_in_tab_app: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <Label htmlFor="show_in_tab_app" className="cursor-pointer text-sm font-semibold text-gray-900">
+                Show in Tab App
               </Label>
             </div>
 
