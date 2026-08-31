@@ -68,8 +68,22 @@ fun DashboardScreen(
     ) {
         if (status == null) {
             // Loading state
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Box(modifier = Modifier.fillMaxSize()) {
+                IconButton(
+                    onClick = { showAdminDialog = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.Gray
+                    )
+                }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
             }
         } else if (!isSessionActive) {
             // IDLE SCREEN
@@ -451,115 +465,6 @@ fun ExtendDialog(
     }
 }
 
-// ── Change Player Count Dialog ──
-@Composable
-fun PlayerCountDialog(
-    viewModel: MainViewModel,
-    table: com.gamehaus.app.data.TableItem,
-    currentCount: Int,
-    onDismiss: () -> Unit
-) {
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-    var isSubmitting by remember { mutableStateOf(false) }
-    val pricing = table.people_pricing ?: emptyMap()
-    val options = pricing.keys.mapNotNull { it.toIntOrNull() }.sorted()
-    var selectedCount by remember { mutableStateOf(currentCount) }
-
-    Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
-        Card(
-            modifier = Modifier
-                .widthIn(max = 400.dp)
-                .fillMaxWidth(0.9f)
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                val label = if (table.type == "ps5") "Controllers" else "Players"
-                Text("Select $label", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    options.forEachIndexed { idx, opt ->
-                        // Match range display format (lowest option is range e.g. 1-4)
-                        val displayStr = if (idx == 0 && opt > 1) "1-$opt" else opt.toString()
-                        val active = if (idx == 0 && opt > 1) selectedCount <= opt else selectedCount == opt
-
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp)
-                                .clickable(enabled = !isSubmitting) { selectedCount = opt },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (active) MaterialTheme.colorScheme.primary else Color(0xFF2A2A2A)
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = displayStr,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (errorMsg != null) {
-                    Text(errorMsg!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        enabled = !isSubmitting,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                    ) {
-                        Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-                    }
-
-                    Button(
-                        onClick = {
-                            if (isSubmitting) return@Button
-                            isSubmitting = true
-                            errorMsg = null
-                            viewModel.changePlayerCount(
-                                count = selectedCount,
-                                onSuccess = onDismiss,
-                                onError = {
-                                    isSubmitting = false
-                                    errorMsg = it
-                                }
-                            )
-                        },
-                        enabled = !isSubmitting,
-                        modifier = Modifier.weight(1.2f),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                        } else {
-                            Text("Update", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 // ── Beverages order Dialog ──
 @Composable
@@ -753,76 +658,6 @@ fun BeverageOrderDialog(
                             } else {
                                 Text("Place Order", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ── Stop Session Dialog ──
-@Composable
-fun ConfirmStopDialog(
-    viewModel: MainViewModel,
-    onDismiss: () -> Unit
-) {
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-    var isSubmitting by remember { mutableStateOf(false) }
-
-    Dialog(onDismissRequest = { if (!isSubmitting) onDismiss() }) {
-        Card(
-            modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth(0.9f),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text("Finish Session?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("This will stop the session timer and notify the staff to collect the final bill. Are you sure?", fontSize = 13.sp, color = Color.Gray)
-
-                if (errorMsg != null) {
-                    Text(errorMsg!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        enabled = !isSubmitting,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                    ) {
-                        Text("No, cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-                    }
-
-                    Button(
-                        onClick = {
-                            if (isSubmitting) return@Button
-                            isSubmitting = true
-                            errorMsg = null
-                            viewModel.stopSession(
-                                onSuccess = onDismiss,
-                                onError = {
-                                    isSubmitting = false
-                                    errorMsg = it
-                                }
-                            )
-                        },
-                        enabled = !isSubmitting,
-                        modifier = Modifier.weight(1.2f),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                        } else {
-                            Text("Yes, Finish", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                         }
                     }
                 }

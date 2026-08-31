@@ -191,7 +191,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 } catch (e: Exception) {
-                    // silent retry
+                    if (e is retrofit2.HttpException && e.code() == 401) {
+                        unpair()
+                    }
+                    // silent retry for other errors
                 }
 
                 delay(5000)
@@ -244,25 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun changePlayerCount(count: Int, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        val session = _status.value?.session ?: return
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val res = client.getService().changePeople(PeopleRequest(session.order_item_id, count))
-                if (res.success) {
-                    refreshStatus()
-                    onSuccess()
-                } else {
-                    onError(res.error ?: "Cannot change player count")
-                }
-            } catch (e: Exception) {
-                onError(getErrorMessage(e))
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
+
 
     fun orderBeverage(item: BeverageItem, quantity: Int, onSuccess: () -> Unit, onError: (String) -> Unit) {
         val session = _status.value?.session ?: return
@@ -293,25 +278,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stopSession(onSuccess: () -> Unit, onError: (String) -> Unit) {
-        val session = _status.value?.session ?: return
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val res = client.getService().stopSession(mapOf("order_item_id" to session.order_item_id))
-                if (res.success) {
-                    refreshStatus()
-                    onSuccess()
-                } else {
-                    onError(res.error ?: "Failed to stop session")
-                }
-            } catch (e: Exception) {
-                onError(getErrorMessage(e))
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
+
 
     private suspend fun refreshStatus() {
         val tableId = prefs.tableId ?: return

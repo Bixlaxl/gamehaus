@@ -19,9 +19,6 @@ interface ApiService {
     @GET("api/tablet/beverages")
     suspend fun getBeverages(@Query("location_id") locationId: String): BaseResponse<List<BeverageItem>>
 
-    @POST("api/sessions/people")
-    suspend fun changePeople(@Body request: PeopleRequest): BaseResponse<Map<String, Any>>
-
     @POST("api/sessions/extend")
     suspend fun extendSession(@Body request: ExtendRequest): BaseResponse<Map<String, Any>>
 
@@ -31,6 +28,4 @@ interface ApiService {
         @Body request: AddExtraRequest
     ): BaseResponse<ExtraItem>
 
-    @POST("api/sessions/stop")
-    suspend fun stopSession(@Body request: Map<String, String>): BaseResponse<Map<String, Any>>
 }

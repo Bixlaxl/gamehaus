@@ -83,11 +83,6 @@ data class ExtendRequest(
     val extend_mins: Int
 )
 
-data class PeopleRequest(
-    val order_item_id: String,
-    val num_people: Int
-)
-
 data class AddExtraRequest(
     val name: String,
     val price: Double,
