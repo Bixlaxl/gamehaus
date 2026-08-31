@@ -3,7 +3,12 @@ package com.gamehaus.app.data
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class ApiClient(private val prefs: PreferencesHelper) {
 
@@ -18,7 +23,7 @@ class ApiClient(private val prefs: PreferencesHelper) {
         if (url != currentUrl || cachedService == null) {
             currentUrl = url
 
-            val okHttpClient = OkHttpClient.Builder()
+            val okHttpClient = getUnsafeOkHttpClient()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
@@ -44,5 +49,27 @@ class ApiClient(private val prefs: PreferencesHelper) {
         }
 
         return cachedService!!
+    }
+
+    // Helper to trust all certificates for older Android tablets
+    private fun getUnsafeOkHttpClient(): OkHttpClient.Builder {
+        try {
+            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
+
+            val sslContext = SSLContext.getInstance("SSL")
+            sslContext.init(null, trustAllCerts, SecureRandom())
+            val sslSocketFactory = sslContext.socketFactory
+
+            val builder = OkHttpClient.Builder()
+            builder.sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
+            builder.hostnameVerifier { _, _ -> true }
+            return builder
+        } catch (e: Exception) {
+            throw RuntimeException(e)
+        }
     }
 }
