@@ -92,5 +92,6 @@ data class AddExtraRequest(
     val name: String,
     val price: Double,
     val quantity: Int,
-    val inventory_item_id: String? = null
+    val inventory_item_id: String? = null,
+    val source: String = "tablet"
 )
