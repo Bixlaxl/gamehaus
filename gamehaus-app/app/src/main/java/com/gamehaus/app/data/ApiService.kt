@@ -1,5 +1,6 @@
 package com.gamehaus.app.data
 
+import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -9,6 +10,9 @@ import retrofit2.http.Query
 interface ApiService {
     @POST("api/tablet/login")
     suspend fun login(@Body request: LoginRequest): BaseResponse<LoginResponse>
+
+    @POST("api/tablet/refresh")
+    fun refreshToken(@Body request: RefreshRequest): Call<BaseResponse<LoginResponse>>
 
     @GET("api/tables")
     suspend fun getTables(@Query("location_id") locationId: String): BaseResponse<List<TableItem>>

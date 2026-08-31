@@ -17,6 +17,10 @@ data class LoginResponse(
     val user: UserInfo
 )
 
+data class RefreshRequest(
+    val refresh_token: String
+)
+
 data class UserInfo(
     val id: String,
     val email: String,
