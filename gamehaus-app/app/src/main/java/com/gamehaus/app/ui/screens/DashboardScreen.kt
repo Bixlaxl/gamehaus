@@ -142,7 +142,7 @@ fun DashboardScreen(
             // ACTIVE HUD SCREEN
             val session = status.session!!
             val isTimeUp = remainingSeconds <= 0
-            val bgColor = if (isTimeUp) Color(0xFFC61A1A) else Color(0xFFFF8A00)
+            val bgColor = if (isTimeUp) Color(0xFFC91A1A) else Color(0xFFFF7B00)
             val fgColor = if (isTimeUp) Color.White else Color(0xFF111111)
             
             Box(
@@ -197,11 +197,11 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = remainingTime,
-                            fontSize = 180.sp,
+                            fontSize = 130.sp,
                             fontWeight = FontWeight.Black,
                             color = fgColor,
-                            letterSpacing = (-4).sp,
-                            modifier = Modifier.offset(y = (-10).dp)
+                            letterSpacing = (-2).sp,
+                            modifier = Modifier.offset(y = (-6).dp)
                         )
                         
                         Row(
@@ -238,29 +238,29 @@ fun DashboardScreen(
                     // Bottom Action Cards
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         ActionCard(
                             title = "ADD TIME",
                             subtitle = "Add more minutes",
                             icon = Icons.Default.MoreTime,
                             onClick = { showExtendDialog = true },
-                            modifier = Modifier.weight(1f).height(140.dp)
+                            modifier = Modifier.weight(1f).height(110.dp)
                         )
                         ActionCard(
                             title = "ORDER FOOD & DRINKS",
                             subtitle = "View menu",
                             icon = Icons.Default.Fastfood,
                             onClick = { showBeverageDialog = true },
-                            modifier = Modifier.weight(1f).height(140.dp)
+                            modifier = Modifier.weight(1f).height(110.dp)
                         )
                         ActionCard(
                             title = "AMOUNT DUE",
-                            subtitle = "Includes ₹${String.format(Locale.US, "%.2f", session.extras.sumOf { it.amount })} (Extras)",
-                            value = "₹${String.format(Locale.US, "%.2f", session.current_bill)}",
+                            subtitle = "Includes ₹${String.format(Locale.US, "%.0f", session.extras.sumOf { it.amount })} (Extras)",
+                            value = "₹${String.format(Locale.US, "%.0f", session.current_bill)}",
                             icon = null,
                             onClick = { /* Details */ },
-                            modifier = Modifier.weight(1f).height(140.dp)
+                            modifier = Modifier.weight(1f).height(110.dp)
                         )
                     }
                 }
@@ -935,55 +935,67 @@ fun ActionCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
-        shape = RoundedCornerShape(20.dp)
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF151515)),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 12.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (icon != null) {
-                Icon(icon, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(36.dp))
-                Spacer(modifier = Modifier.height(12.dp))
+                Icon(icon, contentDescription = null, tint = Color(0xFFFF7B00), modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             } else if (value != null) {
                 Text(
                     text = title,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = value,
-                    fontSize = 32.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
-                    color = Color(0xFFFF8A00)
+                    color = Color(0xFFFF7B00),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
-                    color = Color.Gray
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 return@Column
             }
             
             Text(
                 text = title,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
-                letterSpacing = 1.sp
+                letterSpacing = 1.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = subtitle,
-                fontSize = 12.sp,
-                color = Color.Gray
+                fontSize = 10.sp,
+                color = Color.Gray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }
