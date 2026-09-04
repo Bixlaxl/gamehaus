@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     .single();
 
   if (!profile || (profile.role !== "owner" && profile.role !== "staff")) {
-    await supabase.auth.signOut();
+    await cleanClient.auth.signOut();
     return NextResponse.json(err("Forbidden: Kiosk requires staff/owner role", "FORBIDDEN"), { status: 403 });
   }
 
