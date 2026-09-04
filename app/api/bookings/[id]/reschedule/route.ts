@@ -123,7 +123,7 @@ export async function POST(
   // 3. Trigger WhatsApp notification with new slot details
   if (booking.order_id) {
     const { sendWhatsAppConfirmation } = await import("@/lib/whatsapp");
-    sendWhatsAppConfirmation(booking.order_id).catch((e) => {
+    await sendWhatsAppConfirmation(booking.order_id).catch((e) => {
       console.error("[WhatsApp] Failed to send rescheduled booking confirmation:", e);
     });
   }

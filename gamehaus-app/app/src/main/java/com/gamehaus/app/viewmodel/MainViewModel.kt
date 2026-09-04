@@ -208,7 +208,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (session != null && session.status == "running" && session.expected_end != null) {
                     val endMs = parseIsoDate(session.expected_end)
                     val nowMs = System.currentTimeMillis()
-                    val remSecs = Math.max(0L, (endMs - nowMs) / 1000L)
+                    val remSecs = (endMs - nowMs) / 1000L
 
                     _remainingSeconds.value = remSecs
                     _remainingTimeStr.value = formatSeconds(remSecs)
@@ -325,10 +325,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun formatSeconds(totalSeconds: Long): String {
-        val h = totalSeconds / 3600
-        val m = (totalSeconds % 3600) / 60
-        val s = totalSeconds % 60
-        return String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
+        val sign = if (totalSeconds < 0) "-" else ""
+        val absSecs = Math.abs(totalSeconds)
+        val h = absSecs / 3600
+        val m = (absSecs % 3600) / 60
+        val s = absSecs % 60
+        return String.format(Locale.US, "%s%02d:%02d:%02d", sign, h, m, s)
     }
 
     private fun getErrorMessage(e: Throwable): String {

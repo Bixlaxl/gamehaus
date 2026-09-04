@@ -123,7 +123,7 @@ fun DashboardScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Welcome to Gamehaus!",
+                        text = "Welcome to ${status.table.location_name ?: "Gamehaus"}!",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray
@@ -141,95 +141,126 @@ fun DashboardScreen(
         } else {
             // ACTIVE HUD SCREEN
             val session = status.session!!
-
-            val configuration = LocalConfiguration.current
-            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-
-            Column(
+            val isTimeUp = remainingSeconds <= 0
+            val bgColor = if (isTimeUp) Color(0xFFC61A1A) else Color(0xFFFF8A00)
+            val fgColor = if (isTimeUp) Color.White else Color(0xFF111111)
+            
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .background(bgColor)
+                    .padding(32.dp)
             ) {
-                // Header (Table name & Settings cog)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
-                        Text(
-                            text = status.table.name,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White
-                        )
-                        Text(
-                            text = if (session.num_people != null) {
-                                "${session.num_people} " + if (status.table.type == "ps5") "controllers active" else "players active"
-                            } else "Flat table rate",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                    }
-
-                    IconButton(onClick = { showAdminDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = Color.Gray
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (isLandscape) {
+                    // Header Row
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!session.customer_name.isNullOrEmpty()) {
+                                Icon(Icons.Default.AccountCircle, contentDescription = null, tint = fgColor, modifier = Modifier.size(40.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Hello ${session.customer_name}", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = fgColor)
+                                Spacer(modifier = Modifier.width(20.dp))
+                                Box(modifier = Modifier.width(2.dp).height(32.dp).background(fgColor.copy(alpha = 0.3f)))
+                                Spacer(modifier = Modifier.width(20.dp))
+                            }
+                            Column {
+                                Text(status.table.name.uppercase(), fontSize = 20.sp, fontWeight = FontWeight.Black, color = fgColor)
+                                val playersTxt = if (session.num_people != null) "${session.num_people} PLAYERS" else "FLAT RATE"
+                                val startTxt = "STARTED AT ${formatTime(session.actual_start)}"
+                                Text("$playersTxt • $startTxt", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = fgColor.copy(alpha = 0.8f))
+                            }
+                        }
+                        IconButton(onClick = { showAdminDialog = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = fgColor, modifier = Modifier.size(36.dp))
+                        }
+                    }
+
+                    // Center Timer
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (isTimeUp) "TIME'S UP!" else "REMAINING TIME",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = fgColor,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = remainingTime,
+                            fontSize = 180.sp,
+                            fontWeight = FontWeight.Black,
+                            color = fgColor,
+                            letterSpacing = (-4).sp,
+                            modifier = Modifier.offset(y = (-10).dp)
+                        )
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(32.dp))
+                                .background(if (isTimeUp) Color.Black.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.1f))
+                                .padding(horizontal = 24.dp, vertical = 12.dp)
+                        ) {
+                            Icon(if (isTimeUp) Icons.Default.Warning else Icons.Default.Schedule, contentDescription = null, tint = fgColor, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            val endPrefix = if (isTimeUp) "TIME EXPIRED AT" else "ENDS AT"
+                            Text("$endPrefix ${formatTime(session.expected_end)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = fgColor)
+                        }
+                        
+                        if (isTimeUp) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black.copy(alpha = 0.3f))
+                                    .padding(horizontal = 20.dp, vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("If time crosses 5 minutes, you will be charged for 15 minutes.", fontSize = 16.sp, color = Color.White)
+                            }
+                        }
+                    }
+
+                    // Bottom Action Cards
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        CountdownCard(
-                            remainingSeconds = remainingSeconds,
-                            remainingTime = remainingTime,
-                            session = session,
-                            modifier = Modifier
-                                .weight(1.2f)
-                                .fillMaxHeight()
+                        ActionCard(
+                            title = "ADD TIME",
+                            subtitle = "Add more minutes",
+                            icon = Icons.Default.MoreTime,
+                            onClick = { showExtendDialog = true },
+                            modifier = Modifier.weight(1f).height(140.dp)
                         )
-
-                        BillAndActions(
-                            session = session,
-                            onExtendClick = { showExtendDialog = true },
-                            onBeverageClick = { showBeverageDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
+                        ActionCard(
+                            title = "ORDER FOOD & DRINKS",
+                            subtitle = "View menu",
+                            icon = Icons.Default.Fastfood,
+                            onClick = { showBeverageDialog = true },
+                            modifier = Modifier.weight(1f).height(140.dp)
                         )
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CountdownCard(
-                            remainingSeconds = remainingSeconds,
-                            remainingTime = remainingTime,
-                            session = session,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                        )
-
-                        BillAndActions(
-                            session = session,
-                            onExtendClick = { showExtendDialog = true },
-                            onBeverageClick = { showBeverageDialog = true },
-                            modifier = Modifier.fillMaxWidth()
+                        ActionCard(
+                            title = "AMOUNT DUE",
+                            subtitle = "Includes ₹${String.format(Locale.US, "%.2f", session.extras.sumOf { it.amount })} (Extras)",
+                            value = "₹${String.format(Locale.US, "%.2f", session.current_bill)}",
+                            icon = null,
+                            onClick = { /* Details */ },
+                            modifier = Modifier.weight(1f).height(140.dp)
                         )
                     }
                 }
@@ -892,193 +923,68 @@ fun AdminDialog(
 }
 
 @Composable
-fun CountdownCard(
-    remainingSeconds: Long,
-    remainingTime: String,
-    session: com.gamehaus.app.data.SessionData,
+fun ActionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    value: String? = null,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isNearEnd = remainingSeconds < 300
-    val pulseInfiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by pulseInfiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isNearEnd) 1.05f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = EaseInOutQuad),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
     Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isNearEnd) Color(0x1AEF4444) else Color(0xFF1E1E1E)
-        ),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(
-            1.5.dp,
-            if (isNearEnd) Color(0xFFEF4444).copy(alpha = 0.5f) else Color(0xFF2C2C2C)
-        )
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "REMAINING TIME",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isNearEnd) Color(0xFFEF4444) else Color.Gray,
-                letterSpacing = 1.5.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = remainingTime,
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Black,
-                color = if (isNearEnd) Color(0xFFEF4444) else Color.White,
-                modifier = Modifier.scale(pulseScale)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.2f))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayCircleFilled,
-                    contentDescription = null,
-                    tint = Color.Gray,
-                    modifier = Modifier.size(16.dp)
-                )
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(36.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+            } else if (value != null) {
                 Text(
-                    text = "Started at ${formatTime(session.actual_start)}",
+                    text = title,
                     fontSize = 12.sp,
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    letterSpacing = 1.sp
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun BillAndActions(
-    session: com.gamehaus.app.data.SessionData,
-    onExtendClick: () -> Unit,
-    onBeverageClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Bill Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "AMOUNT DUE",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        letterSpacing = 1.sp
-                    )
-                    Icon(
-                        imageVector = Icons.Default.ReceiptLong,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = String.format("₹%.2f", session.current_bill),
-                    fontSize = 34.sp,
+                    text = value,
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.Black,
-                    color = Color.White
+                    color = Color(0xFFFF8A00)
                 )
-
-                // Show advance paid if it was collected upfront
-                if (session.advance_paid > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Divider(color = Color(0xFF2A2A2A))
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Extras due row
-                    if (session.extras.isNotEmpty()) {
-                        val extrasTotal = session.extras.sumOf { it.amount }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Snacks & drinks", fontSize = 12.sp, color = Color.Gray)
-                            Text(String.format("₹%.2f", extrasTotal), fontSize = 12.sp, color = Color.White)
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Advance paid", fontSize = 12.sp, color = Color(0xFF4CAF50))
-                        Text(String.format("-₹%.2f", session.advance_paid), fontSize = 12.sp, color = Color(0xFF4CAF50))
-                    }
-                }
-
-                // Extras ordered (if any, always show)
-                if (session.advance_paid == 0.0 && session.extras.isNotEmpty()) {
-                    Divider(color = Color(0xFF2A2A2A))
-                    session.extras.forEach { extra ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("${extra.name} ×${extra.quantity}", fontSize = 12.sp, color = Color.Gray)
-                            Text(String.format("₹%.2f", extra.amount), fontSize = 12.sp, color = Color.White)
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+                return@Column
             }
-        }
-
-        // Action cards — only Extend Time and Order Snacks
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            ActionCard(
-                title = "Extend Time",
-                subtitle = "Add more minutes",
-                icon = Icons.Default.AddAlarm,
-                modifier = Modifier.weight(1f)
-            ) { onExtendClick() }
-
-            ActionCard(
-                title = "Order Snacks",
-                subtitle = "Drinks & beverages",
-                icon = Icons.Default.LocalPizza,
-                modifier = Modifier.weight(1f)
-            ) { onBeverageClick() }
+            
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
         }
     }
 }

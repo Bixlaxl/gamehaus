@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   // 1. Fetch table details + location closing time in one query
   const { data: table, error: tableErr } = await admin
     .from("tables")
-    .select("id, name, type, hourly_rate, people_pricing, location:locations(closing_time)")
+    .select("id, name, type, hourly_rate, people_pricing, location:locations(name, closing_time)")
     .eq("id", tableId)
     .single();
 
@@ -35,6 +35,7 @@ export async function GET(request: Request) {
 
   // Strip the location join from the object returned to the tablet
   const { location: locationData, ...tableForClient } = table as any;
+  tableForClient.location_name = locationData?.name;
   const closingTime: string | null = locationData?.closing_time ?? null;
 
   // 2. Fetch active running session on this table
@@ -163,6 +164,7 @@ export async function GET(request: Request) {
       current_bill:     billResult.totalDue,
       advance_paid:     item.order?.advance_paid ?? 0,
       max_extend_mins:  maxExtendMins,
+      customer_name:    item.order?.customer_name ?? null,
       extras: (extras || []).map(e => ({
         id:       e.id,
         name:     e.name,
@@ -183,6 +185,7 @@ export async function GET(request: Request) {
       rate_per_hour:   item.rate_per_hour,
       current_bill:    item.order?.advance_paid ?? 0,
       max_extend_mins: 0,
+      customer_name:   item.order?.customer_name ?? null,
       extras:          [],
     };
   }

@@ -38,7 +38,8 @@ data class TableItem(
     val name: String,
     val type: String,
     val hourly_rate: Double,
-    val people_pricing: Map<String, Double>?
+    val people_pricing: Map<String, Double>?,
+    val location_name: String? = null
 )
 
 data class TabletStatus(
@@ -50,6 +51,7 @@ data class SessionData(
     val order_item_id: String,
     val order_id: String,
     val status: String,
+    val customer_name: String?,
     val actual_start: String?,
     val expected_end: String?,
     val scheduled_start: String?,

@@ -12,8 +12,19 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Refresh token required", "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.refreshSession({
+  const { createServerClient } = await import("@supabase/ssr");
+  const cleanClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => [],
+        setAll: () => {},
+      },
+    }
+  );
+
+  const { data, error } = await cleanClient.auth.refreshSession({
     refresh_token
   });
 

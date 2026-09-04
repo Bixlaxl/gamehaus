@@ -277,7 +277,7 @@ export async function POST(request: Request) {
   }
 
   // Trigger WhatsApp notification asynchronously so staff doesn't wait
-  sendWhatsAppConfirmation(order.id).catch((e) => {
+  await sendWhatsAppConfirmation(order.id).catch((e) => {
     console.error("[WhatsApp] Failed to send manual booking confirmation:", e);
   });
 

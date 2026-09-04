@@ -217,14 +217,16 @@ export async function POST(
       })();
     }
 
-    // Trigger WhatsApp notification
-    whatsappNotificationPromise = (async () => {
-      const { sendWhatsAppConfirmation } = await import("@/lib/whatsapp");
-      await sendWhatsAppConfirmation(orderId).catch((e) => console.error("WhatsApp failed:", e));
-    })();
+    // WhatsApp notification will be handled below
   }
 
   const finalPaidAmount = body.payment_id ? paidAmount : netAdvancePaid;
+
+  // Trigger WhatsApp notification for all confirmed bookings
+  whatsappNotificationPromise = (async () => {
+    const { sendWhatsAppConfirmation } = await import("@/lib/whatsapp");
+    await sendWhatsAppConfirmation(orderId).catch((e) => console.error("WhatsApp failed:", e));
+  })();
 
   const membershipUpdatePromises = Array.from(ledgerUpdates.values())
     .filter(e => e.hoursRedeemed > 0)
