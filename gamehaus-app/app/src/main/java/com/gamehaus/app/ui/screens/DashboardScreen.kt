@@ -555,33 +555,28 @@ fun BeverageOrderDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    AsyncImage(
-                                        model = drink.image_url,
-                                        contentDescription = drink.name,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(50.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                    )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = drink.name,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Black,
                                             color = Color.White,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "₹${drink.selling_price}",
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "Stock: ${drink.stock_count}",
-                                            fontSize = 10.sp,
+                                            fontSize = 11.sp,
                                             color = Color.Gray,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis

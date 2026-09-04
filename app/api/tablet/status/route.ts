@@ -139,7 +139,12 @@ export async function GET(request: Request) {
 
     // 6. Calculate bill (if overtime, extend expected_end in-memory to now)
     const billingItem = { ...item };
-    if (isOvertime) billingItem.expected_end = new Date().toISOString();
+    if (isOvertime) {
+      const overtimeMs = nowMs - new Date(item.expected_end).getTime();
+      if (overtimeMs > 5 * 60 * 1000) {
+        billingItem.expected_end = new Date().toISOString();
+      }
+    }
 
     const billResult = calculateBill(
       [billingItem as any],
