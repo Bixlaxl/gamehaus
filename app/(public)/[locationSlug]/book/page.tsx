@@ -49,7 +49,7 @@ type CouponState =
 
 declare global {
   interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open: () => void };
+    Razorpay: new (options: RazorpayOptions) => { open: () => void; close?: () => void };
   }
 }
 
@@ -111,6 +111,12 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
+function formatTimer(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 export default function CheckoutPage() {
   const router   = useRouter();
   const params   = useParams();
@@ -118,6 +124,11 @@ export default function CheckoutPage() {
   const cart     = useCartStore();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
+  const rzpRef = useRef<{ open: () => void; close?: () => void } | null>(null);
+  const activeOrderIdRef = useRef<string | null>(null);
 
   const [name, setName]               = useState("");
   const [phone, setPhone]             = useState("");
@@ -226,6 +237,54 @@ export default function CheckoutPage() {
     const id = setInterval(() => setNow(new Date()), 30 * 1000);
     return () => clearInterval(id);
   }, []);
+
+  // 5-minute visible checkout countdown timer with synchronized sessionStorage expiry
+  useEffect(() => {
+    if (!mounted) return;
+    if (cart.items.length === 0) {
+      sessionStorage.removeItem("gh_checkout_expires_at");
+      setTimeLeft(null);
+      return;
+    }
+
+    const HOLD_DURATION_SECONDS = 5 * 60; // 5 minutes visible checkout window
+    const storageKey = `gh_checkout_expires_at_${cart.locationId || "default"}`;
+    let expiresAt = Number(sessionStorage.getItem(storageKey));
+    const nowMs = Date.now();
+
+    if (!expiresAt || isNaN(expiresAt) || expiresAt <= nowMs) {
+      expiresAt = nowMs + HOLD_DURATION_SECONDS * 1000;
+      sessionStorage.setItem(storageKey, String(expiresAt));
+    }
+
+    const calcRemaining = () => Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+    setTimeLeft(calcRemaining());
+
+    const interval = setInterval(() => {
+      const remaining = calcRemaining();
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+        sessionStorage.removeItem(storageKey);
+        // Auto-close Razorpay modal if currently open
+        if (rzpRef.current?.close) {
+          try {
+            rzpRef.current.close();
+          } catch {}
+        }
+        if (activeOrderIdRef.current) {
+          fetch(`/api/orders/${activeOrderIdRef.current}/cancel`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emergency: true, silent: true }),
+          }).catch(() => {});
+        }
+        setIsSessionExpired(true);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [mounted, cart.items.length, cart.locationId]);
 
   // Determine if any booking on a specific table is for more than 1 Hour 45 Minutes (2 Hours and above)
   const hasLongBooking = useMemo(() => {
@@ -701,6 +760,7 @@ export default function CheckoutPage() {
     }
 
     const { order_id } = orderBody.data;
+    activeOrderIdRef.current = order_id;
 
     if (amountToPay === 0) {
       try {
@@ -719,6 +779,7 @@ export default function CheckoutPage() {
           submitting.current = false;
           return;
         }
+        sessionStorage.removeItem(`gh_checkout_expires_at_${cart.locationId || "default"}`);
         cart.clearCart();
         router.push(`/booking/${order_id}`);
       } catch (err: any) {
@@ -786,6 +847,7 @@ export default function CheckoutPage() {
         theme: { color: "#D4541A" },
         handler: async (response) => {
           paymentSuccess = true;
+          sessionStorage.removeItem(`gh_checkout_expires_at_${cart.locationId || "default"}`);
           cart.clearCart();
           router.push(`/booking/${order_id}?payment_id=${response.razorpay_payment_id}`);
         },
@@ -805,6 +867,7 @@ export default function CheckoutPage() {
       };
 
       const rzp = new window.Razorpay(options);
+      rzpRef.current = rzp;
       rzp.open();
     } catch (err: any) {
       console.error("[Razorpay Checkout Error]", err);
@@ -889,6 +952,44 @@ export default function CheckoutPage() {
           </div>
         </div>
       )}
+
+      {/* Session Expired Modal */}
+      {isSessionExpired && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 text-center border"
+            style={{ background: surface, borderColor: border }}
+          >
+            <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center bg-amber-500/15 text-amber-500">
+              <Clock className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold" style={{ color: textPri }}>
+                Checkout Session Expired
+              </h3>
+              <p className="text-sm leading-relaxed" style={{ color: textSec }}>
+                Your 5-minute reservation hold has expired and the slots were released so other guests can book.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.removeItem(`gh_checkout_expires_at_${cart.locationId || "default"}`);
+                  cart.clearCart();
+                  setIsSessionExpired(false);
+                  router.push(`/${slug}`);
+                }}
+                className="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-all active:scale-[0.98] shadow-md shadow-[#D4541A]/20"
+                style={{ background: "#D4541A" }}
+              >
+                Choose Available Slots
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="min-h-screen" style={{ background: bg }}>
 
         {/* Header */}
@@ -903,9 +1004,24 @@ export default function CheckoutPage() {
               <ArrowLeft className="h-5 w-5 text-white" />
             </Link>
             <h1 className="font-bold text-base text-white">Checkout</h1>
-            <div className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-white/90">
-              <ShoppingCart className="h-4 w-4 text-white" />
-              <span>{cart.items.length} {cart.items.length === 1 ? "item" : "items"}</span>
+            <div className="ml-auto flex items-center gap-2.5">
+              {cart.items.length > 0 && timeLeft !== null && (
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold tracking-wide transition-all shadow-inner ${
+                    timeLeft <= 60
+                      ? "bg-amber-400 text-black animate-pulse shadow-amber-600/30"
+                      : "bg-black/30 text-white/95 border border-white/20"
+                  }`}
+                  title="Time remaining to complete checkout"
+                >
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>{formatTimer(timeLeft)}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-white/90">
+                <ShoppingCart className="h-4 w-4 text-white" />
+                <span>{cart.items.length} {cart.items.length === 1 ? "item" : "items"}</span>
+              </div>
             </div>
           </div>
         </header>

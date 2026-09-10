@@ -3,9 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function cancelExpiredUnpaidOrders() {
   const admin = createAdminClient();
   try {
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // 7-minute backend TTL (provides a 2-minute buffer over the 5-minute client checkout timer)
+    const sevenMinutesAgo = new Date(Date.now() - 7 * 60 * 1000).toISOString();
     
-    // Find open, unpaid online orders created more than 5 minutes ago by guests (created_by is null)
+    // Find open, unpaid online orders created more than 7 minutes ago by guests (created_by is null)
     const { data: expiredOrders } = await admin
       .from("orders")
       .select("id")
@@ -13,7 +14,7 @@ export async function cancelExpiredUnpaidOrders() {
       .eq("status", "open")
       .eq("advance_paid", 0)
       .is("created_by", null)
-      .lt("created_at", fiveMinutesAgo);
+      .lt("created_at", sevenMinutesAgo);
 
     if (expiredOrders && expiredOrders.length > 0) {
       const candidateIds = expiredOrders.map(o => o.id);

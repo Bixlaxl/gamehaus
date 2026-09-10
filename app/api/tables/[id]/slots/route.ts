@@ -46,7 +46,7 @@ export async function GET(
   const blocked: { start: string; end: string }[] = [];
   const processedItemIds = new Set<string>();
 
-  const fiveMinsAgoMs = Date.now() - 5 * 60 * 1000;
+  const sevenMinsAgoMs = Date.now() - 7 * 60 * 1000;
 
   (rawItems ?? []).forEach((item: any) => {
     // Ignore order items from cancelled orders or expired unpaid guest drafts
@@ -56,7 +56,7 @@ export async function GET(
       const isUnpaidGuestDraft = parentOrder.type === "online" && !parentOrder.created_by && (parentOrder.advance_paid ?? 0) === 0;
       if (isUnpaidGuestDraft) {
         const orderCreatedMs = new Date(parentOrder.created_at ?? 0).getTime();
-        if (orderCreatedMs < fiveMinsAgoMs) return; // expired hold
+        if (orderCreatedMs < sevenMinsAgoMs) return; // expired hold
       }
     }
 
