@@ -36,7 +36,13 @@ export async function POST(
   }
 
   // Idempotency: if the order is already paid/confirmed, skip immediately
-  if (order.status === "open" && order.advance_paid > 0) {
+  const { data: existingBookingsEarly } = await admin
+    .from("bookings")
+    .select("id")
+    .eq("order_id", orderId)
+    .limit(1);
+
+  if ((order.status === "open" && order.advance_paid > 0) || (existingBookingsEarly && existingBookingsEarly.length > 0)) {
     return NextResponse.json(ok({ order_id: orderId }));
   }
 
@@ -126,8 +132,13 @@ export async function POST(
     totalFreeHoursDiscount
   );
 
+  const { getAppSettings } = await import("@/lib/settings");
+  const settings = await getAppSettings(admin);
+  const redeemRate = settings.loyalty.redeem_rupees_per_point ?? 1;
+  const pointsDiscount = (order.points_redeemed ?? 0) * redeemRate;
+
   const totalDiscount = Math.round((bill.discountAmount + bill.memberDiscountAmount + bill.freeHoursDiscountAmount) * 100) / 100;
-  const netAdvancePaid = Math.max(0, bill.subtotal - totalDiscount);
+  const netAdvancePaid = Math.max(0, Math.round((bill.subtotal - totalDiscount - pointsDiscount) * 100) / 100);
 
   // Security Guard: If payment is required but payment_id was not provided
   if (netAdvancePaid > 0 && !body.payment_id) {
@@ -183,41 +194,37 @@ export async function POST(
       razorpay_payment_id: body.payment_id,
       collected_at: new Date().toISOString(),
     }).eq("id", dbPayment.id).then(() => {});
+  }
 
-    // Update loyalty points
-    if (order.customer_phone) {
-      const phone = order.customer_phone;
-      loyaltyProfilePromise = (async () => {
-        const { getAppSettings } = await import("@/lib/settings");
-        const settings = await getAppSettings(admin);
-        const pointsEarned = Math.floor(paidAmount / settings.loyalty.earn_rupees_per_point);
-        const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
+  // Update loyalty points (earned from amount paid, and deducted from points redeemed)
+  if (order.customer_phone) {
+    const phone = order.customer_phone;
+    loyaltyProfilePromise = (async () => {
+      const pointsEarned = Math.floor(paidAmount / settings.loyalty.earn_rupees_per_point);
+      const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
 
-        const { data: profile } = await admin
-          .from("customer_profiles")
-          .select("points_balance")
-          .eq("phone", phone)
-          .single();
+      const { data: profile } = await admin
+        .from("customer_profiles")
+        .select("points_balance")
+        .eq("phone", phone)
+        .single();
 
-        if (profile) {
-          await admin.from("customer_profiles").update({
-            points_balance: Math.max(0, profile.points_balance + netPoints),
-            last_visit_at:  new Date().toISOString(),
-          }).eq("phone", phone);
-        } else {
-          await admin.from("customer_profiles").insert({
-            phone:          phone,
-            name:           order.customer_name,
-            points_balance: Math.max(0, netPoints),
-            visit_count:    0,
-            total_spent:    0,
-            last_visit_at:  new Date().toISOString(),
-          });
-        }
-      })();
-    }
-
-    // WhatsApp notification will be handled below
+      if (profile) {
+        await admin.from("customer_profiles").update({
+          points_balance: Math.max(0, profile.points_balance + netPoints),
+          last_visit_at:  new Date().toISOString(),
+        }).eq("phone", phone);
+      } else {
+        await admin.from("customer_profiles").insert({
+          phone:          phone,
+          name:           order.customer_name,
+          points_balance: Math.max(0, netPoints),
+          visit_count:    0,
+          total_spent:    0,
+          last_visit_at:  new Date().toISOString(),
+        });
+      }
+    })();
   }
 
   const finalPaidAmount = body.payment_id ? paidAmount : netAdvancePaid;

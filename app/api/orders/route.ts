@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
 import { cancelExpiredUnpaidOrders } from "@/lib/booking-cleanup";
 import { calculateCouponDiscount } from "@/lib/coupons";
+import { getAppSettings } from "@/lib/settings";
 
 export const runtime = 'edge';
 
@@ -351,6 +352,30 @@ export async function POST(request: Request) {
 
   discountAmount = Math.round((publicDiscountAmount + memberDiscountAmount) * 100) / 100;
 
+  // ── Validate & Calculate Points Redemption for Online Bookings ───────────
+  let validatedPointsRedeemed = 0;
+  let pointsDiscountAmount = 0;
+
+  if (type === "online" && payment_mode === "full" && points_redeemed && points_redeemed > 0 && customer_phone) {
+    const settings = await getAppSettings(admin);
+    const minPoints = settings.loyalty.min_points_to_redeem ?? 100;
+    const redeemRate = settings.loyalty.redeem_rupees_per_point ?? 1;
+
+    const { data: profile } = await admin
+      .from("customer_profiles")
+      .select("points_balance")
+      .eq("phone", customer_phone)
+      .maybeSingle();
+
+    const balance = profile?.points_balance ?? 0;
+    if (balance >= minPoints) {
+      const remainingBill = Math.max(0, roundedSubtotal - discountAmount);
+      const maxPointsByBill = Math.floor(remainingBill / redeemRate);
+      validatedPointsRedeemed = Math.min(points_redeemed, balance, maxPointsByBill);
+      pointsDiscountAmount = Math.round(validatedPointsRedeemed * redeemRate * 100) / 100;
+    }
+  }
+
   // Create order
   const { data: order, error: orderError } = await admin
     .from("orders")
@@ -360,7 +385,8 @@ export async function POST(request: Request) {
       customer_name,
       customer_phone:         customer_phone ?? null,
       membership_id:          membership_id ?? null,
-      points_redeemed:        points_redeemed ?? 0,
+      points_redeemed:        validatedPointsRedeemed,
+      points_redeemed_online: validatedPointsRedeemed,
       coupon_id:              resolvedCouponId,
       subtotal:               roundedSubtotal > 0 ? roundedSubtotal : null,
       // discount_amount = coupon + member combined (for reporting/display).
@@ -369,7 +395,7 @@ export async function POST(request: Request) {
       // without double-counting the member portion baked in at booking time.
       discount_amount:        discountAmount,
       public_discount_amount: publicDiscountAmount,
-      total_amount:    roundedSubtotal > 0 ? Math.max(0, Math.round((roundedSubtotal - discountAmount) * 100) / 100) : null,
+      total_amount:    roundedSubtotal > 0 ? Math.max(0, Math.round((roundedSubtotal - discountAmount - pointsDiscountAmount) * 100) / 100) : null,
       created_by:      createdBy,
     })
     .select()

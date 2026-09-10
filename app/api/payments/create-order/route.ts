@@ -27,13 +27,33 @@ export async function POST(request: Request) {
   // Single Source of Truth: Fetch exact backend total_amount from database
   const { data: dbOrder } = await admin
     .from("orders")
-    .select("total_amount, advance_paid")
+    .select("total_amount, advance_paid, points_redeemed, points_redeemed_online, subtotal, discount_amount")
     .eq("id", order_id)
     .maybeSingle();
 
-  const resolvedAmountInRupees = dbOrder?.total_amount
-    ? Math.max(0, (dbOrder.total_amount ?? 0) - (dbOrder.advance_paid ?? 0))
-    : (amount / 100);
+  let resolvedAmountInRupees: number;
+  if (dbOrder?.total_amount !== null && dbOrder?.total_amount !== undefined) {
+    const rawTotal = Number(dbOrder.total_amount) || 0;
+    const advance = Number(dbOrder.advance_paid) || 0;
+
+    // Safety fallback: If points were redeemed on an order where total_amount was saved without points deduction
+    const pointsRedeemed = Number(dbOrder.points_redeemed_online || dbOrder.points_redeemed) || 0;
+    const subtotal = Number(dbOrder.subtotal) || 0;
+    const discount = Number(dbOrder.discount_amount) || 0;
+    const pointsWereNotDeducted = pointsRedeemed > 0 && Math.abs(rawTotal - (subtotal - discount)) < 0.01;
+
+    if (pointsWereNotDeducted) {
+      const { getAppSettings } = await import("@/lib/settings");
+      const settings = await getAppSettings(admin);
+      const redeemRate = settings.loyalty.redeem_rupees_per_point ?? 1;
+      const pointsDiscount = pointsRedeemed * redeemRate;
+      resolvedAmountInRupees = Math.max(0, rawTotal - pointsDiscount - advance);
+    } else {
+      resolvedAmountInRupees = Math.max(0, rawTotal - advance);
+    }
+  } else {
+    resolvedAmountInRupees = amount / 100;
+  }
 
   const finalAmountInPaise = Math.round(resolvedAmountInRupees * 100);
 
