@@ -22,6 +22,9 @@ interface Order {
   total_amount: number | null;
   type: "online" | "walk_in";
   status: "open" | "finalized" | "cancelled";
+  discount_amount?: number | null;
+  points_redeemed?: number | null;
+  points_redeemed_online?: number | null;
   items: BookingItem[] | null;
 }
 
@@ -45,9 +48,11 @@ export function BookingConfirmation({ order, paymentId }: { order: Order | null;
   const totalAmount = (order?.items ?? []).reduce((sum, item) => {
     return sum + ((item.rate_per_hour ?? 0) * (item.scheduled_duration_mins ?? 0) / 60);
   }, 0);
-  const discountAmount = (order as any)?.discount_amount ?? 0;
-  const advancePaid = order?.advance_paid ?? 0;
-  const amountDue   = Math.max(0, totalAmount - discountAmount - advancePaid);
+  const discountAmount = Number((order as any)?.discount_amount ?? 0);
+  const pointsRedeemed = Number((order as any)?.points_redeemed_online ?? (order as any)?.points_redeemed ?? 0);
+  const pointsDiscount = pointsRedeemed; // 1 point = ₹1
+  const advancePaid = Number(order?.advance_paid ?? 0);
+  const amountDue   = Math.max(0, totalAmount - discountAmount - pointsDiscount - advancePaid);
 
   const isOnline = order?.type === "online";
   const isPaymentPending = isOnline && (order?.total_amount ?? 0) > 0 && (order?.advance_paid ?? 0) === 0 && order?.status === "open";
@@ -244,6 +249,14 @@ export function BookingConfirmation({ order, paymentId }: { order: Order | null;
                 </span>
               </div>
             )}
+            {pointsDiscount > 0 && (
+              <div className="flex justify-between text-sm" style={{ color: textSec }}>
+                <span>Points redeemed</span>
+                <span style={{ color: "#10B981", fontWeight: 600 }}>
+                  −₹{pointsDiscount.toLocaleString("en-IN")}
+                </span>
+              </div>
+            )}
             {advancePaid > 0 && (
               <div className="flex justify-between text-sm" style={{ color: textSec }}>
                 <span>Paid</span>
@@ -260,7 +273,7 @@ export function BookingConfirmation({ order, paymentId }: { order: Order | null;
                 </span>
               </div>
             )}
-            {amountDue === 0 && (advancePaid > 0 || discountAmount > 0) && (
+            {amountDue === 0 && (advancePaid > 0 || discountAmount > 0 || pointsDiscount > 0) && (
               <div className="flex justify-between text-sm" style={{ color: "#10B981" }}>
                 <span>Fully paid</span>
                 <span>✓</span>
