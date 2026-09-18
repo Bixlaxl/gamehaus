@@ -27,7 +27,25 @@ export async function cancelExpiredUnpaidOrders() {
         .eq("status", "completed");
 
       const paidOrderIds = new Set((activePayments ?? []).map(p => p.order_id));
-      const idsToCancel = candidateIds.filter(id => !paidOrderIds.has(id));
+
+      // Safety guard: never auto-cancel an order that has a confirmed booking.
+      // Manual staff bookings (created via /api/pos/manual-booking) always write a
+      // confirmed booking row immediately on creation. Abandoned guest checkouts never
+      // reach confirmed status — they stay pending until payment is received.
+      // This makes it structurally impossible for this cleanup to touch a manual
+      // booking, even if the created_by / advance_paid filters ever have edge cases
+      // (e.g. a stale session causing created_by to be written as null).
+      const { data: confirmedBookings } = await admin
+        .from("bookings")
+        .select("order_id")
+        .in("order_id", candidateIds)
+        .eq("status", "confirmed");
+
+      const protectedOrderIds = new Set((confirmedBookings ?? []).map(b => b.order_id));
+
+      const idsToCancel = candidateIds.filter(
+        id => !paidOrderIds.has(id) && !protectedOrderIds.has(id)
+      );
 
       if (idsToCancel.length > 0) {
         console.log(`[Auto-Cleanup] Cancelling ${idsToCancel.length} expired unpaid online guest bookings...`, idsToCancel);
