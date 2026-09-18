@@ -191,10 +191,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 } catch (e: Exception) {
-                    if (e is retrofit2.HttpException && e.code() == 401) {
+                    // The OkHttp Authenticator in ApiClient handles token refresh.
+                    // Only call unpair() if the Authenticator has confirmed revocation by
+                    // nulling out authToken. A 401 alone is not enough — it may be a
+                    // transient 401 that the Authenticator is already handling.
+                    if (e is retrofit2.HttpException && e.code() == 401 && prefs.authToken == null) {
                         unpair()
                     }
-                    // silent retry for other errors
+                    // silent retry for other errors (network glitches, timeouts, etc.)
                 }
 
                 delay(5000)

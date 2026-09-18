@@ -243,8 +243,21 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
   const dark      = false;
   const open      = isOpen(location.opening_time, location.closing_time);
-  const types     = ["all", ...new Set(tables.map(t => t.type))];
-  const shown     = filter === "all" ? tables : tables.filter(t => t.type === filter);
+  // Build the type filter list from table types AND mode names so that
+  // dual-mode tables (e.g. Medium Tables with both Snooker and Pool modes)
+  // appear as tabs for both categories.
+  const types = ["all", ...new Set([
+    ...tables.map(t => t.type),
+    ...tables.flatMap(t => (t.modes ?? []).map(m => m.name.toLowerCase())),
+  ])];
+  // A table is shown if filter is "all", or its primary type matches,
+  // or any of its modes' names match (case-insensitive).
+  const shown = filter === "all"
+    ? tables
+    : tables.filter(t =>
+        t.type === filter ||
+        (t.modes ?? []).some(m => m.name.toLowerCase() === filter.toLowerCase())
+      );
   const days      = useMemo(() => buildDays(location.timezone), [location.timezone]);
   const cartCount = cart.items.length;
   const [animateCart, setAnimateCart] = useState(false);
@@ -564,7 +577,12 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
             const active = filter === t;
             const tc     = t === "all" ? null : cfg(t);
             const accent = t === "all" ? "#111111" : (tc?.accent ?? "#111111");
-            const count  = t === "all" ? tables.length : tables.filter(tb => tb.type === t).length;
+            const count  = t === "all"
+              ? tables.length
+              : tables.filter(tb =>
+                  tb.type === t ||
+                  (tb.modes ?? []).some(m => m.name.toLowerCase() === t.toLowerCase())
+                ).length;
             return (
               <button
                 key={t}
