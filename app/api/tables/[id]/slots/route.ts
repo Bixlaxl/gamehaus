@@ -37,7 +37,7 @@ export async function GET(
     admin
       .from("bookings")
       .select("scheduled_start, scheduled_end, order_item:order_items!inner(id, table_id)")
-      .eq("order_items.table_id", tableId)
+      .eq("order_item.table_id", tableId)
       .eq("status", "confirmed")
       .gte("scheduled_start", new Date(dayStartMs).toISOString())
       .lte("scheduled_start", new Date(dayEndMs).toISOString()),
