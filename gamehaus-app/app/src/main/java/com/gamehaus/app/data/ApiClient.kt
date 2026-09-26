@@ -46,11 +46,10 @@ class ApiClient(private val prefs: PreferencesHelper) {
                     override fun authenticate(route: Route?, response: Response): Request? {
                         // Prevent infinite loop if the refresh endpoint itself returns 401
                         if (response.request.url.encodedPath.contains("/api/tablet/refresh")) {
-                            // The refresh call itself got a 401 — this is a genuine revocation.
-                            // Clear credentials so the app knows to unpair.
+                            // The refresh call itself got a 401 — credentials revoked or invalid.
+                            // Clear auth tokens only; do not wipe table pairing assignment.
                             prefs.authToken = null
                             prefs.refreshToken = null
-                            prefs.isPaired = false
                             return null
                         }
 
@@ -91,10 +90,9 @@ class ApiClient(private val prefs: PreferencesHelper) {
                                     }
                                 }
                                 // Server explicitly rejected the refresh (non-IOException).
-                                // This means the refresh token is truly expired/revoked — safe to unpair.
+                                // Clear tokens only; do not wipe table pairing assignment.
                                 prefs.authToken = null
                                 prefs.refreshToken = null
-                                prefs.isPaired = false
                                 return null
                             } catch (e: IOException) {
                                 // Network error (timeout, Wi-Fi blip, tablet sleep/wake).

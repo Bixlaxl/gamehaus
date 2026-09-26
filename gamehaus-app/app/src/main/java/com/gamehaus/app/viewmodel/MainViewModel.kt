@@ -42,10 +42,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _remainingSeconds = MutableStateFlow(0L)
     val remainingSeconds: StateFlow<Long> = _remainingSeconds.asStateFlow()
 
+    private val _isTimeUp = MutableStateFlow(false)
+    val isTimeUp: StateFlow<Boolean> = _isTimeUp.asStateFlow()
+
     private var pollJob: Job? = null
     private var timerJob: Job? = null
     private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
     private var hasBeepedThisSession = false
+
+    // Monotonic server-sync timer tracking
+    private var baseRemainingSeconds: Long = 0L
+    private var lastSyncUptimeMs: Long = 0L
+    private var isSyncActive: Boolean = false
 
     init {
         if (prefs.isPaired) {
@@ -140,9 +148,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onAppForegrounded() {
+        if (prefs.isPaired && prefs.tableId != null) {
+            // Only restart if jobs were stopped (backgrounded). On cold launch,
+            // init{} already called startActiveSessionFlow(), so jobs are alive.
+            if (pollJob == null || !pollJob!!.isActive) {
+                startActiveSessionFlow()
+            }
+        }
+    }
+
+    fun onAppBackgrounded() {
+        pollJob?.cancel()
+        timerJob?.cancel()
+        pollJob = null
+        timerJob = null
+    }
+
     fun updateTableAssignment(table: TableItem) {
         prefs.tableId = table.id
         prefs.tableName = table.name
+        // Clear stale state immediately to transition cleanly into loading state
+        _status.value = null
+        _remainingSeconds.value = 0L
+        _remainingTimeStr.value = "00:00:00"
+        _isTimeUp.value = false
+        isSyncActive = false
         startActiveSessionFlow()
     }
 
@@ -156,10 +187,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun unpair() {
         pollJob?.cancel()
         timerJob?.cancel()
+        pollJob = null
+        timerJob = null
         prefs.isPaired = false
         prefs.authToken = null
         prefs.refreshToken = null
         _status.value = null
+        _remainingSeconds.value = 0L
+        _remainingTimeStr.value = "00:00:00"
+        _isTimeUp.value = false
         _isPaired.value = false
     }
 
@@ -169,18 +205,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hasBeepedThisSession = false
 
         val tableId = prefs.tableId ?: return
-        val locationId = prefs.locationId ?: return
+        if (prefs.locationId == null) return
 
         // Fetch beverages list once on start
         fetchBeverages()
 
-        // Poll status every 5 seconds
+        // Adaptive polling: 10s for active session, 15s for idle table
         pollJob = viewModelScope.launch {
             while (isActive) {
                 try {
                     val res = client.getService().getStatus(tableId)
                     if (res.success && res.data != null) {
                         val oldSession = _status.value?.session
+                        val session = res.data.session
+
+                        if (session != null && session.status == "running") {
+                            baseRemainingSeconds = session.remaining_seconds
+                            lastSyncUptimeMs = android.os.SystemClock.elapsedRealtime()
+                            isSyncActive = true
+                            // Synchronously update timer values before updating _status so Compose renders correct HUD
+                            _remainingSeconds.value = session.remaining_seconds
+                            _remainingTimeStr.value = formatSeconds(session.remaining_seconds)
+                            _isTimeUp.value = session.is_overtime || session.remaining_seconds <= 0
+                        } else {
+                            isSyncActive = false
+                            _remainingSeconds.value = 0L
+                            _remainingTimeStr.value = "00:00:00"
+                            _isTimeUp.value = false
+                        }
+
                         if (_status.value != res.data) {
                             _status.value = res.data
                         }
@@ -191,40 +244,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 } catch (e: Exception) {
-                    // The OkHttp Authenticator in ApiClient handles token refresh.
-                    // Only call unpair() if the Authenticator has confirmed revocation by
-                    // nulling out authToken. A 401 alone is not enough — it may be a
-                    // transient 401 that the Authenticator is already handling.
-                    if (e is retrofit2.HttpException && e.code() == 401 && prefs.authToken == null) {
-                        unpair()
-                    }
-                    // silent retry for other errors (network glitches, timeouts, etc.)
+                    // Do not unpair automatically on network errors or background 401s.
+                    // ApiClient handles token refresh; table assignment remains intact.
                 }
 
-                delay(5000)
+                val intervalMs = if (_status.value?.session?.status == "running") 10_000L else 15_000L
+                delay(intervalMs)
             }
         }
 
-        // Timer countdown tick every second
+        // Timer countdown tick every second (monotonic, immune to device clock/date desync)
         timerJob = viewModelScope.launch {
             while (isActive) {
                 val session = _status.value?.session
-                if (session != null && session.status == "running" && session.expected_end != null) {
-                    val endMs = parseIsoDate(session.expected_end)
-                    val nowMs = System.currentTimeMillis()
-                    val remSecs = (endMs - nowMs) / 1000L
+                if (session != null && session.status == "running") {
+                    val remSecs = if (isSyncActive && lastSyncUptimeMs > 0L) {
+                        val elapsedSinceSyncSecs = (android.os.SystemClock.elapsedRealtime() - lastSyncUptimeMs) / 1000L
+                        baseRemainingSeconds - elapsedSinceSyncSecs
+                    } else if (!session.expected_end.isNullOrEmpty()) {
+                        val endMs = parseIsoDate(session.expected_end)
+                        if (endMs > 0L) (endMs - System.currentTimeMillis()) / 1000L else 0L
+                    } else {
+                        0L
+                    }
 
                     _remainingSeconds.value = remSecs
                     _remainingTimeStr.value = formatSeconds(remSecs)
+                    _isTimeUp.value = session.is_overtime || remSecs <= 0
 
                     // Beep alert exactly 5 minutes (300 seconds) before end
                     if (remSecs in 299..301 && !hasBeepedThisSession) {
                         playBeep()
                         hasBeepedThisSession = true
                     }
+
+                    // If time just expired locally, refresh status immediately to fetch overtime bill & status
+                    if (remSecs <= 0 && isSyncActive && !session.is_overtime) {
+                        launch { refreshStatus() }
+                    }
                 } else {
                     _remainingSeconds.value = 0L
                     _remainingTimeStr.value = "00:00:00"
+                    _isTimeUp.value = false
                 }
                 delay(1000)
             }
@@ -289,7 +350,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val res = client.getService().getStatus(tableId)
             if (res.success && res.data != null) {
-                _status.value = res.data
+                val session = res.data.session
+                if (session != null && session.status == "running") {
+                    baseRemainingSeconds = session.remaining_seconds
+                    lastSyncUptimeMs = android.os.SystemClock.elapsedRealtime()
+                    isSyncActive = true
+                    _remainingSeconds.value = session.remaining_seconds
+                    _remainingTimeStr.value = formatSeconds(session.remaining_seconds)
+                    _isTimeUp.value = session.is_overtime || session.remaining_seconds <= 0
+                } else {
+                    isSyncActive = false
+                    _remainingSeconds.value = 0L
+                    _remainingTimeStr.value = "00:00:00"
+                    _isTimeUp.value = false
+                }
+
+                if (_status.value != res.data) {
+                    _status.value = res.data
+                }
             }
         } catch (e: Exception) {
             // ignore
@@ -318,11 +396,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun parseIsoDate(iso: String): Long {
+    private fun parseIsoDate(iso: String?): Long {
+        if (iso.isNullOrEmpty()) return 0L
+        val clean = iso.trim()
+        val patterns = arrayOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        )
+        for (pattern in patterns) {
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.US)
+                if (!pattern.contains("X") && !pattern.contains("Z")) {
+                    sdf.timeZone = TimeZone.getTimeZone("UTC")
+                }
+                val parsed = sdf.parse(clean.replace("Z", "+00:00"))
+                if (parsed != null) return parsed.time
+            } catch (_: Exception) {}
+        }
         return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            sdf.parse(iso)?.time ?: 0L
+            val normalized = clean.replace("Z", "+0000").replace(Regex("([+-]\\d{2}):(\\d{2})$"), "$1$2")
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+            sdf.parse(normalized)?.time ?: 0L
         } catch (e: Exception) {
             0L
         }

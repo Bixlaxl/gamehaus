@@ -51,7 +51,7 @@ fun DashboardScreen(
 ) {
     val statusState by viewModel.status.collectAsState()
     val remainingTime by viewModel.remainingTimeStr.collectAsState()
-    val remainingSeconds by viewModel.remainingSeconds.collectAsState()
+    val isTimeUp by viewModel.isTimeUp.collectAsState()
     val beverages by viewModel.beverages.collectAsState()
 
     var showAdminDialog by remember { mutableStateOf(false) }
@@ -141,7 +141,6 @@ fun DashboardScreen(
         } else {
             // ACTIVE HUD SCREEN
             val session = status.session!!
-            val isTimeUp = remainingSeconds <= 0
             val bgColor = if (isTimeUp) Color(0xFFC91A1A) else Color(0xFFFF7B00)
             val fgColor = if (isTimeUp) Color.White else Color(0xFF111111)
             
@@ -999,11 +998,37 @@ fun ActionCard(
 private fun formatTime(isoStr: String?): String {
     if (isoStr.isNullOrEmpty()) return "—"
     return try {
-        val sdfIn = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-        sdfIn.timeZone = TimeZone.getTimeZone("UTC")
-        val date = sdfIn.parse(isoStr) ?: return "—"
-        val sdfOut = SimpleDateFormat("h:mm a", Locale.getDefault())
-        sdfOut.format(date)
+        val clean = isoStr.trim()
+        val patterns = arrayOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        )
+        var date: Date? = null
+        for (pattern in patterns) {
+            try {
+                val sdfIn = SimpleDateFormat(pattern, Locale.US)
+                if (!pattern.contains("X") && !pattern.contains("Z")) {
+                    sdfIn.timeZone = TimeZone.getTimeZone("UTC")
+                }
+                date = sdfIn.parse(clean.replace("Z", "+00:00"))
+                if (date != null) break
+            } catch (_: Exception) {}
+        }
+        if (date == null) {
+            val normalized = clean.replace("Z", "+0000").replace(Regex("([+-]\\d{2}):(\\d{2})$"), "$1$2")
+            val sdfFallback = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+            date = sdfFallback.parse(normalized)
+        }
+        if (date != null) {
+            val sdfOut = SimpleDateFormat("h:mm a", Locale.US)
+            sdfOut.timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+            sdfOut.format(date)
+        } else {
+            "—"
+        }
     } catch (e: Exception) {
         "—"
     }

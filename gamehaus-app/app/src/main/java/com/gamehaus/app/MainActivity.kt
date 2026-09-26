@@ -38,4 +38,17 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (viewModel.isPaired.value) {
+            viewModel.onAppForegrounded()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel.onAppBackgrounded()
+    }
 }
+

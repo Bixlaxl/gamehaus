@@ -44,7 +44,8 @@ data class TableItem(
 
 data class TabletStatus(
     val table: TableItem,
-    val session: SessionData?
+    val session: SessionData?,
+    val server_time: String? = null
 )
 
 data class SessionData(

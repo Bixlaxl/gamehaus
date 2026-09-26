@@ -22,15 +22,31 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
-  // 1. Fetch table details + location closing time in one query
-  const { data: table, error: tableErr } = await admin
-    .from("tables")
-    .select("id, name, type, hourly_rate, people_pricing, location:locations(name, closing_time)")
-    .eq("id", tableId)
-    .single();
+  // 1. Fetch table details and active running session concurrently
+  const [
+    { data: table, error: tableErr },
+    { data: runningItem, error: runningItemErr }
+  ] = await Promise.all([
+    admin
+      .from("tables")
+      .select("id, name, type, hourly_rate, people_pricing, location:locations(name, closing_time)")
+      .eq("id", tableId)
+      .single(),
+    admin
+      .from("order_items")
+      .select("*, order:orders(*)")
+      .eq("table_id", tableId)
+      .eq("status", "running")
+      .limit(1)
+      .maybeSingle()
+  ]);
 
   if (tableErr || !table) {
     return NextResponse.json(err("Table not found", "NOT_FOUND"), { status: 404 });
+  }
+
+  if (runningItemErr) {
+    return NextResponse.json(err(runningItemErr.message, "DB_ERROR"), { status: 500 });
   }
 
   // Strip the location join from the object returned to the tablet
@@ -38,19 +54,8 @@ export async function GET(request: Request) {
   tableForClient.location_name = locationData?.name;
   const closingTime: string | null = locationData?.closing_time ?? null;
 
-  // 2. Fetch active running session on this table
-  // Prioritise running over scheduled so active sessions are not interrupted by future bookings.
-  let { data: item, error: itemErr } = await admin
-    .from("order_items")
-    .select("*, order:orders(*)")
-    .eq("table_id", tableId)
-    .eq("status", "running")
-    .limit(1)
-    .maybeSingle();
-
-  if (itemErr) {
-    return NextResponse.json(err(itemErr.message, "DB_ERROR"), { status: 500 });
-  }
+  // 2. Prioritise running over scheduled so active sessions are not interrupted by future bookings.
+  let item = runningItem;
 
   if (!item) {
     // No running session — look for the next scheduled session
@@ -87,8 +92,9 @@ export async function GET(request: Request) {
 
     if (item.expected_end) {
       const endMs  = new Date(item.expected_end).getTime();
-      remainingSeconds = Math.max(0, Math.floor((endMs - nowMs) / 1000));
-      isOvertime       = nowMs > endMs;
+      const diffSecs = Math.floor((endMs - nowMs) / 1000);
+      remainingSeconds = diffSecs;
+      isOvertime       = diffSecs < 0;
     }
 
     // 4. Fetch extras AND next scheduled booking on this table in parallel
@@ -195,5 +201,9 @@ export async function GET(request: Request) {
     };
   }
 
-  return NextResponse.json(ok({ table: tableForClient, session: sessionData }));
+  return NextResponse.json(ok({
+    table: tableForClient,
+    session: sessionData,
+    server_time: new Date().toISOString(),
+  }));
 }
