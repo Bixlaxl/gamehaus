@@ -158,7 +158,10 @@ export function calculateBill(
 
 
     const scheduledMins   = Math.ceil((billingEnd.getTime() - start.getTime()) / 60000);
-    const scheduledAmount = Math.round((scheduledMins / 60) * item.rate_per_hour * 100) / 100;
+    const calculatedAmount = Math.round((scheduledMins / 60) * item.rate_per_hour * 100) / 100;
+    const scheduledAmount = (item.status === "finished" && item.final_amount != null)
+      ? Number(item.final_amount)
+      : calculatedAmount;
 
     tableLines.push({
       id:             item.id,
@@ -263,7 +266,7 @@ export async function syncOrderTotals(admin: any, orderId: string): Promise<void
     admin.from("order_extras").select("*").eq("order_id", orderId).eq("is_deleted", false),
   ]);
 
-  if (!orderRow) return;
+  if (!orderRow || orderRow.status === "finalized") return;
 
   const activeItems = (allItems ?? []).filter((i: any) => i.status !== "cancelled");
   const activeExtras = (allExtras ?? []).filter((e: any) => !e.name.startsWith("[PENDING]"));

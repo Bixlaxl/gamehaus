@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stopSessionSchema, ok, err } from "@/lib/validators/schemas";
-import { calculateBill } from "@/lib/billing/engine";
+import { calculateBill, syncOrderTotals } from "@/lib/billing/engine";
 import type { OrderItem } from "@/lib/supabase/types";
 
 export const runtime = 'edge';
@@ -53,6 +53,10 @@ export async function POST(request: Request) {
 
   if (updateError) {
     return NextResponse.json(err(updateError.message, "DB_ERROR"), { status: 500 });
+  }
+
+  if (item.order_id) {
+    await syncOrderTotals(admin, item.order_id);
   }
 
   return NextResponse.json(ok({ stopped_at: now.toISOString(), final_amount: finalAmount }));

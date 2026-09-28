@@ -45,7 +45,11 @@ export function ClientBillView({ order }: ClientBillViewProps) {
   const advancePaid = Number(order.advance_paid) || 0;
   const pointsRedeemed = Number(order.points_redeemed) || 0;
   const computedDue = Math.max(0, Math.round((subtotal - discountAmount - advancePaid - pointsRedeemed) * 100) / 100);
-  const amountDue = advancePaid > 0 && extrasSubtotal > 0 && Number(order.amount_due) === 0 ? computedDue : (Number(order.amount_due) || 0);
+  const amountDue = (Number(order.amount_due) > 0)
+    ? Number(order.amount_due)
+    : (advancePaid > 0 && computedDue > 0)
+    ? computedDue
+    : (Number(order.amount_due) || 0);
   const totalPaid = advancePaid + amountDue;
 
   function handlePrint() {

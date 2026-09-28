@@ -1457,11 +1457,15 @@ function BillDetailModal({
           {(() => {
             const tableItemsSubtotal = (bill.items ?? []).reduce((sum: number, i: any) => sum + (Number(i.final_amount) || 0), 0);
             const extrasSubtotal = (bill.extras ?? []).filter((e: any) => !e.is_deleted).reduce((sum: number, e: any) => sum + (Number(e.price) * Number(e.quantity) || 0), 0);
-            const displaySubtotal = Math.max(bill.subtotal, Math.round((tableItemsSubtotal + extrasSubtotal) * 100) / 100);
+            const displaySubtotal = Math.max(Number(bill.subtotal) || 0, Math.round((tableItemsSubtotal + extrasSubtotal) * 100) / 100);
             const pubDisc = bill.public_discount_amount ?? 0;
             const memDisc = Math.max(0, bill.discount_amount - pubDisc);
             const computedDue = Math.max(0, Math.round((displaySubtotal - bill.discount_amount - (bill.advance_paid ?? 0) - (bill.points_redeemed ?? 0)) * 100) / 100);
-            const displayDue = (bill.advance_paid ?? 0) > 0 && extrasSubtotal > 0 && bill.amount_due === 0 ? computedDue : bill.amount_due;
+            const displayDue = (Number(bill.amount_due) > 0)
+              ? Number(bill.amount_due)
+              : ((bill.advance_paid ?? 0) > 0 && computedDue > 0)
+              ? computedDue
+              : (Number(bill.amount_due) || 0);
             return (
               <section className="px-5 py-4 border-b dark:border-[#222] text-sm space-y-1.5">
                 <div className="flex justify-between"><span className="opacity-70">Subtotal</span><span className="tabular-nums">{formatCurrency(displaySubtotal)}</span></div>

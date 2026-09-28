@@ -57,31 +57,86 @@ export async function GET(request: Request) {
   const allOrders = (data ?? []).filter((o) => !(o.type === "online" && (o.advance_paid ?? 0) === 0 && !o.created_by));
   const todayStr = getOperatingDate(new Date());
 
+  const isOrderActiveToday = (o: any): boolean => {
+    if (o.created_at && getOperatingDate(new Date(o.created_at)) === todayStr) return true;
+    for (const item of o.items ?? []) {
+      if (item.scheduled_start && getOperatingDate(new Date(item.scheduled_start)) === todayStr) return true;
+      if (item.actual_start && getOperatingDate(new Date(item.actual_start)) === todayStr) return true;
+      if (item.actual_end && getOperatingDate(new Date(item.actual_end)) === todayStr) return true;
+      if (item.checked_in_at && getOperatingDate(new Date(item.checked_in_at)) === todayStr) return true;
+    }
+    return false;
+  };
+
+  const orderHasDue = (o: any): boolean => {
+    if (Number(o.amount_due) > 0) return true;
+
+    const activeItems = (o.items ?? []).filter((i: any) => i.status !== "cancelled" && !i.is_deleted);
+    const activeExtras = (o.extras ?? []).filter((e: any) => !e.is_deleted && !e.name?.startsWith("[PENDING]"));
+
+    const tableSubtotal = activeItems.reduce((sum: number, it: any) => {
+      if (it.final_amount != null) return sum + Number(it.final_amount);
+      if (it.rate_per_hour && it.actual_start) {
+        const endMs = it.expected_end
+          ? new Date(it.expected_end).getTime()
+          : it.actual_end
+          ? new Date(it.actual_end).getTime()
+          : Date.now();
+        const mins = Math.max(0, Math.ceil((endMs - new Date(it.actual_start).getTime()) / 60000));
+        return sum + (mins / 60) * it.rate_per_hour;
+      }
+      if (it.rate_per_hour && it.scheduled_duration_mins) {
+        return sum + (it.scheduled_duration_mins / 60) * it.rate_per_hour;
+      }
+      return sum;
+    }, 0);
+
+    const extrasSubtotal = activeExtras.reduce(
+      (sum: number, e: any) => sum + (Number(e.price) * Number(e.quantity) || 0),
+      0
+    );
+
+    const totalSubtotal = Math.max(Number(o.subtotal) || 0, Math.round((tableSubtotal + extrasSubtotal) * 100) / 100);
+
+    const pubDisc = (() => {
+      const pub = Number(o.public_discount_amount);
+      if (!isNaN(pub) && pub > 0) return pub;
+      const disc = Number(o.discount_amount);
+      if (!isNaN(disc) && disc > 0) return disc;
+      return 0;
+    })();
+
+    const advancePaid = Number(o.advance_paid) || 0;
+    const pointsRedeemed = Number(o.points_redeemed) || 0;
+
+    const netDue = Math.round((totalSubtotal - pubDisc - advancePaid - pointsRedeemed) * 100) / 100;
+    return netDue > 0.5;
+  };
+
   const orders = allOrders.filter((o) => {
-    const orderDateStr = getOperatingDate(new Date(o.created_at));
-    if (orderDateStr === todayStr) return true;
+    const isToday = isOrderActiveToday(o);
     const hasRunning = o.items?.some((i: any) => i.status === "running");
     const hasScheduled = o.items?.some((i: any) => i.status === "scheduled");
-    const hasDue = Number(o.amount_due) > 0;
-    // Keep in unpaid active feed only if it has a running session, scheduled upcoming booking, an unpaid balance, or belongs to today's shift
-    return hasRunning || hasScheduled || hasDue;
+    const hasDue = orderHasDue(o);
+    // Keep in unpaid active feed if it belongs to today's shift, has a running session,
+    // has a scheduled upcoming booking, or has an unpaid balance.
+    return isToday || hasRunning || hasScheduled || hasDue;
   });
 
   const danglingOrders = allOrders.filter((o) => {
-    const orderDateStr = getOperatingDate(new Date(o.created_at));
-    if (orderDateStr === todayStr) return false;
+    const isToday = isOrderActiveToday(o);
     const hasRunning = o.items?.some((i: any) => i.status === "running");
     const hasScheduled = o.items?.some((i: any) => i.status === "scheduled");
-    const hasDue = Number(o.amount_due) > 0;
-    // Never auto-finalize an order that has scheduled upcoming bookings!
-    return !hasRunning && !hasScheduled && !hasDue;
+    const hasDue = orderHasDue(o);
+    // Only auto-finalize abandoned orders from past shifts with zero balance, nothing running, and nothing scheduled
+    return !isToday && !hasRunning && !hasScheduled && !hasDue;
   });
 
   if (danglingOrders.length > 0) {
     const danglingIds = danglingOrders.map((o) => o.id);
     admin
       .from("orders")
-      .update({ status: "finalized", finalized_at: new Date().toISOString() })
+      .update({ status: "finalized", finalized_at: new Date().toISOString(), amount_due: 0 })
       .in("id", danglingIds)
       .then(({ error }) => {
         if (error) console.error("Failed to auto-finalize dangling orders:", error);
