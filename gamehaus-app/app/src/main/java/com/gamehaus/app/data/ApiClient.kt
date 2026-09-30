@@ -19,6 +19,20 @@ class ApiClient(private val prefs: PreferencesHelper) {
 
     private var currentUrl: String? = null
     private var cachedService: ApiService? = null
+    private var cleanAuthService: ApiService? = null
+
+    private fun getCleanRetrofit(baseUrl: String): Retrofit {
+        val cleanOkHttp = getUnsafeOkHttpClient()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(cleanOkHttp)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
 
     fun getService(): ApiService {
         val rawUrl = prefs.serverUrl.trim()
@@ -27,6 +41,7 @@ class ApiClient(private val prefs: PreferencesHelper) {
 
         if (url != currentUrl || cachedService == null) {
             currentUrl = url
+            cleanAuthService = getCleanRetrofit(url).create(ApiService::class.java)
 
             val okHttpClient = getUnsafeOkHttpClient()
                 .connectTimeout(15, TimeUnit.SECONDS)
@@ -44,24 +59,22 @@ class ApiClient(private val prefs: PreferencesHelper) {
                 }
                 .authenticator(object : Authenticator {
                     override fun authenticate(route: Route?, response: Response): Request? {
-                        // Prevent infinite loop if the refresh endpoint itself returns 401
-                        if (response.request.url.encodedPath.contains("/api/tablet/refresh")) {
-                            // The refresh call itself got a 401 — credentials revoked or invalid.
-                            // Clear auth tokens only; do not wipe table pairing assignment.
-                            prefs.authToken = null
-                            prefs.refreshToken = null
+                        // Prevent recursive loops if the auth endpoints themselves return 401
+                        val path = response.request.url.encodedPath
+                        if (path.contains("/api/tablet/refresh") || path.contains("/api/tablet/login")) {
+                            return null
+                        }
+
+                        // Prevent infinite retry loops on stubborn 401s
+                        if (responseCount(response) >= 3) {
                             return null
                         }
 
                         val currentFailedToken = prefs.authToken
 
-                        // Synchronized block prevents multiple concurrent 401 responses
-                        // (e.g. status poll + beverage fetch) from each calling refreshToken.
-                        // Supabase rotates refresh tokens on first use, so a second call with
-                        // the already-rotated token would fail and incorrectly unpair the tablet.
+                        // Synchronized block ensures only one refresh or re-login runs at a time
                         synchronized(this) {
-                            // Double-check: if another thread already refreshed the token
-                            // while we were waiting for the lock, just retry with the new token.
+                            // If another concurrent thread already updated the token, retry with it immediately
                             val latestToken = prefs.authToken
                             if (latestToken != null && latestToken != currentFailedToken) {
                                 return response.request.newBuilder()
@@ -69,42 +82,70 @@ class ApiClient(private val prefs: PreferencesHelper) {
                                     .build()
                             }
 
-                            val refreshToken = prefs.refreshToken ?: return null
-                            val service = cachedService ?: return null
+                            val authService = cleanAuthService ?: return null
 
-                            try {
-                                val refreshResponse = service.refreshToken(RefreshRequest(refreshToken)).execute()
-                                if (refreshResponse.isSuccessful && refreshResponse.body()?.success == true) {
-                                    val newAuthToken = refreshResponse.body()?.data?.token
-                                    val newRefreshToken = refreshResponse.body()?.data?.refresh_token
+                            // 1. First line of defense: Try silent refresh with refresh_token
+                            val refreshToken = prefs.refreshToken
+                            if (!refreshToken.isNullOrEmpty()) {
+                                try {
+                                    val refreshRes = authService.refreshToken(RefreshRequest(refreshToken)).execute()
+                                    if (refreshRes.isSuccessful && refreshRes.body()?.success == true) {
+                                        val newAuth = refreshRes.body()?.data?.token
+                                        val newRefresh = refreshRes.body()?.data?.refresh_token
 
-                                    if (newAuthToken != null) {
-                                        prefs.authToken = newAuthToken
-                                        if (newRefreshToken != null) {
-                                            prefs.refreshToken = newRefreshToken
+                                        if (newAuth != null) {
+                                            prefs.authToken = newAuth
+                                            if (newRefresh != null) {
+                                                prefs.refreshToken = newRefresh
+                                            }
+                                            return response.request.newBuilder()
+                                                .header("Authorization", "Bearer $newAuth")
+                                                .build()
                                         }
-
-                                        return response.request.newBuilder()
-                                            .header("Authorization", "Bearer $newAuthToken")
-                                            .build()
                                     }
+                                } catch (e: IOException) {
+                                    // Network drop / offline. Keep credentials intact for when network returns.
+                                    return null
+                                } catch (e: Exception) {
+                                    // Non-network error; fall through to auto-login
                                 }
-                                // Server explicitly rejected the refresh (non-IOException).
-                                // Clear tokens only; do not wipe table pairing assignment.
-                                prefs.authToken = null
-                                prefs.refreshToken = null
-                                return null
-                            } catch (e: IOException) {
-                                // Network error (timeout, Wi-Fi blip, tablet sleep/wake).
-                                // Do NOT clear credentials — the token is still valid on the server.
-                                // Return null so this individual request fails silently.
-                                // The polling loop will retry in 5 seconds once connectivity returns.
-                                return null
-                            } catch (e: Exception) {
-                                // Unknown error — treat conservatively like a network glitch:
-                                // do not unpair, just fail this request silently.
-                                return null
                             }
+
+                            // 2. Second line of defense: Auto-relogin using saved staff credentials
+                            // Guarantees the tablet never gets permanently stuck or requires staff PIN re-entry
+                            val email = prefs.staffEmail
+                            val pin = prefs.staffPin
+                            if (!email.isNullOrEmpty() && !pin.isNullOrEmpty()) {
+                                try {
+                                    val loginRes = authService.loginSync(LoginRequest(email, pin)).execute()
+                                    if (loginRes.isSuccessful && loginRes.body()?.success == true) {
+                                        val data = loginRes.body()?.data
+                                        val newAuth = data?.token
+                                        val newRefresh = data?.refresh_token
+
+                                        if (newAuth != null) {
+                                            prefs.authToken = newAuth
+                                            if (newRefresh != null) {
+                                                prefs.refreshToken = newRefresh
+                                            }
+                                            if (data.user.location_id != null) {
+                                                prefs.locationId = data.user.location_id
+                                            }
+
+                                            return response.request.newBuilder()
+                                                .header("Authorization", "Bearer $newAuth")
+                                                .build()
+                                        }
+                                    }
+                                } catch (e: IOException) {
+                                    // Network drop. Keep credentials intact.
+                                    return null
+                                } catch (e: Exception) {
+                                    return null
+                                }
+                            }
+
+                            return null
                         }
                     }
                 })
@@ -120,6 +161,16 @@ class ApiClient(private val prefs: PreferencesHelper) {
         }
 
         return cachedService!!
+    }
+
+    private fun responseCount(response: Response): Int {
+        var result = 1
+        var prior = response.priorResponse
+        while (prior != null) {
+            result++
+            prior = prior.priorResponse
+        }
+        return result
     }
 
     // Helper to trust all certificates for older Android tablets

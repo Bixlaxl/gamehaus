@@ -67,13 +67,17 @@ fun DashboardScreen(
             .background(Color(0xFF111111))
     ) {
         if (status == null) {
-            // Loading state
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Loading / Reconnecting state
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+            ) {
                 IconButton(
                     onClick = { showAdminDialog = true },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(16.dp)
+                        .padding(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -81,8 +85,49 @@ fun DashboardScreen(
                         tint = Color.Gray
                     )
                 }
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(48.dp)
+                    )
+
+                    val tableName = viewModel.prefs.tableName ?: "Kiosk"
+                    Text(
+                        text = tableName,
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "Connecting to GameHaus...",
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { viewModel.triggerManualRefresh() },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFF333333)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Retry",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Retry Connection", fontSize = 13.sp)
+                    }
                 }
             }
         } else if (!isSessionActive) {

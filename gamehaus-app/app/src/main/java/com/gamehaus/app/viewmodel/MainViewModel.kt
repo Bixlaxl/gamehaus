@@ -1,8 +1,13 @@
 package com.gamehaus.app.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gamehaus.app.data.*
@@ -55,10 +60,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var lastSyncUptimeMs: Long = 0L
     private var isSyncActive: Boolean = false
 
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
     init {
+        registerNetworkCallback()
         if (prefs.isPaired) {
             startActiveSessionFlow()
         }
+    }
+
+    private fun registerNetworkCallback() {
+        try {
+            val app = getApplication<Application>()
+            connectivityManager = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    // As soon as network connectivity is established/restored, sync immediately
+                    if (prefs.isPaired && prefs.tableId != null) {
+                        viewModelScope.launch {
+                            refreshStatus()
+                            fetchBeverages()
+                        }
+                    }
+                }
+            }
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            networkCallback?.let { connectivityManager?.registerNetworkCallback(request, it) }
+        } catch (_: Exception) {}
+    }
+
+    private fun unregisterNetworkCallback() {
+        try {
+            networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
+        } catch (_: Exception) {}
     }
 
     fun setServerUrl(url: String) {
@@ -77,6 +114,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     prefs.refreshToken = loginRes.data.refresh_token
                     prefs.locationId = loginRes.data.user.location_id
                     prefs.staffEmail = email
+                    prefs.staffPin = pin
 
                     // Fetch tables list for this location
                     val tablesRes = service.getTables(loginRes.data.user.location_id ?: "")
@@ -111,6 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (loginRes.success && loginRes.data != null) {
                     prefs.authToken = loginRes.data.token
                     prefs.refreshToken = loginRes.data.refresh_token
+                    prefs.staffPin = password
                     onSuccess()
                 } else {
                     onError(loginRes.error ?: "Invalid password")
@@ -245,10 +284,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 } catch (e: Exception) {
                     // Do not unpair automatically on network errors or background 401s.
-                    // ApiClient handles token refresh; table assignment remains intact.
+                    // ApiClient handles token refresh and auto-relogin; table assignment remains intact.
                 }
 
-                val intervalMs = if (_status.value?.session?.status == "running") 10_000L else 15_000L
+                val intervalMs = when {
+                    _status.value == null -> 3_000L
+                    _status.value?.session?.status == "running" -> 10_000L
+                    else -> 15_000L
+                }
                 delay(intervalMs)
             }
         }
@@ -374,6 +417,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun triggerManualRefresh() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                refreshStatus()
+                fetchBeverages()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun fetchBeverages() {
         val locationId = prefs.locationId ?: return
         viewModelScope.launch {
@@ -452,6 +507,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        unregisterNetworkCallback()
         pollJob?.cancel()
         timerJob?.cancel()
         toneGenerator.release()

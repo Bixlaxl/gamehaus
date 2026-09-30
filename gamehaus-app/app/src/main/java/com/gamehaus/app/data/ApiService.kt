@@ -11,6 +11,9 @@ interface ApiService {
     @POST("api/tablet/login")
     suspend fun login(@Body request: LoginRequest): BaseResponse<LoginResponse>
 
+    @POST("api/tablet/login")
+    fun loginSync(@Body request: LoginRequest): Call<BaseResponse<LoginResponse>>
+
     @POST("api/tablet/refresh")
     fun refreshToken(@Body request: RefreshRequest): Call<BaseResponse<LoginResponse>>
 

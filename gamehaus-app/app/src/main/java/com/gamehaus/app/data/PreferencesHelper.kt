@@ -26,6 +26,10 @@ class PreferencesHelper(context: Context) {
         get() = prefs.getString("staff_email", null)
         set(value) = prefs.edit().putString("staff_email", value).apply()
 
+    var staffPin: String?
+        get() = prefs.getString("staff_pin", null)
+        set(value) = prefs.edit().putString("staff_pin", value).apply()
+
     var tableId: String?
         get() = prefs.getString("table_id", null)
         set(value) = prefs.edit().putString("table_id", value).apply()
@@ -43,6 +47,9 @@ class PreferencesHelper(context: Context) {
                     .remove("table_name")
                     .remove("location_id")
                     .remove("staff_email")
+                    .remove("staff_pin")
+                    .remove("auth_token")
+                    .remove("refresh_token")
                     .apply()
             }
         }
