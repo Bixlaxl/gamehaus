@@ -152,16 +152,19 @@ export function calculateBill(
     } else if (item.scheduled_duration_mins && item.scheduled_duration_mins > 0) {
       start = now;
       billingEnd = new Date(now.getTime() + item.scheduled_duration_mins * 60000);
+    } else if (item.final_amount != null) {
+      start = now;
+      billingEnd = now;
     } else {
       continue;
     }
 
 
     const scheduledMins   = Math.ceil((billingEnd.getTime() - start.getTime()) / 60000);
-    const calculatedAmount = Math.round((scheduledMins / 60) * item.rate_per_hour * 100) / 100;
-    const scheduledAmount = (item.status === "finished" && item.final_amount != null)
-      ? Number(item.final_amount)
-      : calculatedAmount;
+    const calculatedAmount = Math.round((scheduledMins / 60) * (item.rate_per_hour || 0) * 100) / 100;
+    const scheduledAmount = (calculatedAmount > 0)
+      ? calculatedAmount
+      : (item.final_amount != null ? Number(item.final_amount) : 0);
 
     tableLines.push({
       id:             item.id,

@@ -752,7 +752,11 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
                   return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
                 };
 
-                const baseMins = ti?.scheduled_duration_mins || 60;
+                const startReal = ti?.actual_start || (ti as any)?.checked_in_at;
+                const baseMins = ti?.scheduled_duration_mins
+                  || (ti?.expected_end && startReal
+                      ? Math.max(15, Math.round(((new Date(ti.expected_end).getTime() - new Date(startReal).getTime()) / 60000) - (ti.extended_mins || 0)))
+                      : 60);
                 const extMins = ti?.extended_mins || 0;
 
                 return (

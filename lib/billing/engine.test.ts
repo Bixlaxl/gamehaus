@@ -309,5 +309,38 @@ describe("billing engine", () => {
     expect(result.subtotal).toBe(287.5);
     expect(result.totalDue).toBe(100);
   });
+
+  it("regression: cancelled extension with stale final_amount calculates true base duration", () => {
+    // 1-hour session on Medium Table (₹300/hr).
+    // An earlier extension was removed: expected_end is reset to 1 hour, extended_mins is 0.
+    // Even if final_amount in database was stale at ₹600, calculateBill must return ₹300!
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      expected_end: t60.toISOString(), // 60 mins
+      scheduled_duration_mins: 60,
+      extended_mins: 0,
+      rate_per_hour: 300,
+      final_amount: 600, // stale from cancelled extension
+      status: "finished",
+    });
+    const extra = makeExtra({ price: 20, quantity: 1 });
+    const result = calculateBill([item], [extra], new Date());
+    expect(result.tableLines[0].durationMins).toBe(60);
+    expect(result.tableLines[0].amount).toBe(300);
+    expect(result.subtotal).toBe(320); // 300 table + 20 extra
+    expect(result.totalDue).toBe(320);
+  });
+
+  it("manual bills with custom final_amount and no rate_per_hour correctly use final_amount", () => {
+    const item = makeItem({
+      rate_per_hour: 0,
+      final_amount: 500,
+      status: "finished",
+    });
+    const result = calculateBill([item], [], new Date());
+    expect(result.tableLines[0].amount).toBe(500);
+    expect(result.subtotal).toBe(500);
+    expect(result.totalDue).toBe(500);
+  });
 });
 

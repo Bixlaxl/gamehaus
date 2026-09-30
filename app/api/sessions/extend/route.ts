@@ -155,20 +155,36 @@ export async function POST(request: Request) {
     }
   }
 
-  // Resurrect a finished session: flip status back to running, clear actual_end so
-  // the bill engine recomputes against the new expected_end.
+  const newExtendedMins = (item.extended_mins || 0) + extend_mins;
   const updatePayload: {
     expected_end: string;
     extended_mins: number;
-    status?: "running";
-    actual_end?: null;
+    status?: "running" | "finished";
+    actual_end?: string | null;
+    final_amount?: number | null;
   } = {
     expected_end:  newExpectedEnd.toISOString(),
-    extended_mins: item.extended_mins + extend_mins,
+    extended_mins: newExtendedMins,
   };
+
   if (item.status === "finished") {
-    updatePayload.status     = "running";
-    updatePayload.actual_end = null;
+    // If the session was already finished (e.g. staff adding an extension inside FinalizeBillModal),
+    // keep status as "finished" and update final_amount to include the extension.
+    // This prevents resurrecting the table to running on the floor/tablet and prevents
+    // blocking checkout with "Stop all running sessions before finalizing".
+    const startReal = item.actual_start || item.checked_in_at;
+    const durationMins = item.scheduled_duration_mins
+      ?? (item.scheduled_start && item.scheduled_end
+          ? Math.round((new Date(item.scheduled_end).getTime() - new Date(item.scheduled_start).getTime()) / 60000)
+          : (startReal && item.expected_end
+             ? Math.max(15, Math.round(((new Date(item.expected_end).getTime() - new Date(startReal).getTime()) / 60000) - (item.extended_mins || 0)))
+             : 60));
+    const totalDurationMins = durationMins + newExtendedMins;
+    const newFinalAmount = Math.round((totalDurationMins / 60) * (item.rate_per_hour || 0) * 100) / 100;
+
+    updatePayload.status = "finished";
+    updatePayload.actual_end = newExpectedEnd.toISOString();
+    updatePayload.final_amount = newFinalAmount;
   }
 
   const { error: updateError } = await admin
