@@ -60,6 +60,12 @@ fun DashboardScreen(
 
     val status = statusState
     val isSessionActive = status?.session != null && status.session.status == "running"
+    val needsAuth by viewModel.needsAuth.collectAsState()
+    val connectionStatusText by viewModel.connectionStatusText.collectAsState()
+
+    var inlinePassword by remember { mutableStateOf("") }
+    var inlineError by remember { mutableStateOf<String?>(null) }
+    var inlineLoading by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -86,47 +92,149 @@ fun DashboardScreen(
                     )
                 }
 
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 3.dp,
-                        modifier = Modifier.size(48.dp)
-                    )
-
-                    val tableName = viewModel.prefs.tableName ?: "Kiosk"
-                    Text(
-                        text = tableName,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Text(
-                        text = "Connecting to GameHaus...",
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = { viewModel.triggerManualRefresh() },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = BorderStroke(1.dp, Color(0xFF333333)),
-                        shape = RoundedCornerShape(8.dp)
+                if (needsAuth) {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Retry",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                        val tableName = viewModel.prefs.tableName ?: "Kiosk"
+                        Text(
+                            text = tableName,
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Retry Connection", fontSize = 13.sp)
+
+                        Text(
+                            text = "Staff Authentication Required",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        Text(
+                            text = "Enter staff password once to authenticate this kiosk:",
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+
+                        OutlinedTextField(
+                            value = inlinePassword,
+                            onValueChange = { 
+                                inlinePassword = it
+                                inlineError = null 
+                            },
+                            label = { Text("Password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(0.85f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color(0xFF444444),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
+
+                        if (inlineError != null) {
+                            Text(
+                                text = inlineError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                if (inlinePassword.isNotBlank()) {
+                                    inlineLoading = true
+                                    viewModel.validateAdminPassword(
+                                        password = inlinePassword,
+                                        onSuccess = {
+                                            inlineLoading = false
+                                            inlineError = null
+                                        },
+                                        onError = {
+                                            inlineLoading = false
+                                            inlineError = it
+                                        }
+                                    )
+                                }
+                            },
+                            enabled = !inlineLoading && inlinePassword.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(0.85f)
+                        ) {
+                            if (inlineLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Unlock & Connect", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(48.dp)
+                        )
+
+                        val tableName = viewModel.prefs.tableName ?: "Kiosk"
+                        Text(
+                            text = tableName,
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            text = connectionStatusText,
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = { viewModel.triggerManualRefresh() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = BorderStroke(1.dp, Color(0xFF333333)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Retry",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Retry Connection", fontSize = 13.sp)
+                            }
+
+                            Button(
+                                onClick = { showAdminDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2A2A)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Enter PIN", fontSize = 13.sp, color = Color.White)
+                            }
+                        }
                     }
                 }
             }

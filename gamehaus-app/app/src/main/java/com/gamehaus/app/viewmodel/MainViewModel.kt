@@ -50,6 +50,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isTimeUp = MutableStateFlow(false)
     val isTimeUp: StateFlow<Boolean> = _isTimeUp.asStateFlow()
 
+    private val _needsAuth = MutableStateFlow(false)
+    val needsAuth: StateFlow<Boolean> = _needsAuth.asStateFlow()
+
+    private val _connectionStatusText = MutableStateFlow("Connecting to GameHaus...")
+    val connectionStatusText: StateFlow<String> = _connectionStatusText.asStateFlow()
+
     private var pollJob: Job? = null
     private var timerJob: Job? = null
     private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
@@ -150,7 +156,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     prefs.authToken = loginRes.data.token
                     prefs.refreshToken = loginRes.data.refresh_token
                     prefs.staffPin = password
+                    if (loginRes.data.user.location_id != null) {
+                        prefs.locationId = loginRes.data.user.location_id
+                    }
+                    _needsAuth.value = false
+                    _connectionStatusText.value = "Connected"
                     onSuccess()
+                    startActiveSessionFlow()
                 } else {
                     onError(loginRes.error ?: "Invalid password")
                 }
@@ -244,10 +256,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hasBeepedThisSession = false
 
         val tableId = prefs.tableId ?: return
-        if (prefs.locationId == null) return
+        android.util.Log.d("GameHaus", "startActiveSessionFlow for tableId=$tableId")
 
-        // Fetch beverages list once on start
-        fetchBeverages()
+        // Fetch beverages list once on start if location is known
+        if (prefs.locationId != null) {
+            fetchBeverages()
+        }
 
         // Adaptive polling: 10s for active session, 15s for idle table
         pollJob = viewModelScope.launch {
@@ -255,6 +269,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val res = client.getService().getStatus(tableId)
                     if (res.success && res.data != null) {
+                        _needsAuth.value = false
+                        _connectionStatusText.value = "Connected"
+
                         val oldSession = _status.value?.session
                         val session = res.data.session
 
@@ -281,10 +298,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         if (res.data.session?.order_item_id != oldSession?.order_item_id) {
                             hasBeepedThisSession = false
                         }
+                    } else {
+                        android.util.Log.w("GameHaus", "getStatus unsuccessful: ${res.error}")
+                        if (res.error?.contains("Unauthorized", ignoreCase = true) == true) {
+                            _needsAuth.value = true
+                            _connectionStatusText.value = "Staff authentication required"
+                        }
                     }
                 } catch (e: Exception) {
-                    // Do not unpair automatically on network errors or background 401s.
-                    // ApiClient handles token refresh and auto-relogin; table assignment remains intact.
+                    android.util.Log.e("GameHaus", "Error polling status: ${e.message}", e)
+                    if (e is retrofit2.HttpException && e.code() == 401) {
+                        _needsAuth.value = true
+                        _connectionStatusText.value = "Staff authentication required"
+                    } else {
+                        _connectionStatusText.value = "Connecting to GameHaus..."
+                    }
                 }
 
                 val intervalMs = when {
