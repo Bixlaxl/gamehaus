@@ -13,7 +13,7 @@ import {
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({
-  label, value, sub, accent, icon, trend, trendLabel = "vs yesterday",
+  label, value, sub, accent, icon, trend, trendLabel = "vs yesterday", diffAmount,
 }: {
   label: string;
   value: string;
@@ -22,6 +22,7 @@ function StatCard({
   icon: React.ReactNode;
   trend?: number;
   trendLabel?: string;
+  diffAmount?: number;
 }) {
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -42,7 +43,14 @@ function StatCard({
                   : trend < 0
                   ? <ArrowDownRight className="h-3 w-3" />
                   : <Minus className="h-3 w-3" />}
-                {Math.abs(trend)}% {trendLabel}
+                {diffAmount !== undefined ? (
+                  <span>
+                    {diffAmount >= 0 ? "+" : "-"}{formatCurrency(Math.abs(diffAmount))} ({Math.abs(trend)}%)
+                  </span>
+                ) : (
+                  <span>{Math.abs(trend)}%</span>
+                )}
+                {" "}{trendLabel}
               </span>
             )}
           </div>
@@ -160,14 +168,31 @@ export default async function OwnerDashboard({
   const { start: todayStart, end: todayEnd }         = businessDayBounds(bizDateStr, opening, closing);
   const { start: yesterdayStart, end: yesterdayEnd } = businessDayBounds(yesterdayBizStr, opening, closing);
 
+  // Same-point-in-time comparisons:
+  // Today's comparison: compare today till current time vs yesterday till the same point in time
+  const elapsedTodayMs = Math.min(
+    todayEnd.getTime() - todayStart.getTime(),
+    Math.max(0, now.getTime() - todayStart.getTime())
+  );
+  const yesterdaySameTime = new Date(yesterdayStart.getTime() + elapsedTodayMs);
+
   const bizYear       = parseInt(bizDateStr.slice(0, 4));
   const bizMonth      = parseInt(bizDateStr.slice(5, 7));
+  const bizDay        = parseInt(bizDateStr.slice(8, 10));
   const monthFirstStr = `${bizYear}-${String(bizMonth).padStart(2, "0")}-01`;
   const monthStart    = new Date(`${monthFirstStr}T${opening}+05:30`);
   const lastMonthYear = bizMonth === 1 ? bizYear - 1 : bizYear;
   const lastMonthVal  = bizMonth === 1 ? 12 : bizMonth - 1;
   const lastMonthFirstStr = `${lastMonthYear}-${String(lastMonthVal).padStart(2, "0")}-01`;
   const lastMonthStart    = new Date(`${lastMonthFirstStr}T${opening}+05:30`);
+
+  // Month comparison: compare current month till today's date & time vs last month till equivalent date & time
+  const daysInLastMonth = new Date(lastMonthYear, lastMonthVal, 0).getDate();
+  const equivDay = Math.min(bizDay, daysInLastMonth);
+  const lastMonthEquivDateStr = `${lastMonthYear}-${String(lastMonthVal).padStart(2, "0")}-${String(equivDay).padStart(2, "0")}`;
+  const { start: lastMonthEquivDayStart } = businessDayBounds(lastMonthEquivDateStr, opening, closing);
+  const lastMonthSamePoint = new Date(lastMonthEquivDayStart.getTime() + elapsedTodayMs);
+
   const sevenDaysAgo  = new Date(todayStart);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   // 30-day window for insights — long enough to smooth out daily noise
@@ -175,17 +200,16 @@ export default async function OwnerDashboard({
   const thirtyDaysAgo = new Date(todayStart);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
 
-  // ── Paginated fetch helper ─────────────────────────────────────────────────
-  // Supabase PostgREST returns at most 1000 rows by default. For row-level
-  // queries that could exceed that as the business scales, paginate.
+  // ── Paginated fetch helper with safety limits ─────────────────────────────
   async function fetchAll<T>(
-    query: ReturnType<ReturnType<typeof admin.from>["select"]>
+    query: any,
+    maxRows = 2000
   ): Promise<T[]> {
     const PAGE = 1000;
     const rows: T[] = [];
     let page = 0;
-    while (true) {
-      const { data, error } = await query.range(page * PAGE, (page + 1) * PAGE - 1);
+    while (rows.length < maxRows) {
+      const { data, error } = await query.range(page * PAGE, Math.min((page + 1) * PAGE - 1, maxRows - 1));
       if (error || !data || data.length === 0) break;
       rows.push(...(data as T[]));
       if (data.length < PAGE) break;
@@ -214,9 +238,10 @@ export default async function OwnerDashboard({
       loc_id: locParam,
     }).single(),
 
+    // Same-point-in-time comparison for yesterday
     admin.rpc("get_revenue_summary", {
       from_ts: yesterdayStart.toISOString(),
-      to_ts: yesterdayEnd.toISOString(),
+      to_ts: yesterdaySameTime.toISOString(),
       loc_id: locParam,
     }).single(),
 
@@ -226,9 +251,10 @@ export default async function OwnerDashboard({
       loc_id: locParam,
     }).single(),
 
+    // Same-point-in-time comparison for last month
     admin.rpc("get_revenue_summary", {
       from_ts: lastMonthStart.toISOString(),
-      to_ts: monthStart.toISOString(),
+      to_ts: lastMonthSamePoint.toISOString(),
       loc_id: locParam,
     }).single(),
 
@@ -268,32 +294,31 @@ export default async function OwnerDashboard({
   type InsightItem = { actual_start: string | null; final_amount: number | null; table_id: string; table: { name: string; type: string; location_id: string } | null };
   type InsightExtra = { name: string; price: number; quantity: number; order: { location_id: string | null; status: string } | { location_id: string | null; status: string }[] | null; inventory_item: { name: string } | { name: string }[] | null };
 
+  let weekQuery = admin.from("orders").select("amount_due, advance_paid, location_id, finalized_at")
+    .eq("status", "finalized")
+    .gte("finalized_at", sevenDaysAgo.toISOString())
+    .order("finalized_at", { ascending: true });
+  if (selectedLocId) weekQuery = weekQuery.eq("location_id", selectedLocId);
+
+  let itemsQuery = admin.from("order_items")
+    .select("actual_start, final_amount, table_id, table:tables!inner(name, type, location_id)")
+    .eq("status", "finished")
+    .gte("actual_start", thirtyDaysAgo.toISOString())
+    .order("actual_start", { ascending: true });
+  if (selectedLocId) itemsQuery = itemsQuery.eq("table.location_id", selectedLocId);
+
+  let extrasQuery = admin.from("order_extras")
+    .select("name, price, quantity, order:orders!inner(location_id, status), inventory_item:inventory_items(name)")
+    .eq("is_deleted", false)
+    .eq("order.status", "finalized")
+    .gte("created_at", thirtyDaysAgo.toISOString())
+    .order("created_at", { ascending: true });
+  if (selectedLocId) extrasQuery = extrasQuery.eq("order.location_id", selectedLocId);
+
   const [weekOrders, insightItems, insightExtras] = await Promise.all([
-    fetchAll<WeekOrder>(
-      admin.from("orders").select("amount_due, advance_paid, location_id, finalized_at")
-        .eq("status", "finalized")
-        .gte("finalized_at", sevenDaysAgo.toISOString())
-        .order("finalized_at", { ascending: true })
-    ),
-
-    // Finished order_items → drives Peak/Slow hours AND Most-profitable table.
-    fetchAll<InsightItem>(
-      admin.from("order_items")
-        .select("actual_start, final_amount, table_id, table:tables(name, type, location_id)")
-        .eq("status", "finished")
-        .gte("actual_start", thirtyDaysAgo.toISOString())
-        .order("actual_start", { ascending: true })
-    ),
-
-    // Sold extras → drives Best-selling items.
-    fetchAll<InsightExtra>(
-      admin.from("order_extras")
-        .select("name, price, quantity, order:orders!inner(location_id, status), inventory_item:inventory_items(name)")
-        .eq("is_deleted", false)
-        .eq("order.status", "finalized")
-        .gte("created_at", thirtyDaysAgo.toISOString())
-        .order("created_at", { ascending: true })
-    ),
+    fetchAll<WeekOrder>(weekQuery, 1500),
+    fetchAll<InsightItem>(itemsQuery, 2000),
+    fetchAll<InsightExtra>(extrasQuery, 2000),
   ]);
 
   // ── Location filters (applied in JS for row-level data) ──────────────────
@@ -339,8 +364,10 @@ export default async function OwnerDashboard({
     const todayStartIso = todayStart.toISOString();
     const todayEndIso = todayEnd.toISOString();
     const yesterdayStartIso = yesterdayStart.toISOString();
-    const yesterdayEndIso = yesterdayEnd.toISOString();
+    const yesterdaySameTimeIso = yesterdaySameTime.toISOString();
     const monthStartIso = monthStart.toISOString();
+    const lastMonthStartIso = lastMonthStart.toISOString();
+    const lastMonthSamePointIso = lastMonthSamePoint.toISOString();
 
     for (const m of allMemberships) {
       if (!m.created_at || !m.plan?.price) continue;
@@ -348,13 +375,13 @@ export default async function OwnerDashboard({
       const cat = m.created_at;
       if (cat >= monthStartIso) {
         monthMembershipSales += price;
-      } else {
+      } else if (cat >= lastMonthStartIso && cat <= lastMonthSamePointIso) {
         lastMonthMembershipSales += price;
       }
 
       if (cat >= todayStartIso && cat <= todayEndIso) {
         todayMembershipSales += price;
-      } else if (cat >= yesterdayStartIso && cat <= yesterdayEndIso) {
+      } else if (cat >= yesterdayStartIso && cat <= yesterdaySameTimeIso) {
         yesterdayMembershipSales += price;
       }
     }
@@ -371,11 +398,13 @@ export default async function OwnerDashboard({
     yesterdayRevenue > 0
       ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
       : todayRevenue > 0 ? 100 : 0;
+  const revenueDiff = todayRevenue - yesterdayRevenue;
 
   const monthTrend =
     lastMonthRevenue > 0
       ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
       : monthRevenue > 0 ? 100 : 0;
+  const monthDiff = monthRevenue - lastMonthRevenue;
 
   // 7-day chart
   const weekData: { date: Date; revenue: number }[] = [];
@@ -566,6 +595,8 @@ export default async function OwnerDashboard({
           accent="#D4541A"
           icon={<TrendingUp className="h-5 w-5" style={{ color: "#D4541A" }} />}
           trend={revenueTrend}
+          diffAmount={revenueDiff}
+          trendLabel="vs yesterday same time"
         />
         <StatCard
           label="Live Tables Now"
@@ -588,7 +619,8 @@ export default async function OwnerDashboard({
           accent="#f59e0b"
           icon={<Receipt className="h-5 w-5" style={{ color: "#f59e0b" }} />}
           trend={monthTrend}
-          trendLabel="vs last month"
+          diffAmount={monthDiff}
+          trendLabel="vs last month same period"
         />
       </div>
 

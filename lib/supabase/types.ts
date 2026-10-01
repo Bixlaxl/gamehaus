@@ -18,6 +18,7 @@ export interface Database {
           timezone: string;
           opening_time: string;
           closing_time: string;
+          operating_hours?: Record<string, { open: string; close: string }> | null;
           slug: string;
           is_active: boolean;
           image_urls: string[];
@@ -31,6 +32,7 @@ export interface Database {
           timezone?: string;
           opening_time?: string;
           closing_time?: string;
+          operating_hours?: Record<string, { open: string; close: string }> | null;
           slug: string;
           is_active?: boolean;
           image_urls?: string[];
@@ -44,6 +46,7 @@ export interface Database {
           timezone?: string;
           opening_time?: string;
           closing_time?: string;
+          operating_hours?: Record<string, { open: string; close: string }> | null;
           slug?: string;
           is_active?: boolean;
           image_urls?: string[];

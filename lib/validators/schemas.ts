@@ -45,13 +45,24 @@ export function friendlyDbError(
 }
 
 // Location
+export const dayScheduleSchema = z.object({
+  open: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+  close: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+});
+
+export const operatingHoursSchema = z.record(
+  z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]),
+  dayScheduleSchema
+).optional().nullable();
+
 export const locationSchema = z.object({
   name: z.string().min(1),
   address: z.string().min(1),
   phone: z.string().optional(),
   timezone: z.string().default("Asia/Kolkata"),
-  opening_time: z.string().regex(/^\d{2}:\d{2}$/),
-  closing_time: z.string().regex(/^\d{2}:\d{2}$/),
+  opening_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+  closing_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+  operating_hours: operatingHoursSchema,
   slug: z
     .string()
     .min(1)

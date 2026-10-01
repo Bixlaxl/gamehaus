@@ -15,7 +15,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { Location } from "@/lib/supabase/types";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { DAY_KEYS, DAY_NAMES, DayKey, WeekOperatingHours } from "@/lib/operating-hours";
+import { Plus, Pencil, Trash2, Clock, Check } from "lucide-react";
 import { toast } from "sonner";
 
 const supabase = createClient();
@@ -48,6 +49,18 @@ type LocationForm = {
   closing_time: string;
   timezone: string;
   image_urls: string[];
+  operating_hours: WeekOperatingHours;
+  has_custom_schedule: boolean;
+};
+
+const defaultOperatingHours: WeekOperatingHours = {
+  mon: { open: "10:00", close: "23:00" },
+  tue: { open: "10:00", close: "23:00" },
+  wed: { open: "10:00", close: "23:00" },
+  thu: { open: "10:00", close: "23:00" },
+  fri: { open: "10:00", close: "23:00" },
+  sat: { open: "10:00", close: "23:00" },
+  sun: { open: "10:00", close: "23:00" },
 };
 
 const defaultForm: LocationForm = {
@@ -59,6 +72,8 @@ const defaultForm: LocationForm = {
   closing_time: "23:00",
   timezone: "Asia/Kolkata",
   image_urls: [],
+  operating_hours: defaultOperatingHours,
+  has_custom_schedule: false,
 };
 
 async function uploadFiles(locationId: string, files: File[]): Promise<string[]> {
@@ -164,6 +179,12 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
           hasChanges = true;
         }
 
+        const currentSchedule = formValues.has_custom_schedule ? formValues.operating_hours : null;
+        if (JSON.stringify(currentSchedule) !== JSON.stringify(editing.operating_hours || null)) {
+          patchPayload.operating_hours = currentSchedule;
+          hasChanges = true;
+        }
+
         if (!hasChanges) {
           return;
         }
@@ -184,6 +205,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
           opening_time: formValues.opening_time,
           closing_time: formValues.closing_time,
           timezone: formValues.timezone,
+          operating_hours: formValues.has_custom_schedule ? formValues.operating_hours : null,
           image_urls: [],
         };
 
@@ -218,12 +240,13 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
           l.id === values.editId
             ? {
                 ...l,
-                name:         values.name,
-                address:      values.address,
-                phone:        values.phone || null,
-                opening_time: values.opening_time,
-                closing_time: values.closing_time,
-                timezone:     values.timezone,
+                name:            values.name,
+                address:         values.address,
+                phone:           values.phone || null,
+                opening_time:    values.opening_time,
+                closing_time:    values.closing_time,
+                timezone:        values.timezone,
+                operating_hours: values.has_custom_schedule ? values.operating_hours : null,
               }
             : l
         )
@@ -332,15 +355,30 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
 
   function openEdit(loc: Location) {
     setEditing(loc);
+    const op = (loc.operating_hours || {}) as WeekOperatingHours;
+    const hasCustom = !!loc.operating_hours && Object.keys(loc.operating_hours).length > 0;
+    const openTime = loc.opening_time ? loc.opening_time.slice(0, 5) : "10:00";
+    const closeTime = loc.closing_time ? loc.closing_time.slice(0, 5) : "23:00";
+
+    const schedule: WeekOperatingHours = {};
+    for (const k of DAY_KEYS) {
+      schedule[k] = {
+        open: op[k]?.open ? op[k]!.open.slice(0, 5) : openTime,
+        close: op[k]?.close ? op[k]!.close.slice(0, 5) : closeTime,
+      };
+    }
+
     setForm({
       name: loc.name,
       address: loc.address,
       phone: loc.phone ?? "",
       slug: loc.slug,
-      opening_time: loc.opening_time,
-      closing_time: loc.closing_time,
+      opening_time: openTime,
+      closing_time: closeTime,
       timezone: loc.timezone,
       image_urls: loc.image_urls || [],
+      operating_hours: schedule,
+      has_custom_schedule: hasCustom,
     });
     newFiles.forEach((f) => URL.revokeObjectURL(f.preview));
     setNewFiles([]);
@@ -394,9 +432,29 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                 {loc.phone && (
                   <p className="text-base text-gray-700 font-bold">{loc.phone}</p>
                 )}
-                <p className="text-sm text-gray-500 font-bold">
-                  /{loc.slug} · {loc.opening_time} – {loc.closing_time}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm text-gray-500 font-bold">
+                    /{loc.slug} · Default: {loc.opening_time} – {loc.closing_time}
+                  </p>
+                  {loc.operating_hours && Object.keys(loc.operating_hours).length > 0 && (
+                    <Badge variant="outline" className="text-xs bg-amber-50 text-amber-800 border-amber-200 font-bold">
+                      Custom Day Timings Active
+                    </Badge>
+                  )}
+                </div>
+                {loc.operating_hours && Object.keys(loc.operating_hours).length > 0 && (
+                  <div className="text-xs text-gray-500 font-medium grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+                    {DAY_KEYS.map((k) => {
+                      const d = loc.operating_hours?.[k];
+                      if (!d) return null;
+                      return (
+                        <div key={k} className="bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                          <span className="font-bold text-gray-700 capitalize">{k}:</span> {d.open}–{d.close}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -539,7 +597,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="opening">Opens</Label>
+                <Label htmlFor="opening">Default Opens</Label>
                 <Input
                   id="opening"
                   type="time"
@@ -551,7 +609,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="closing">Closes</Label>
+                <Label htmlFor="closing">Default Closes</Label>
                 <Input
                   id="closing"
                   type="time"
@@ -562,6 +620,97 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                   required
                 />
               </div>
+            </div>
+
+            {/* Custom Day Timings Section */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-primary" />
+                    Day-of-Week Closing Hours
+                  </Label>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Configure different closing timings for weekdays vs weekends
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={form.has_custom_schedule ? "default" : "outline"}
+                  size="sm"
+                  className="text-xs h-8"
+                  onClick={() => setForm({ ...form, has_custom_schedule: !form.has_custom_schedule })}
+                >
+                  {form.has_custom_schedule ? "Custom Schedule: ON" : "Use Same Every Day"}
+                </Button>
+              </div>
+
+              {form.has_custom_schedule && (
+                <div className="space-y-3 pt-2 border-t border-gray-200">
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Quick Presets:</span>
+                    <button
+                      type="button"
+                      className="text-xs bg-white border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-md text-gray-700 font-medium transition-colors"
+                      onClick={() => {
+                        const sched = { ...form.operating_hours };
+                        (["mon", "tue", "wed", "thu"] as DayKey[]).forEach(k => {
+                          sched[k] = { open: form.opening_time, close: "23:30" };
+                        });
+                        setForm({ ...form, operating_hours: sched });
+                      }}
+                    >
+                      Mon–Thu 11:30 PM
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs bg-white border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-md text-gray-700 font-medium transition-colors"
+                      onClick={() => {
+                        const sched = { ...form.operating_hours };
+                        (["fri", "sat", "sun"] as DayKey[]).forEach(k => {
+                          sched[k] = { open: form.opening_time, close: "01:00" };
+                        });
+                        setForm({ ...form, operating_hours: sched });
+                      }}
+                    >
+                      Fri–Sun 01:00 AM
+                    </button>
+                  </div>
+
+                  {/* Day by Day Inputs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {DAY_KEYS.map((k) => (
+                      <div key={k} className="flex items-center justify-between gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                        <span className="text-xs font-bold text-gray-800 w-16">{DAY_NAMES[k]}</span>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <input
+                            type="time"
+                            value={form.operating_hours[k]?.open || form.opening_time}
+                            onChange={(e) => {
+                              const sched = { ...form.operating_hours };
+                              sched[k] = { open: e.target.value, close: sched[k]?.close || form.closing_time };
+                              setForm({ ...form, operating_hours: sched });
+                            }}
+                            className="h-7 w-20 text-xs px-1.5 border border-gray-200 rounded text-center"
+                          />
+                          <span className="text-xs text-gray-400">–</span>
+                          <input
+                            type="time"
+                            value={form.operating_hours[k]?.close || form.closing_time}
+                            onChange={(e) => {
+                              const sched = { ...form.operating_hours };
+                              sched[k] = { open: sched[k]?.open || form.opening_time, close: e.target.value };
+                              setForm({ ...form, operating_hours: sched });
+                            }}
+                            className="h-7 w-20 text-xs px-1.5 border border-gray-200 rounded text-center font-bold text-gray-900"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="timezone">Timezone</Label>

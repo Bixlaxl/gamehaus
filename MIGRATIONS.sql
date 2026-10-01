@@ -255,3 +255,60 @@ ALTER TABLE orders
 
 UPDATE orders SET points_redeemed_online = points_redeemed WHERE type = 'online';
 
+
+-- ============================================================
+-- DAY-OF-WEEK OPERATING HOURS (016_operating_hours.sql)
+-- ============================================================
+ALTER TABLE locations
+  ADD COLUMN IF NOT EXISTS operating_hours JSONB;
+
+
+-- ============================================================
+-- SHIFT RECONCILIATION & DAILY ACCOUNTS (017_daily_accounts.sql)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS daily_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  business_date DATE NOT NULL,
+  
+  -- Night Shift details
+  night_upi NUMERIC NOT NULL DEFAULT 0,
+  night_cash NUMERIC NOT NULL DEFAULT 0,
+  night_total_earnings NUMERIC NOT NULL DEFAULT 0,
+  night_opening_balance NUMERIC NOT NULL DEFAULT 0,
+  night_expenses NUMERIC NOT NULL DEFAULT 0,
+  night_closing_balance NUMERIC NOT NULL DEFAULT 0,
+  night_expected_closing NUMERIC NOT NULL DEFAULT 0,
+  night_difference NUMERIC NOT NULL DEFAULT 0,
+  night_is_tallied BOOLEAN NOT NULL DEFAULT FALSE,
+  night_notes TEXT,
+  night_submitted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  night_submitted_at TIMESTAMPTZ,
+  
+  -- Day Shift handover details
+  day_opening_balance NUMERIC,
+  day_difference NUMERIC,
+  day_is_tallied BOOLEAN,
+  day_notes TEXT,
+  day_submitted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  day_submitted_at TIMESTAMPTZ,
+  
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  
+  CONSTRAINT daily_accounts_loc_date_uniq UNIQUE(location_id, business_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_accounts_loc_date ON daily_accounts(location_id, business_date DESC);
+
+-- Enable RLS
+ALTER TABLE daily_accounts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow authenticated users to read and write daily_accounts"
+  ON daily_accounts
+  FOR ALL
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+

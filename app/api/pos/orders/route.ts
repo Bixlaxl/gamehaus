@@ -118,33 +118,9 @@ export async function GET(request: Request) {
     const hasRunning = o.items?.some((i: any) => i.status === "running");
     const hasScheduled = o.items?.some((i: any) => i.status === "scheduled");
     const hasDue = orderHasDue(o);
-    // Keep in unpaid active feed if it belongs to today's shift, has a running session,
-    // has a scheduled upcoming booking, or has an unpaid balance.
     return isToday || hasRunning || hasScheduled || hasDue;
   });
-
-  const danglingOrders = allOrders.filter((o) => {
-    const isToday = isOrderActiveToday(o);
-    const hasRunning = o.items?.some((i: any) => i.status === "running");
-    const hasScheduled = o.items?.some((i: any) => i.status === "scheduled");
-    const hasDue = orderHasDue(o);
-    // Only auto-finalize abandoned orders from past shifts with zero balance, nothing running, and nothing scheduled
-    return !isToday && !hasRunning && !hasScheduled && !hasDue;
-  });
-
-  if (danglingOrders.length > 0) {
-    const danglingIds = danglingOrders.map((o) => o.id);
-    admin
-      .from("orders")
-      .update({ status: "finalized", finalized_at: new Date().toISOString(), amount_due: 0 })
-      .in("id", danglingIds)
-      .then(({ error }) => {
-        if (error) console.error("Failed to auto-finalize dangling orders:", error);
-        else {
-          admin.from("order_items").update({ status: "finished" }).in("order_id", danglingIds).then(() => {});
-        }
-      });
-  }
+  // Orders are filtered cleanly in memory for the active shift without mutating DB during GET polling.
 
   const phones = Array.from(new Set(orders.map((o) => o.customer_phone).filter((p): p is string => !!p)));
 

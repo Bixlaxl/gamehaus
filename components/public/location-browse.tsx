@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency, isSimulatorActive, getActualSlotDate, getOperatingDate } from "@/lib/utils";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
 
 
 
@@ -242,7 +243,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }, [date, booking?.id, slotsTick]);
 
   const dark      = false;
-  const open      = isOpen(location.opening_time, location.closing_time);
+  const todayHours = getLocationOperatingHours(location, getLocalDateString(location.timezone));
+  const open      = isOpen(todayHours.opening_time, todayHours.closing_time);
   // Build the type filter list from table types AND mode names so that
   // dual-mode tables (e.g. Medium Tables with both Snooker and Pool modes)
   // appear as tabs for both categories.
@@ -273,8 +275,9 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   }, [cartCount]);
 
   /* All slots for the current sheet date */
+  const sheetHours = getLocationOperatingHours(location, date);
   const allSlots = booking
-    ? visibleSlots(location.opening_time, location.closing_time, date, location.timezone)
+    ? visibleSlots(sheetHours.opening_time, sheetHours.closing_time, date, location.timezone)
     : [];
 
   /* People/controller pricing options for the current booking */
@@ -342,18 +345,17 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
 
   /* Slot is in customer's own cart (show blue occupied card) */
   function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
-    const actualDate = getActualSlotDate(slotDate, slotTime, location.opening_time, location.closing_time);
+    const hours = getLocationOperatingHours(location, slotDate);
+    const actualDate = getActualSlotDate(slotDate, slotTime, hours.opening_time, hours.closing_time);
     const slotMs = new Date(`${actualDate}T${slotTime}:00`).getTime();
     // Per-table check — a slot in the cart for this same table blocks it
     return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
   }
 
-
-
-
   /* Slot is blocked by a walk-in or confirmed booking on the server — hide it entirely */
   function isServerBlocked(slotDate: string, slotTime: string): boolean {
-    const actualDate = getActualSlotDate(slotDate, slotTime, location.opening_time, location.closing_time);
+    const hours = getLocationOperatingHours(location, slotDate);
+    const actualDate = getActualSlotDate(slotDate, slotTime, hours.opening_time, hours.closing_time);
     const slotMs = new Date(`${actualDate}T${slotTime}:00`).getTime();
     return blockedRangesMs.some(r => slotMs >= r.start && slotMs < r.end);
   }
@@ -433,9 +435,8 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     if (selectedSlots.length < requiredSlots) return;
     const firstSlot = selectedSlots[0];
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
-    console.log("[addToCart] date:", date, "firstSlot:", firstSlot, "lastSlot:", lastSlot);
-    console.log("[addToCart] location.opening_time:", location.opening_time, "location.closing_time:", location.closing_time);
-    const slotStartDate = getActualSlotDate(date, firstSlot, location.opening_time, location.closing_time);
+    const hours = getLocationOperatingHours(location, date);
+    const slotStartDate = getActualSlotDate(date, firstSlot, hours.opening_time, hours.closing_time);
     console.log("[addToCart] slotStartDate:", slotStartDate);
     const startIso  = new Date(`${slotStartDate}T${firstSlot}:00`).toISOString();
     console.log("[addToCart] startIso:", startIso);

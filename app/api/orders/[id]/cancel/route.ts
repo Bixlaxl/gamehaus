@@ -199,6 +199,40 @@ export async function POST(
       admin.from("bookings").update({ status: "cancelled" }).eq("order_id", orderId),
     ]);
 
+    // 6.2 Revert beverage inventory stock for any items on this cancelled order
+    const { data: extras } = await admin
+      .from("order_extras")
+      .select("id, inventory_item_id, quantity, is_deleted")
+      .eq("order_id", orderId)
+      .eq("is_deleted", false);
+
+    for (const extra of extras ?? []) {
+      if (!extra.inventory_item_id) continue;
+      const { data: inv } = await admin
+        .from("inventory_items")
+        .select("stock_count, name, location_id")
+        .eq("id", extra.inventory_item_id)
+        .maybeSingle();
+
+      if (inv && inv.stock_count !== null) {
+        const newStock = inv.stock_count + extra.quantity;
+        await admin
+          .from("inventory_items")
+          .update({ stock_count: newStock })
+          .eq("id", extra.inventory_item_id);
+
+        await admin.from("inventory_stock_logs").insert({
+          inventory_item_id: extra.inventory_item_id,
+          location_id: inv.location_id,
+          change: extra.quantity,
+          reason: "reverse",
+          order_extra_id: extra.id,
+          note: `Restored on order #${orderId} cancellation`,
+        });
+      }
+      await admin.from("order_extras").update({ is_deleted: true }).eq("id", extra.id);
+    }
+
     // 6.5. Restore redeemed points and revoke earned points on the customer profile
     // ONLY restore points if they were ACTUALLY deducted during a completed payment
     // (i.e. order.points_redeemed_online > 0, or order had advance_paid > 0).

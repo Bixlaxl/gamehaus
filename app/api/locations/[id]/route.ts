@@ -30,8 +30,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin.from("locations").update(parsed.data).eq("id", id).select().single();
-  if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+  let data: any = null;
+  const updatePayload = { ...parsed.data };
+  const { data: updatedLoc, error } = await admin.from("locations").update(updatePayload).eq("id", id).select().single();
+
+  if (error) {
+    if (error.message?.includes("operating_hours") && "operating_hours" in updatePayload) {
+      // Column not yet added to locations table; strip it and save to app_settings
+      const { operating_hours, ...stripped } = updatePayload;
+      const { data: strippedData, error: strippedErr } = await admin.from("locations").update(stripped).eq("id", id).select().single();
+      if (strippedErr) return NextResponse.json(err(strippedErr.message, "DB_ERROR"), { status: 500 });
+      data = strippedData;
+
+      // Persist operating_hours into app_settings.data.location_operating_hours
+      const { data: currentSettings } = await admin.from("app_settings").select("data").eq("id", 1).maybeSingle();
+      const currentData = (currentSettings?.data ?? {}) as any;
+      const locationHours = { ...(currentData.location_operating_hours ?? {}), [id]: operating_hours };
+      await admin.from("app_settings").upsert({ id: 1, data: { ...currentData, location_operating_hours: locationHours }, updated_at: new Date().toISOString() });
+      if (data) data.operating_hours = operating_hours;
+    } else {
+      return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
+    }
+  } else {
+    data = updatedLoc;
+  }
   return NextResponse.json(ok(data));
 }
 

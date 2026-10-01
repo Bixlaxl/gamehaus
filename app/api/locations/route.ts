@@ -26,12 +26,18 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("locations")
-    .select("*")
-    .order("created_at");
+  const [{ data, error }, { data: settingsRow }] = await Promise.all([
+    admin.from("locations").select("*").order("created_at"),
+    admin.from("app_settings").select("data").eq("id", 1).maybeSingle(),
+  ]);
   if (error) return NextResponse.json(err(error.message, "DB_ERROR"), { status: 500 });
-  return NextResponse.json(ok(data ?? []));
+  
+  const savedHours = (settingsRow?.data as any)?.location_operating_hours ?? {};
+  const locationsWithHours = (data ?? []).map((l: any) => ({
+    ...l,
+    operating_hours: l.operating_hours || savedHours[l.id] || null,
+  }));
+  return NextResponse.json(ok(locationsWithHours));
 }
 
 export async function POST(request: Request) {

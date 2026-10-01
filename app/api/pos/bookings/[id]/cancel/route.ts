@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { sendWhatsAppCancellation } from "@/lib/whatsapp";
+import { getAppSettings } from "@/lib/settings";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -110,10 +111,15 @@ export async function POST(
       if (!hasOtherActive) {
         await admin.from("orders").update({ status: "cancelled" }).eq("id", booking.order_id);
 
-        // Restore loyalty points ONLY if they were actually deducted
+        // Revoke earned loyalty points and restore redeemed points
         if (order?.customer_phone) {
-          const actuallyDeducted = Number(order.points_redeemed_online || 0);
-          if (actuallyDeducted > 0) {
+          const settings = await getAppSettings(admin);
+          const earnRate = settings.loyalty.earn_rupees_per_point || 100;
+          const advancePaidVal = Number(order.advance_paid || 0);
+          const pointsEarned = advancePaidVal > 0 ? Math.floor(advancePaidVal / earnRate) : 0;
+          const actuallyDeducted = Number(order.points_redeemed_online || order.points_redeemed || 0);
+
+          if (actuallyDeducted > 0 || pointsEarned > 0) {
             const { data: profile } = await admin
               .from("customer_profiles")
               .select("points_balance")
@@ -121,12 +127,48 @@ export async function POST(
               .single();
 
             if (profile) {
+              const newBalance = Math.max(0, (profile.points_balance || 0) + actuallyDeducted - pointsEarned);
               await admin
                 .from("customer_profiles")
-                .update({ points_balance: (profile.points_balance || 0) + actuallyDeducted })
+                .update({ points_balance: newBalance })
                 .eq("phone", order.customer_phone);
             }
           }
+        }
+
+        // Revert beverage inventory stock for any items on this cancelled order
+        const { data: extras } = await admin
+          .from("order_extras")
+          .select("id, inventory_item_id, quantity, is_deleted")
+          .eq("order_id", booking.order_id)
+          .eq("is_deleted", false);
+
+        for (const extra of extras ?? []) {
+          if (!extra.inventory_item_id) continue;
+          const { data: inv } = await admin
+            .from("inventory_items")
+            .select("stock_count, name, location_id")
+            .eq("id", extra.inventory_item_id)
+            .maybeSingle();
+
+          if (inv && inv.stock_count !== null) {
+            const newStock = inv.stock_count + extra.quantity;
+            await admin
+              .from("inventory_items")
+              .update({ stock_count: newStock })
+              .eq("id", extra.inventory_item_id);
+
+            await admin.from("inventory_stock_logs").insert({
+              inventory_item_id: extra.inventory_item_id,
+              location_id: inv.location_id,
+              change: extra.quantity,
+              reason: "reverse",
+              order_extra_id: extra.id,
+              note: `Restored on booking #${bookingId} cancellation`,
+              created_by: viewer.id,
+            });
+          }
+          await admin.from("order_extras").update({ is_deleted: true }).eq("id", extra.id);
         }
       } else {
         // Recalculate order totals for the remaining active bookings
