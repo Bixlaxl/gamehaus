@@ -50,6 +50,7 @@ export default async function POSLayout({ children }: { children: React.ReactNod
       <POSSideRail
         staffName={profile.name}
         locationName={location?.name ?? ""}
+        role={profile.role}
       />
       {children}
     </div>

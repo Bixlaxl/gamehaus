@@ -499,7 +499,7 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
 
       {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit Location" : "Add Location"}
@@ -678,33 +678,39 @@ export function LocationsContent({ initialLocations }: { initialLocations: Locat
                     </button>
                   </div>
 
-                  {/* Day by Day Inputs */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                  {/* Day by Day Spacious Rows */}
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {DAY_KEYS.map((k) => (
-                      <div key={k} className="flex items-center justify-between gap-2 bg-white p-2 rounded-lg border border-gray-200">
-                        <span className="text-xs font-bold text-gray-800 w-16">{DAY_NAMES[k]}</span>
-                        <div className="flex items-center gap-1.5 flex-1">
-                          <input
-                            type="time"
-                            value={form.operating_hours[k]?.open || form.opening_time}
-                            onChange={(e) => {
-                              const sched = { ...form.operating_hours };
-                              sched[k] = { open: e.target.value, close: sched[k]?.close || form.closing_time };
-                              setForm({ ...form, operating_hours: sched });
-                            }}
-                            className="h-7 w-20 text-xs px-1.5 border border-gray-200 rounded text-center"
-                          />
+                      <div key={k} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-2.5 rounded-lg border border-gray-200">
+                        <span className="text-xs font-bold text-gray-800 w-24">{DAY_NAMES[k]}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-gray-400 font-medium">Opens:</span>
+                            <input
+                              type="time"
+                              value={form.operating_hours[k]?.open || form.opening_time}
+                              onChange={(e) => {
+                                const sched = { ...form.operating_hours };
+                                sched[k] = { open: e.target.value, close: sched[k]?.close || form.closing_time };
+                                setForm({ ...form, operating_hours: sched });
+                              }}
+                              className="h-8 min-w-[120px] text-xs px-2 border border-gray-200 rounded text-center bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          </div>
                           <span className="text-xs text-gray-400">–</span>
-                          <input
-                            type="time"
-                            value={form.operating_hours[k]?.close || form.closing_time}
-                            onChange={(e) => {
-                              const sched = { ...form.operating_hours };
-                              sched[k] = { open: sched[k]?.open || form.opening_time, close: e.target.value };
-                              setForm({ ...form, operating_hours: sched });
-                            }}
-                            className="h-7 w-20 text-xs px-1.5 border border-gray-200 rounded text-center font-bold text-gray-900"
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-gray-400 font-medium">Closes:</span>
+                            <input
+                              type="time"
+                              value={form.operating_hours[k]?.close || form.closing_time}
+                              onChange={(e) => {
+                                const sched = { ...form.operating_hours };
+                                sched[k] = { open: sched[k]?.open || form.opening_time, close: e.target.value };
+                                setForm({ ...form, operating_hours: sched });
+                              }}
+                              className="h-8 min-w-[120px] text-xs px-2 border border-gray-200 rounded text-center font-bold text-gray-900 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}

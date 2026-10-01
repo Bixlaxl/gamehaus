@@ -4,35 +4,34 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, LayoutGrid, CalendarDays, Receipt, Sun, Moon } from "lucide-react";
+import { LogOut, LayoutGrid, CalendarDays, Receipt, Sun, Moon, Calculator, ShieldCheck } from "lucide-react";
 import { useTheme } from "next-themes";
 
-// Inventory was removed from the staff side rail; owners still manage stock
-// via /owner/inventory. Bell + low-stock badge components stay in the repo
-// for the owner sidebar but are no longer rendered here.
-
-type Route = "tables" | "bookings" | "bills";
+type Route = "tables" | "bookings" | "bills" | "accounts";
 
 interface Props {
   /** Optional override — when omitted, the active route is derived from the URL pathname. */
   activeRoute?: Route;
   staffName?: string;
   locationName?: string;
+  role?: string;
 }
 
 const NAV: { route: Route; label: string; href: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { route: "tables",    label: "Tables",    href: "/pos",           Icon: LayoutGrid   },
   { route: "bookings",  label: "Bookings",  href: "/pos/bookings",  Icon: CalendarDays },
   { route: "bills",     label: "Bills",     href: "/pos/bills",     Icon: Receipt      },
+  { route: "accounts",  label: "Accounts",  href: "/pos/accounts",  Icon: Calculator   },
 ];
 
 function deriveActive(pathname: string): Route {
   if (pathname.startsWith("/pos/bookings")) return "bookings";
   if (pathname.startsWith("/pos/bills"))    return "bills";
+  if (pathname.startsWith("/pos/accounts")) return "accounts";
   return "tables";
 }
 
-export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
+export function POSSideRail({ activeRoute, staffName, locationName, role }: Props) {
   const pathname = usePathname();
   const active   = activeRoute ?? deriveActive(pathname ?? "/pos");
   const router = useRouter();
@@ -65,10 +64,21 @@ export function POSSideRail({ activeRoute, staffName, locationName }: Props) {
 
       <nav className="w-60 shrink-0 flex flex-col bg-white dark:bg-[#161616] border-r border-gray-200 dark:border-[#222]">
         {/* Brand */}
-        <div className="h-20 flex items-center gap-3 px-5 border-b border-gray-200 dark:border-[#222] shrink-0">
-          <span className="flex-1 font-black text-2xl tracking-tight" style={{ color: "#D4541A" }}>
+        <div className="h-20 flex items-center justify-between gap-2 px-5 border-b border-gray-200 dark:border-[#222] shrink-0">
+          <span className="font-black text-2xl tracking-tight" style={{ color: "#D4541A" }}>
             Gamehaus
           </span>
+          {role === "owner" && (
+            <Link
+              href="/owner"
+              prefetch
+              className="text-[11px] font-bold text-[#D4541A] bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-md transition-colors flex items-center gap-1 shrink-0"
+              title="Switch to Owner Portal"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Owner
+            </Link>
+          )}
         </div>
 
         {/* Nav links */}

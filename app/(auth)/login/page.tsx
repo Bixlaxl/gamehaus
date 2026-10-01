@@ -81,7 +81,9 @@ function LoginForm() {
       return;
     }
 
-    router.replace(safeNext ?? (profile.role === "owner" ? "/owner" : "/pos"));
+    // Owners always land on /owner by default; staff land on /pos or safeNext
+    const destination = profile.role === "owner" ? (safeNext?.startsWith("/owner") ? safeNext : "/owner") : (safeNext ?? "/pos");
+    router.replace(destination);
   }
 
   return (
