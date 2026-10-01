@@ -9,16 +9,12 @@ import {
   Calendar,
   CheckCircle2,
   AlertTriangle,
-  ArrowRight,
-  TrendingUp,
-  Wallet,
-  Receipt,
   RotateCcw,
   Sparkles,
   History,
   Building2,
-  Check,
-  AlertCircle
+  Receipt,
+  Wallet
 } from "lucide-react";
 
 interface LocationOption {
@@ -66,7 +62,6 @@ export function OwnerAccountsContent({
   const [dayNotes, setDayNotes] = useState<string>("");
   const [submittingDay, setSubmittingDay] = useState(false);
 
-  // Fetch account records & hints when location or date changes
   async function loadData() {
     if (!selectedLocId) return;
     setLoading(true);
@@ -80,7 +75,6 @@ export function OwnerAccountsContent({
         setPosHints(json.data.pos_hints || null);
         setPreviousNightClosing(json.data.previous_night_closing ?? null);
 
-        // If today's record already exists, pre-fill form
         const currentRec = (json.data.records || []).find(
           (r: DailyAccountRecord) => r.business_date === selectedDate
         );
@@ -98,7 +92,6 @@ export function OwnerAccountsContent({
             setDayNotes(currentRec.day_notes || "");
           }
         } else {
-          // Reset form fields
           setNightUpi("");
           setNightCash("");
           setNightOpening(json.data.previous_night_closing != null ? String(json.data.previous_night_closing) : "");
@@ -123,12 +116,11 @@ export function OwnerAccountsContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocId, selectedDate]);
 
-  // Derived current record
   const currentRecord = useMemo(() => {
     return records.find((r) => r.business_date === selectedDate);
   }, [records, selectedDate]);
 
-  // Real-time Night Math
+  // Live Calculations
   const numNightUpi = parseFloat(nightUpi) || 0;
   const numNightCash = parseFloat(nightCash) || 0;
   const numNightOpening = parseFloat(nightOpening) || 0;
@@ -140,17 +132,15 @@ export function OwnerAccountsContent({
   const liveNightDiff = Math.round((numNightClosing - liveExpectedClosing) * 100) / 100;
   const liveNightTallied = Math.abs(liveNightDiff) < 0.01 && (nightClosing.trim() !== "");
 
-  // Real-time Day Handover Math
   const numDayOpening = parseFloat(dayOpening) || 0;
   const prevClosingForDay = previousNightClosing ?? 0;
   const liveDayDiff = Math.round((numDayOpening - prevClosingForDay) * 100) / 100;
   const liveDayTallied = Math.abs(liveDayDiff) < 0.01 && (dayOpening.trim() !== "");
 
-  // Submit Night Shift
   async function handleNightSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!nightClosing.trim()) {
-      toast.error("Please enter the physical closing cash balance.");
+      toast.error("Please enter the closing cash balance.");
       return;
     }
     setSubmittingNight(true);
@@ -173,15 +163,15 @@ export function OwnerAccountsContent({
       const json = await res.json();
       if (json.success) {
         if (json.data.is_tallied) {
-          toast.success("Night shift accounts verified & tallied!");
+          toast.success("Night shift accounts tallied!");
         } else {
           toast.warning(
-            `Night shift saved with discrepancy of ${formatCurrency(Math.abs(json.data.difference))}`
+            `Saved with discrepancy: ${formatCurrency(Math.abs(json.data.difference))}`
           );
         }
         await loadData();
       } else {
-        toast.error(json.error?.message || "Failed to save night shift entry");
+        toast.error(json.error?.message || "Failed to save entry");
       }
     } catch {
       toast.error("Network error saving entry");
@@ -190,11 +180,10 @@ export function OwnerAccountsContent({
     }
   }
 
-  // Submit Day Shift Handover
   async function handleDaySubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!dayOpening.trim()) {
-      toast.error("Please enter the drawer opening cash balance.");
+      toast.error("Please enter the drawer opening balance.");
       return;
     }
     setSubmittingDay(true);
@@ -213,76 +202,85 @@ export function OwnerAccountsContent({
       const json = await res.json();
       if (json.success) {
         if (json.data.is_tallied) {
-          toast.success("Day shift drawer handover tallied with previous night closing!");
+          toast.success("Day handover tallied with previous night!");
         } else {
           toast.warning(
-            `Drawer handover saved with discrepancy of ${formatCurrency(Math.abs(json.data.difference))}`
+            `Handover saved with discrepancy: ${formatCurrency(Math.abs(json.data.difference))}`
           );
         }
         await loadData();
       } else {
-        toast.error(json.error?.message || "Failed to save day handover");
+        toast.error(json.error?.message || "Failed to save handover");
       }
     } catch {
-      toast.error("Network error saving day handover");
+      toast.error("Network error saving handover");
     } finally {
       setSubmittingDay(false);
     }
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Top Header & Selectors */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200 dark:border-[#1E1E1E]">
-        <div>
-          <div className="flex items-center gap-2">
-            <Calculator className="h-7 w-7 text-[#D4541A]" />
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-900 dark:text-white">
-              Shift Accounts & Cash Reconciliation
+    <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
+      {/* Sleek, Clean Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200 dark:border-[#1E1E1E]">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-orange-500/10 text-[#D4541A]">
+            <Calculator className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+              Shift Accounts
             </h1>
           </div>
-          <p className="text-sm text-gray-500 dark:text-[#888] mt-1">
-            Dual-formula cash verification, drawer handover balance check, and shift reconciliation.
-          </p>
         </div>
 
-        {/* Location & Date Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-[#161616] px-3 py-1.5 rounded-xl border border-gray-200 dark:border-[#222]">
-            <Building2 className="h-4 w-4 text-gray-400" />
-            <select
-              value={selectedLocId}
-              onChange={(e) => setSelectedLocId(e.target.value)}
-              className="bg-transparent text-sm font-semibold text-gray-800 dark:text-white focus:outline-none"
-            >
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id} className="dark:bg-[#161616] text-black dark:text-white">
-                  {loc.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Compact Controls: Location + Date + Quick buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {locations.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-white dark:bg-[#161616] px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#262626] shadow-sm">
+              <Building2 className="h-3.5 w-3.5 text-gray-400" />
+              <select
+                value={selectedLocId}
+                onChange={(e) => setSelectedLocId(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-gray-800 dark:text-white focus:outline-none"
+              >
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id} className="dark:bg-[#161616] text-black dark:text-white">
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-[#161616] px-3 py-1.5 rounded-xl border border-gray-200 dark:border-[#222]">
-            <Calendar className="h-4 w-4 text-gray-400" />
+          <div className="flex items-center gap-1.5 bg-white dark:bg-[#161616] px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#262626] shadow-sm">
+            <Calendar className="h-3.5 w-3.5 text-gray-400" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent text-sm font-semibold text-gray-800 dark:text-white focus:outline-none"
+              className="bg-transparent text-xs font-semibold text-gray-800 dark:text-white focus:outline-none"
             />
           </div>
 
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelectedDate(initialDate)}
-              className="text-xs px-2.5 py-1.5 rounded-lg font-medium bg-gray-100 hover:bg-gray-200 dark:bg-[#161616] dark:hover:bg-[#222] text-gray-700 dark:text-[#aaa] transition"
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold transition ${
+                selectedDate === initialDate
+                  ? "bg-[#D4541A] text-white"
+                  : "bg-white dark:bg-[#161616] border border-gray-200 dark:border-[#262626] text-gray-600 dark:text-[#aaa] hover:bg-gray-50"
+              }`}
             >
               Today
             </button>
             <button
               onClick={() => setSelectedDate(shiftDayStr(initialDate, -1))}
-              className="text-xs px-2.5 py-1.5 rounded-lg font-medium bg-gray-100 hover:bg-gray-200 dark:bg-[#161616] dark:hover:bg-[#222] text-gray-700 dark:text-[#aaa] transition"
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold transition ${
+                selectedDate === shiftDayStr(initialDate, -1)
+                  ? "bg-[#D4541A] text-white"
+                  : "bg-white dark:bg-[#161616] border border-gray-200 dark:border-[#262626] text-gray-600 dark:text-[#aaa] hover:bg-gray-50"
+              }`}
             >
               Yesterday
             </button>
@@ -290,218 +288,161 @@ export function OwnerAccountsContent({
         </div>
       </div>
 
-      {/* KPI Cards: Night Status, Day Handover Status, Total Earnings */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Card 1: Night Tally Status */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#777]">
-              Night Shift Tally
+      {/* Metric Cards (Compact on Mobile, 3-Cols on Desktop) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
+        {/* Card 1: Night Shift */}
+        <div className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm flex sm:flex-col justify-between items-center sm:items-start">
+          <div className="w-full flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#666]">
+              Night Close
             </span>
-            <span className="text-xs font-mono text-gray-400">
-              Opening + Cash - Expenses = Closing
-            </span>
-          </div>
-          <div className="my-3">
-            {currentRecord?.night_submitted_at ? (
-              currentRecord.night_is_tallied ? (
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-6 w-6 shrink-0" />
-                  <div>
-                    <span className="text-xl font-black">Tallied</span>
-                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 font-medium">
-                      Exact match (Diff ₹0)
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-                  <AlertTriangle className="h-6 w-6 shrink-0" />
-                  <div>
-                    <span className="text-xl font-black">Discrepancy</span>
-                    <p className="text-xs font-semibold">
-                      {currentRecord.night_difference > 0 ? "+" : ""}
-                      {formatCurrency(currentRecord.night_difference)}
-                    </p>
-                  </div>
-                </div>
-              )
-            ) : (
-              <div className="flex items-center gap-2 text-gray-400 dark:text-[#666]">
-                <RotateCcw className="h-5 w-5" />
-                <div>
-                  <span className="text-lg font-bold">Pending Night Close</span>
-                  <p className="text-xs">Staff has not finalized night shift</p>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-[#777] border-t border-gray-100 dark:border-[#1A1A1A] pt-2 flex items-center justify-between">
-            <span>Closing in Drawer:</span>
-            <span className="font-mono font-bold text-gray-900 dark:text-white">
+            <span className="text-xs font-mono font-bold text-gray-900 dark:text-white">
               {formatCurrency(currentRecord?.night_closing_balance ?? numNightClosing)}
             </span>
           </div>
-        </div>
 
-        {/* Card 2: Day Shift Handover Status */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#777]">
-              Day Shift Handover
-            </span>
-            <span className="text-xs font-mono text-gray-400">
-              Prev Night Closing = Day Opening
-            </span>
-          </div>
-          <div className="my-3">
-            {currentRecord?.day_submitted_at ? (
-              currentRecord.day_is_tallied ? (
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-6 w-6 shrink-0" />
-                  <div>
-                    <span className="text-xl font-black">Tallied Handover</span>
-                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 font-medium">
-                      Exact match with previous night
-                    </p>
-                  </div>
-                </div>
+          <div className="mt-1.5 sm:mt-2">
+            {currentRecord?.night_submitted_at ? (
+              currentRecord.night_is_tallied ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-black">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Tallied
+                </span>
               ) : (
-                <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-                  <AlertTriangle className="h-6 w-6 shrink-0" />
-                  <div>
-                    <span className="text-xl font-black">Handover Discrepancy</span>
-                    <p className="text-xs font-semibold">
-                      {(currentRecord.day_difference ?? 0) > 0 ? "+" : ""}
-                      {formatCurrency(currentRecord.day_difference ?? 0)}
-                    </p>
-                  </div>
-                </div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-black">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {currentRecord.night_difference > 0 ? "+" : ""}{formatCurrency(currentRecord.night_difference)}
+                </span>
               )
             ) : (
-              <div className="flex items-center gap-2 text-gray-400 dark:text-[#666]">
-                <RotateCcw className="h-5 w-5" />
-                <div>
-                  <span className="text-lg font-bold">Pending Day Handover</span>
-                  <p className="text-xs">Count drawer physical cash</p>
-                </div>
-              </div>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-[#1c1c1c] text-gray-500 text-xs font-medium">
+                <RotateCcw className="h-3 w-3" /> Pending
+              </span>
             )}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-[#777] border-t border-gray-100 dark:border-[#1A1A1A] pt-2 flex items-center justify-between">
-            <span>Previous Night Closing:</span>
-            <span className="font-mono font-bold text-gray-900 dark:text-white">
-              {formatCurrency(previousNightClosing ?? 0)}
-            </span>
           </div>
         </div>
 
-        {/* Card 3: Total Earnings Summary */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#777]">
-              Day Total Earnings
+        {/* Card 2: Day Handover */}
+        <div className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm flex sm:flex-col justify-between items-center sm:items-start">
+          <div className="w-full flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#666]">
+              Day Handover
             </span>
-            <span className="text-xs font-mono text-gray-400">UPI + Cash</span>
+            <span className="text-xs font-mono font-bold text-gray-900 dark:text-white">
+              Prev: {formatCurrency(previousNightClosing ?? 0)}
+            </span>
           </div>
-          <div className="my-3">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                {formatCurrency(
-                  currentRecord?.night_total_earnings ?? liveNightEarnings
-                )}
+
+          <div className="mt-1.5 sm:mt-2">
+            {currentRecord?.day_submitted_at ? (
+              currentRecord.day_is_tallied ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-black">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Handover Tallied
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-black">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {(currentRecord.day_difference ?? 0) > 0 ? "+" : ""}{formatCurrency(currentRecord.day_difference ?? 0)}
+                </span>
+              )
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-[#1c1c1c] text-gray-500 text-xs font-medium">
+                <RotateCcw className="h-3 w-3" /> Pending
               </span>
-              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                (UPI: {formatCurrency(currentRecord?.night_upi ?? numNightUpi)} | Cash: {formatCurrency(currentRecord?.night_cash ?? numNightCash)})
-              </span>
-            </div>
+            )}
           </div>
-          <div className="text-xs text-gray-500 dark:text-[#777] border-t border-gray-100 dark:border-[#1A1A1A] pt-2 flex items-center justify-between">
-            <span>POS Recorded Hint:</span>
-            <span className="font-mono text-gray-700 dark:text-[#aaa]">
-              {posHints ? `${formatCurrency(posHints.total_hint)} (UPI: ${formatCurrency(posHints.upi_hint)}, Cash: ${formatCurrency(posHints.cash_hint)})` : "No POS data"}
+        </div>
+
+        {/* Card 3: Shift Earnings */}
+        <div className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm flex sm:flex-col justify-between items-center sm:items-start">
+          <div className="w-full flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#666]">
+              Shift Earnings
+            </span>
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              UPI {formatCurrency(currentRecord?.night_upi ?? numNightUpi)} · Cash {formatCurrency(currentRecord?.night_cash ?? numNightCash)}
+            </span>
+          </div>
+
+          <div className="mt-1.5 sm:mt-2">
+            <span className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
+              {formatCurrency(currentRecord?.night_total_earnings ?? liveNightEarnings)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-[#1E1E1E]">
+      {/* Segmented Tab Bar (Clean, no text wrapping) */}
+      <div className="bg-gray-100 dark:bg-[#161616] p-1 rounded-xl flex items-center gap-1 border border-gray-200/80 dark:border-[#222]">
         <button
           onClick={() => setActiveTab("night")}
-          className={`px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition-all ${
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
             activeTab === "night"
-              ? "border-[#D4541A] text-[#D4541A]"
-              : "border-transparent text-gray-500 dark:text-[#777] hover:text-gray-900 dark:hover:text-white"
+              ? "bg-white dark:bg-[#222] text-[#D4541A] shadow-sm"
+              : "text-gray-500 dark:text-[#777] hover:text-gray-900 dark:hover:text-white"
           }`}
         >
-          <Receipt className="h-4 w-4" />
-          Night Shift Closing
+          <Receipt className="h-3.5 w-3.5" />
+          <span>Night Close</span>
         </button>
         <button
           onClick={() => setActiveTab("day")}
-          className={`px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition-all ${
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
             activeTab === "day"
-              ? "border-[#D4541A] text-[#D4541A]"
-              : "border-transparent text-gray-500 dark:text-[#777] hover:text-gray-900 dark:hover:text-white"
+              ? "bg-white dark:bg-[#222] text-[#D4541A] shadow-sm"
+              : "text-gray-500 dark:text-[#777] hover:text-gray-900 dark:hover:text-white"
           }`}
         >
-          <Wallet className="h-4 w-4" />
-          Day Shift Handover
+          <Wallet className="h-3.5 w-3.5" />
+          <span>Day Handover</span>
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition-all ${
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
             activeTab === "history"
-              ? "border-[#D4541A] text-[#D4541A]"
-              : "border-transparent text-gray-500 dark:text-[#777] hover:text-gray-900 dark:hover:text-white"
+              ? "bg-white dark:bg-[#222] text-[#D4541A] shadow-sm"
+              : "text-gray-500 dark:text-[#777] hover:text-gray-900 dark:hover:text-white"
           }`}
         >
-          <History className="h-4 w-4" />
-          Reconciliation History ({records.length})
+          <History className="h-3.5 w-3.5" />
+          <span>History ({records.length})</span>
         </button>
       </div>
 
-      {/* Tab 1: Night Shift Entry Form */}
+      {/* Tab 1: Night Close Form */}
       {activeTab === "night" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <form onSubmit={handleNightSubmit} className="lg:col-span-7 space-y-4">
-            <div className="p-6 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-[#1A1A1A]">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white">
-                    Night Shift Entry ({selectedDate})
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-[#888]">
-                    Record shift revenue, opening float, petty cash expenses, and closing drawer balance.
-                  </p>
-                </div>
+            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-[#1A1A1A]">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+                  Night Shift Entry ({selectedDate})
+                </h2>
                 {posHints && (
                   <button
                     type="button"
                     onClick={() => {
                       setNightUpi(String(posHints.upi_hint));
                       setNightCash(String(posHints.cash_hint));
-                      toast.info("Auto-filled UPI & Cash from POS records!");
+                      toast.info("Filled from POS records!");
                     }}
-                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-orange-500/10 text-[#D4541A] font-semibold hover:bg-orange-500/20 transition"
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-orange-500/10 text-[#D4541A] font-bold hover:bg-orange-500/20 transition"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Auto-fill from POS
+                    <Sparkles className="h-3 w-3" />
+                    Fill POS
                   </button>
                 )}
               </div>
 
-              {/* Earnings Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* UPI & Cash */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-700 dark:text-[#ccc]">
-                      UPI Payments (₹)
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-gray-600 dark:text-[#aaa]">
+                      UPI (₹)
                     </label>
                     {posHints && (
-                      <span className="text-[10px] text-gray-400">
-                        POS: {formatCurrency(posHints.upi_hint)}
+                      <span className="text-[10px] text-gray-400 font-mono">
+                        POS: ₹{posHints.upi_hint}
                       </span>
                     )}
                   </div>
@@ -512,18 +453,18 @@ export function OwnerAccountsContent({
                     placeholder="0.00"
                     value={nightUpi}
                     onChange={(e) => setNightUpi(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                   />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-700 dark:text-[#ccc]">
-                      Cash Payments (₹)
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-gray-600 dark:text-[#aaa]">
+                      Cash (₹)
                     </label>
                     {posHints && (
-                      <span className="text-[10px] text-gray-400">
-                        POS: {formatCurrency(posHints.cash_hint)}
+                      <span className="text-[10px] text-gray-400 font-mono">
+                        POS: ₹{posHints.cash_hint}
                       </span>
                     )}
                   </div>
@@ -534,29 +475,17 @@ export function OwnerAccountsContent({
                     placeholder="0.00"
                     value={nightCash}
                     onChange={(e) => setNightCash(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                   />
                 </div>
               </div>
 
-              {/* Float & Expenses */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Float, Expenses, Closing */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-700 dark:text-[#ccc]">
-                      Opening Float (₹)
-                    </label>
-                    {previousNightClosing != null && (
-                      <button
-                        type="button"
-                        onClick={() => setNightOpening(String(previousNightClosing))}
-                        className="text-[10px] text-[#D4541A] hover:underline"
-                        title="Set from previous night's closing"
-                      >
-                        Prev: {formatCurrency(previousNightClosing)}
-                      </button>
-                    )}
-                  </div>
+                  <label className="block text-[11px] font-bold text-gray-600 dark:text-[#aaa] mb-1">
+                    Float (₹)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -564,16 +493,14 @@ export function OwnerAccountsContent({
                     placeholder="0.00"
                     value={nightOpening}
                     onChange={(e) => setNightOpening(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                   />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-700 dark:text-[#ccc]">
-                      Petty Expenses (₹)
-                    </label>
-                  </div>
+                  <label className="block text-[11px] font-bold text-gray-600 dark:text-[#aaa] mb-1">
+                    Expenses (₹)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -581,16 +508,14 @@ export function OwnerAccountsContent({
                     placeholder="0.00"
                     value={nightExpenses}
                     onChange={(e) => setNightExpenses(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                   />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-900 dark:text-white">
-                      Physical Closing (₹)
-                    </label>
-                  </div>
+                  <label className="block text-[11px] font-bold text-[#D4541A] mb-1">
+                    Closing Cash (₹)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -599,194 +524,107 @@ export function OwnerAccountsContent({
                     placeholder="0.00"
                     value={nightClosing}
                     onChange={(e) => setNightClosing(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border-2 border-[#D4541A] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                    className="w-full px-3 py-2 rounded-xl border-2 border-[#D4541A] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm font-bold focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-[#ccc] mb-1.5">
-                  Shift Notes / Explanations
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Paid ₹300 for cleaning supplies; ₹50 tip discrepancy..."
+                <input
+                  type="text"
+                  placeholder="Notes (optional, e.g. ₹200 snacks expense)"
                   value={nightNotes}
                   onChange={(e) => setNightNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submittingNight || loading}
-                className="w-full py-3 px-4 rounded-xl bg-[#D4541A] text-white font-bold text-sm tracking-wide hover:bg-[#b84414] active:scale-[0.99] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 rounded-xl bg-[#D4541A] text-white font-bold text-xs tracking-wide hover:bg-[#b84414] active:scale-[0.99] transition disabled:opacity-50"
               >
-                {submittingNight ? "Verifying & Saving..." : "Save & Verify Night Shift Accounts"}
+                {submittingNight ? "Saving..." : "Save & Tally Shift"}
               </button>
             </div>
           </form>
 
-          {/* Right Live Math & Verification Card */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="p-6 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-5">
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-[#D4541A]" />
-                Live Reconciliation Formula
-              </h3>
-
-              {/* Total Earnings breakdown */}
-              <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#222] space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#777]">
-                  1. Shift Revenue
-                </span>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-[#aaa]">UPI Collection</span>
-                  <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                    {formatCurrency(numNightUpi)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-[#aaa]">Cash Collection</span>
-                  <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                    {formatCurrency(numNightCash)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm font-bold border-t border-gray-200 dark:border-[#222] pt-2 text-gray-900 dark:text-white">
-                  <span>Total Earnings (UPI + Cash)</span>
-                  <span className="font-mono text-[#D4541A]">
-                    {formatCurrency(liveNightEarnings)}
-                  </span>
-                </div>
+          {/* Right Live Math Box */}
+          <div className="lg:col-span-5 space-y-3">
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-gray-700 dark:text-[#ccc]">
+                <span>Tally Formula</span>
+                <span className="font-mono text-gray-400">Float + Cash - Exp = Closing</span>
               </div>
 
-              {/* Expected Closing Math */}
-              <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#222] space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#777]">
-                  2. Cash Drawer Formula
-                </span>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-[#aaa]">(+) Opening Balance</span>
-                  <span className="font-mono text-gray-900 dark:text-white">
-                    {formatCurrency(numNightOpening)}
+              <div className="space-y-1.5 text-xs text-gray-600 dark:text-[#aaa] bg-gray-50 dark:bg-[#161616] p-3 rounded-xl border border-gray-200 dark:border-[#222]">
+                <div className="flex justify-between">
+                  <span>Float + Cash</span>
+                  <span className="font-mono font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(numNightOpening + numNightCash)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-[#aaa]">(+) Cash Collected</span>
-                  <span className="font-mono text-gray-900 dark:text-white">
-                    {formatCurrency(numNightCash)}
+                <div className="flex justify-between">
+                  <span>Petty Expenses</span>
+                  <span className="font-mono text-rose-500">
+                    -{formatCurrency(numNightExpenses)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-[#aaa]">(-) Petty Expenses</span>
-                  <span className="font-mono text-gray-900 dark:text-white">
-                    {formatCurrency(numNightExpenses)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm font-bold border-t border-gray-200 dark:border-[#222] pt-2 text-gray-900 dark:text-white">
-                  <span>Expected Drawer Balance</span>
+                <div className="flex justify-between font-bold border-t border-gray-200 dark:border-[#222] pt-1.5 text-gray-900 dark:text-white">
+                  <span>Expected Closing</span>
                   <span className="font-mono text-blue-600 dark:text-blue-400">
                     {formatCurrency(liveExpectedClosing)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm font-bold text-gray-900 dark:text-white">
-                  <span>Actual Physical Count</span>
-                  <span className="font-mono text-gray-900 dark:text-white">
-                    {formatCurrency(numNightClosing)}
-                  </span>
-                </div>
               </div>
 
-              {/* Live Tally Result Indicator */}
+              {/* Status Pill */}
               <div
-                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
                   !nightClosing.trim()
-                    ? "bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#222] text-gray-500"
+                    ? "bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#222] text-gray-400"
                     : liveNightTallied
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                     : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
                 }`}
               >
-                {!nightClosing.trim() ? (
-                  <>
-                    <RotateCcw className="h-5 w-5 shrink-0" />
-                    <div>
-                      <span className="font-bold text-sm">Enter Physical Closing</span>
-                      <p className="text-xs text-gray-500">
-                        Formula will tally when closing cash is entered.
-                      </p>
-                    </div>
-                  </>
-                ) : liveNightTallied ? (
-                  <>
-                    <CheckCircle2 className="h-6 w-6 shrink-0" />
-                    <div>
-                      <span className="font-black text-base">TALLIED</span>
-                      <p className="text-xs font-semibold">
-                        Drawer balance perfectly matches Opening + Cash - Expenses.
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="h-6 w-6 shrink-0" />
-                    <div>
-                      <span className="font-black text-base">DISCREPANCY DETECTED</span>
-                      <p className="text-xs font-semibold">
-                        Difference: {liveNightDiff > 0 ? "+" : ""}{formatCurrency(liveNightDiff)} (
-                        {liveNightDiff > 0 ? "Excess Cash in Drawer" : "Shortage in Drawer"})
-                      </p>
-                    </div>
-                  </>
-                )}
+                <span>Status:</span>
+                <span>
+                  {!nightClosing.trim()
+                    ? "Enter Closing Cash"
+                    : liveNightTallied
+                    ? "TALLIED (Diff ₹0)"
+                    : `DISCREPANCY: ${liveNightDiff > 0 ? "+" : ""}${formatCurrency(liveNightDiff)}`}
+                </span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Tab 2: Day Shift Handover Form */}
+      {/* Tab 2: Day Handover Form */}
       {activeTab === "day" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <form onSubmit={handleDaySubmit} className="lg:col-span-7 space-y-4">
-            <div className="p-6 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-5">
-              <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-white">
-                  Day Shift Handover ({selectedDate})
+            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-[#1A1A1A]">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+                  Day Handover ({selectedDate})
                 </h2>
-                <p className="text-xs text-gray-500 dark:text-[#888] mt-1">
-                  Morning staff counts physical cash in the drawer. It must equal the closing balance left by the previous night shift.
-                </p>
-              </div>
-
-              {/* Comparison Preview Box */}
-              <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#222] flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#777]">
-                    Previous Night Closing
-                  </span>
-                  <div className="font-mono text-xl font-bold text-gray-900 dark:text-white mt-0.5">
-                    {formatCurrency(previousNightClosing ?? 0)}
-                  </div>
-                  <span className="text-[10px] text-gray-400">
-                    From date: {shiftDayStr(selectedDate, -1)}
-                  </span>
-                </div>
                 {previousNightClosing != null && (
                   <button
                     type="button"
                     onClick={() => setDayOpening(String(previousNightClosing))}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-orange-500/10 text-[#D4541A] font-semibold hover:bg-orange-500/20 transition flex items-center gap-1"
+                    className="text-[11px] px-2.5 py-1 rounded-md bg-orange-500/10 text-[#D4541A] font-bold hover:bg-orange-500/20 transition"
                   >
-                    <Check className="h-3.5 w-3.5" />
-                    Copy as Opening
+                    Copy Prev: {formatCurrency(previousNightClosing)}
                   </button>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-900 dark:text-white mb-1.5">
-                  Actual Physical Cash Counted in Drawer (₹)
+                <label className="block text-xs font-bold text-gray-700 dark:text-[#ccc] mb-1.5">
+                  Actual Physical Cash Counted (₹)
                 </label>
                 <input
                   type="number"
@@ -796,55 +634,47 @@ export function OwnerAccountsContent({
                   placeholder="0.00"
                   value={dayOpening}
                   onChange={(e) => setDayOpening(e.target.value)}
-                  className="w-full px-3.5 py-3 rounded-xl border-2 border-[#D4541A] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                  className="w-full px-3 py-2.5 rounded-xl border-2 border-[#D4541A] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white font-mono text-sm font-bold focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-[#ccc] mb-1.5">
-                  Handover Notes / Discrepancy Reason
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Counted by Rahul; verified cash notes in register..."
+                <input
+                  type="text"
+                  placeholder="Notes (optional)"
                   value={dayNotes}
                   onChange={(e) => setDayNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#D4541A]"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-[#262626] bg-gray-50 dark:bg-[#161616] text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-[#D4541A]"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submittingDay || loading}
-                className="w-full py-3 px-4 rounded-xl bg-[#D4541A] text-white font-bold text-sm tracking-wide hover:bg-[#b84414] active:scale-[0.99] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 rounded-xl bg-[#D4541A] text-white font-bold text-xs tracking-wide hover:bg-[#b84414] active:scale-[0.99] transition disabled:opacity-50"
               >
-                {submittingDay ? "Checking Handover..." : "Confirm & Save Day Shift Handover"}
+                {submittingDay ? "Saving..." : "Confirm Day Handover"}
               </button>
             </div>
           </form>
 
           {/* Right Live Handover Verification */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="p-6 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-5">
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-[#D4541A]" />
-                Day Shift Handover Verification
-              </h3>
+          <div className="lg:col-span-5 space-y-3">
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-gray-700 dark:text-[#ccc]">
+                <span>Handover Check</span>
+                <span className="font-mono text-gray-400">Prev Close = Day Open</span>
+              </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm p-3 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#222]">
-                  <span className="text-gray-600 dark:text-[#aaa]">Previous Night Closing</span>
-                  <span className="font-mono font-bold text-gray-900 dark:text-white">
+              <div className="space-y-1.5 text-xs text-gray-600 dark:text-[#aaa] bg-gray-50 dark:bg-[#161616] p-3 rounded-xl border border-gray-200 dark:border-[#222]">
+                <div className="flex justify-between">
+                  <span>Previous Night Closing</span>
+                  <span className="font-mono font-semibold text-gray-900 dark:text-white">
                     {formatCurrency(prevClosingForDay)}
                   </span>
                 </div>
-
-                <div className="flex items-center justify-center text-gray-400">
-                  <ArrowRight className="h-4 w-4 rotate-90 sm:rotate-0" />
-                </div>
-
-                <div className="flex items-center justify-between text-sm p-3 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#222]">
-                  <span className="text-gray-600 dark:text-[#aaa]">New Day Physical Count</span>
+                <div className="flex justify-between">
+                  <span>Morning Drawer Count</span>
                   <span className="font-mono font-bold text-[#D4541A]">
                     {formatCurrency(numDayOpening)}
                   </span>
@@ -853,45 +683,22 @@ export function OwnerAccountsContent({
 
               {/* Handover Status Banner */}
               <div
-                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
                   !dayOpening.trim()
-                    ? "bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#222] text-gray-500"
+                    ? "bg-gray-50 dark:bg-[#161616] border-gray-200 dark:border-[#222] text-gray-400"
                     : liveDayTallied
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                     : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
                 }`}
               >
-                {!dayOpening.trim() ? (
-                  <>
-                    <RotateCcw className="h-5 w-5 shrink-0" />
-                    <div>
-                      <span className="font-bold text-sm">Enter Drawer Count</span>
-                      <p className="text-xs text-gray-500">
-                        Counts will compare against the previous night&apos;s recorded closing balance.
-                      </p>
-                    </div>
-                  </>
-                ) : liveDayTallied ? (
-                  <>
-                    <CheckCircle2 className="h-6 w-6 shrink-0" />
-                    <div>
-                      <span className="font-black text-base">TALLIED HANDOVER</span>
-                      <p className="text-xs font-semibold">
-                        Physical cash perfectly matches previous night closing float.
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="h-6 w-6 shrink-0" />
-                    <div>
-                      <span className="font-black text-base">HANDOVER DISCREPANCY</span>
-                      <p className="text-xs font-semibold">
-                        Difference: {liveDayDiff > 0 ? "+" : ""}{formatCurrency(liveDayDiff)}
-                      </p>
-                    </div>
-                  </>
-                )}
+                <span>Status:</span>
+                <span>
+                  {!dayOpening.trim()
+                    ? "Enter Drawer Count"
+                    : liveDayTallied
+                    ? "TALLIED"
+                    : `DISCREPANCY: ${liveDayDiff > 0 ? "+" : ""}${formatCurrency(liveDayDiff)}`}
+                </span>
               </div>
             </div>
           </div>
@@ -900,37 +707,35 @@ export function OwnerAccountsContent({
 
       {/* Tab 3: History & Audit Ledger */}
       {activeTab === "history" && (
-        <div className="p-6 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm overflow-hidden space-y-4">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-[#1E1E1E] shadow-sm overflow-hidden space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-gray-900 dark:text-white">
-              Shift Reconciliation Audit Ledger
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+              Shift History
             </h2>
-            <span className="text-xs text-gray-500 font-mono">
-              {records.length} records recorded
+            <span className="text-xs text-gray-400 font-mono">
+              {records.length} records
             </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 dark:bg-[#161616] text-xs uppercase font-bold text-gray-500 dark:text-[#777] border-b border-gray-200 dark:border-[#222]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50 dark:bg-[#161616] uppercase font-bold text-gray-400 dark:text-[#777] border-b border-gray-200 dark:border-[#222]">
                 <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">UPI</th>
-                  <th className="px-4 py-3">Cash</th>
-                  <th className="px-4 py-3">Total Earnings</th>
-                  <th className="px-4 py-3">Opening Float</th>
-                  <th className="px-4 py-3">Expenses</th>
-                  <th className="px-4 py-3">Closing</th>
-                  <th className="px-4 py-3">Night Tally</th>
-                  <th className="px-4 py-3">Day Handover</th>
-                  <th className="px-4 py-3">Staff</th>
+                  <th className="px-3 py-2.5">Date</th>
+                  <th className="px-3 py-2.5">Earnings</th>
+                  <th className="px-3 py-2.5">Float</th>
+                  <th className="px-3 py-2.5">Expenses</th>
+                  <th className="px-3 py-2.5">Closing</th>
+                  <th className="px-3 py-2.5">Night Tally</th>
+                  <th className="px-3 py-2.5">Day Handover</th>
+                  <th className="px-3 py-2.5">Staff</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#1A1A1A]">
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
-                      No shift account records found for this location yet.
+                    <td colSpan={8} className="px-3 py-6 text-center text-gray-400">
+                      No shift records found.
                     </td>
                   </tr>
                 ) : (
@@ -943,60 +748,48 @@ export function OwnerAccountsContent({
                         setActiveTab("night");
                       }}
                     >
-                      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white font-mono">
+                      <td className="px-3 py-2.5 font-bold font-mono text-gray-900 dark:text-white">
                         {r.business_date}
                       </td>
-                      <td className="px-4 py-3 font-mono text-gray-600 dark:text-[#aaa]">
-                        {formatCurrency(r.night_upi ?? 0)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-gray-600 dark:text-[#aaa]">
-                        {formatCurrency(r.night_cash ?? 0)}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold text-[#D4541A]">
+                      <td className="px-3 py-2.5 font-mono font-bold text-[#D4541A]">
                         {formatCurrency(r.night_total_earnings ?? 0)}
                       </td>
-                      <td className="px-4 py-3 font-mono text-gray-600 dark:text-[#aaa]">
+                      <td className="px-3 py-2.5 font-mono text-gray-500">
                         {formatCurrency(r.night_opening_balance ?? 0)}
                       </td>
-                      <td className="px-4 py-3 font-mono text-gray-600 dark:text-[#aaa]">
+                      <td className="px-3 py-2.5 font-mono text-rose-500">
                         {formatCurrency(r.night_expenses ?? 0)}
                       </td>
-                      <td className="px-4 py-3 font-mono font-bold text-gray-900 dark:text-white">
+                      <td className="px-3 py-2.5 font-mono font-bold text-gray-900 dark:text-white">
                         {formatCurrency(r.night_closing_balance ?? 0)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {r.night_submitted_at ? (
                           r.night_is_tallied ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 className="h-3 w-3" /> Tallied
-                            </span>
+                            <span className="text-emerald-600 font-bold">Tallied</span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400">
-                              <AlertCircle className="h-3 w-3" />
+                            <span className="text-rose-600 font-bold">
                               {r.night_difference > 0 ? "+" : ""}{formatCurrency(r.night_difference)}
                             </span>
                           )
                         ) : (
-                          <span className="text-[11px] text-gray-400">Pending</span>
+                          <span className="text-gray-400">Pending</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {r.day_submitted_at ? (
                           r.day_is_tallied ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 className="h-3 w-3" /> Tallied
-                            </span>
+                            <span className="text-emerald-600 font-bold">Tallied</span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400">
-                              <AlertCircle className="h-3 w-3" />
+                            <span className="text-rose-600 font-bold">
                               {(r.day_difference ?? 0) > 0 ? "+" : ""}{formatCurrency(r.day_difference ?? 0)}
                             </span>
                           )
                         ) : (
-                          <span className="text-[11px] text-gray-400">Pending</span>
+                          <span className="text-gray-400">Pending</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-[#888]">
+                      <td className="px-3 py-2.5 text-gray-500">
                         {r.night_submitted_by_name || r.day_submitted_by_name || "—"}
                       </td>
                     </tr>
