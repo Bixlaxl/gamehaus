@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Clock, ChevronRight, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 interface Location {
   id: string;
@@ -13,6 +15,8 @@ interface Location {
   phone: string | null;
   opening_time: string;
   closing_time: string;
+  operating_hours?: any;
+  timezone?: string;
   slug: string;
   image_urls: string[];
 }
@@ -371,7 +375,9 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {locations.map((loc, i) => {
-              const open   = isOpenNow(loc.opening_time, loc.closing_time);
+              const opDate = getOperatingDate(new Date(), loc.opening_time || "10:00");
+              const { opening_time, closing_time } = getLocationOperatingHours(loc, opDate);
+              const open   = isOpenNow(opening_time, closing_time);
               const accent = i === 0 ? "#D4541A" : "#C4893A";
               const matchingCoupons = coupons.filter(
                 (c) => c.location_id === loc.id || c.location_id === null
@@ -431,7 +437,7 @@ export function SplashHero({ locations, coupons = [] }: { locations: Location[];
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#888]">
                             <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
-                            <span>{formatTime(loc.opening_time)} – {formatTime(loc.closing_time)}</span>
+                            <span>{formatTime(opening_time)} – {formatTime(closing_time)}</span>
                           </div>
                         </div>
 

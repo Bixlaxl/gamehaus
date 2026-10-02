@@ -89,3 +89,55 @@ export function getLocationOperatingHours(
 
   return { opening_time: fallbackOpen, closing_time: fallbackClose };
 }
+
+
+/**
+ * Validates whether a requested booking slot (startIso to endIso) falls entirely within
+ * the opening and closing hours for that date window.
+ * Supports operating hours that cross midnight (e.g. 10:00 to 01:00).
+ */
+export function isWithinOperatingHours(
+  startIso: string,
+  endIso: string,
+  openingTime: string,
+  closingTime: string
+): boolean {
+  const startMs = new Date(startIso).getTime();
+  const endMs   = new Date(endIso).getTime();
+  if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) return false;
+  
+  // Convert slot start time to IST date string
+  const startInIst = new Date(startMs + 5.5 * 60 * 60 * 1000);
+  const y = startInIst.getUTCFullYear();
+  const mo = String(startInIst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(startInIst.getUTCDate()).padStart(2, "0");
+  const slotDate = `${y}-${mo}-${d}`;
+  
+  const op = openingTime.split(":").slice(0, 2).join(":");
+  const cl = closingTime.split(":").slice(0, 2).join(":");
+  const [oh, om] = op.split(":").map(Number);
+  const [ch, cm] = cl.split(":").map(Number);
+  const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
+
+  const checkWindow = (dateStr: string) => {
+    const opens = new Date(`${dateStr}T${op}:00+05:30`).getTime();
+    let closes = new Date(`${dateStr}T${cl}:00+05:30`).getTime();
+    if (crossesMidnight) {
+      closes += 24 * 60 * 60 * 1000;
+    }
+    return startMs >= opens && endMs <= closes;
+  };
+
+  if (checkWindow(slotDate)) return true;
+
+  if (crossesMidnight) {
+    const yesterday = new Date(new Date(`${slotDate}T12:00:00+05:30`).getTime() - 24 * 60 * 60 * 1000);
+    const yy = yesterday.getUTCFullYear();
+    const ymo = String(yesterday.getUTCMonth() + 1).padStart(2, "0");
+    const yd = String(yesterday.getUTCDate()).padStart(2, "0");
+    const yesterdayStr = `${yy}-${ymo}-${yd}`;
+    if (checkWindow(yesterdayStr)) return true;
+  }
+
+  return false;
+}

@@ -242,9 +242,10 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, booking?.id, slotsTick]);
 
-  const dark      = false;
-  const todayHours = getLocationOperatingHours(location, getLocalDateString(location.timezone));
-  const open      = isOpen(todayHours.opening_time, todayHours.closing_time);
+  const dark       = false;
+  const opDate     = getOperatingDate(new Date(), location.opening_time || "10:00");
+  const todayHours = getLocationOperatingHours(location, opDate);
+  const open       = isOpen(todayHours.opening_time, todayHours.closing_time);
   // Build the type filter list from table types AND mode names so that
   // dual-mode tables (e.g. Medium Tables with both Snooker and Pool modes)
   // appear as tabs for both categories.

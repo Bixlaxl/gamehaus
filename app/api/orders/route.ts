@@ -5,6 +5,8 @@ import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
 import { cancelExpiredUnpaidOrders } from "@/lib/booking-cleanup";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { getAppSettings } from "@/lib/settings";
+import { getLocationOperatingHours, isWithinOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 export const runtime = 'edge';
 
@@ -64,10 +66,10 @@ export async function POST(request: Request) {
   // Walk-in orders: require staff authentication
   const admin = createAdminClient();
 
-  // Verify location is active
+  // Verify location is active & load operating hours
   const { data: location, error: locError } = await admin
     .from("locations")
-    .select("is_active")
+    .select("id, is_active, opening_time, closing_time, operating_hours, timezone")
     .eq("id", location_id)
     .maybeSingle();
 
@@ -172,6 +174,29 @@ export async function POST(request: Request) {
   // Re-verify every requested slot is still free at the moment of booking.
   const scheduledItems = resolvedItems.filter((i) => i.scheduled_start && i.scheduled_end);
   if (scheduledItems.length > 0) {
+    // ── Enforce operating hours for each scheduled item ─────────────────────
+    for (const item of scheduledItems) {
+      const opDate = getOperatingDate(item.scheduled_start!, location.opening_time || "10:00");
+      const { opening_time, closing_time } = getLocationOperatingHours(location as any, opDate);
+      if (opening_time && closing_time) {
+        const withinHours = isWithinOperatingHours(
+          item.scheduled_start!,
+          item.scheduled_end!,
+          opening_time,
+          closing_time
+        );
+        if (!withinHours) {
+          return NextResponse.json(
+            err(
+              `The selected time is outside operating hours for that day (${opening_time} – ${closing_time})`,
+              "OUTSIDE_HOURS"
+            ),
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const tableIds = [...new Set(scheduledItems.map((i) => i.table_id))];
 
     const [{ data: existingItems }, { data: existingBookings }] = await Promise.all([

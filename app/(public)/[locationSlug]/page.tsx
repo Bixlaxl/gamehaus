@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LocationBrowse } from "@/components/public/location-browse";
+import { addOneDay } from "@/lib/utils";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -38,7 +39,8 @@ export default async function LocationPage({
   // Today in local timezone format — matches client-side local date calculation
   const todayDate = getLocalDateString(location.timezone);
   const dayStartIso = new Date(`${todayDate}T00:00:00+05:30`).toISOString();
-  const dayEndIso   = new Date(`${todayDate}T23:59:59+05:30`).toISOString();
+  // Operating hours can cross midnight up to 04:00 AM next day — query up to noon next day
+  const dayEndIso   = new Date(`${addOneDay(todayDate)}T12:00:00+05:30`).toISOString();
 
   // Run tables + today's blocked-slot data in parallel (3 queries, 1 round-trip)
   const [{ data: tables }, { data: rawItems }, { data: rawBookings }] = await Promise.all([

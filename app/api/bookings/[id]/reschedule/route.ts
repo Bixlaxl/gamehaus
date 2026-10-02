@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
 import { z } from "zod";
+import { getLocationOperatingHours, isWithinOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 export const runtime = 'edge';
 
@@ -33,7 +35,7 @@ export async function POST(
 
   const { data: booking, error: bErr } = await admin
     .from("bookings")
-    .select("*, order_item:order_items!inner(id, table_id, scheduled_start, scheduled_end), order:orders!inner(id, location_id)")
+    .select("*, order_item:order_items!inner(id, table_id, scheduled_start, scheduled_end), order:orders!inner(id, location_id, location:locations(id, opening_time, closing_time, operating_hours, timezone))")
     .eq("id", bookingId)
     .single();
 
@@ -61,6 +63,22 @@ export async function POST(
   const orderItem = booking.order_item as { id: string; table_id: string } | null;
   if (!orderItem) {
     return NextResponse.json(err("Order item missing from booking", "INVALID_STATE"), { status: 400 });
+  }
+
+  // Validate that rescheduled slot falls within operating hours
+  const loc = (booking.order as any)?.location;
+  if (loc) {
+    const opDate = getOperatingDate(finalStart, loc.opening_time || "10:00");
+    const { opening_time, closing_time } = getLocationOperatingHours(loc, opDate);
+    if (opening_time && closing_time) {
+      const withinHours = isWithinOperatingHours(finalStart, finalEnd, opening_time, closing_time);
+      if (!withinHours) {
+        return NextResponse.json(
+          err(`Rescheduled time must be within operating hours (${opening_time} – ${closing_time})`, "OUTSIDE_HOURS"),
+          { status: 400 }
+        );
+      }
+    }
   }
 
   // 1. Conflict Check (overlaps with other active bookings/sessions on the same table)
