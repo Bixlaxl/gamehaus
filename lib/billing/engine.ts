@@ -34,6 +34,7 @@ export interface BillResult {
   discountAmount: number;
   memberDiscountAmount: number;
   freeHoursDiscountAmount: number;
+  pointsDiscountAmount: number;
   advancePaid: number;
   totalDue: number;
 }
@@ -131,7 +132,8 @@ export function calculateBill(
   advancePaid: number = 0,
   fixedDiscountAmount: number = 0,
   memberDiscountPct: number = 0,
-  freeHoursDiscountAmount: number = 0
+  freeHoursDiscountAmount: number = 0,
+  pointsDiscountAmount: number = 0
 ): BillResult {
   const tableLines: BillingLineItem[] = [];
 
@@ -237,13 +239,18 @@ export function calculateBill(
 
   const memberDiscountAmount = sessionMemberDiscount + extraMemberDiscount;
 
+  // Points discount reduces table session charges (applied after member/free-hour discounts, before subtracting online advance)
+  const remainingTableAfterPoints = Math.max(0, tableNet - pointsDiscountAmount);
+  const unusedPoints = Math.max(0, pointsDiscountAmount - tableNet);
+  const remainingExtraAfterPoints = Math.max(0, extraNet - unusedPoints);
+
   // Online advance paid (advancePaid) covers table session charges.
   // Excess online table advance does not swallow beverage/extra sales.
   const tableDue = advancePaid > 0
-    ? Math.max(0, tableNet - advancePaid)
-    : tableNet;
+    ? Math.max(0, remainingTableAfterPoints - advancePaid)
+    : remainingTableAfterPoints;
 
-  const totalDue = tableDue + extraNet;
+  const totalDue = tableDue + remainingExtraAfterPoints;
 
   return {
     tableLines,
@@ -253,6 +260,7 @@ export function calculateBill(
     discountAmount: Math.round(publicDiscount * 100) / 100,
     memberDiscountAmount,
     freeHoursDiscountAmount,
+    pointsDiscountAmount: Math.round(pointsDiscountAmount * 100) / 100,
     advancePaid,
     totalDue: Math.round(totalDue * 100) / 100,
   };
@@ -281,13 +289,17 @@ export async function syncOrderTotals(admin: any, orderId: string): Promise<void
     return 0;
   })();
 
+  const pointsRedeemed = Number((orderRow as any).points_redeemed_online ?? orderRow.points_redeemed ?? 0);
   const freshBill = calculateBill(
     activeItems as any,
     activeExtras as any,
     new Date(),
     orderRow.coupon as any,
     orderRow.advance_paid ?? 0,
-    pubDisc
+    pubDisc,
+    0,
+    0,
+    pointsRedeemed
   );
 
   const totalDisc = freshBill.discountAmount + freshBill.memberDiscountAmount;

@@ -32,10 +32,10 @@ export async function GET(request: Request) {
       .select("id, name, type, hourly_rate, people_pricing, location:locations(name, closing_time)")
       .eq("id", tableId)
       .single(),
-    admin
-      .from("order_items")
-      .select("*, order:orders(*)")
-      .eq("table_id", tableId)
+      admin
+        .from("order_items")
+        .select("*, order:orders(*, payments(*))")
+        .eq("table_id", tableId)
       .eq("status", "running")
       .limit(1)
       .maybeSingle()
@@ -59,10 +59,10 @@ export async function GET(request: Request) {
 
   if (!item) {
     // No running session — look for the next scheduled session
-    const { data: schedItem, error: schedErr } = await admin
-      .from("order_items")
-      .select("*, order:orders(*)")
-      .eq("table_id", tableId)
+      const { data: schedItem, error: schedErr } = await admin
+        .from("order_items")
+        .select("*, order:orders(*, payments(*))")
+        .eq("table_id", tableId)
       .eq("status", "scheduled")
       .order("scheduled_start", { ascending: true })
       .limit(1)
@@ -152,14 +152,26 @@ export async function GET(request: Request) {
       }
     }
 
+    // Extract points discount and any venue payments already completed
+    const pointsDiscount = Number(item.order?.points_redeemed_online ?? item.order?.points_redeemed ?? 0);
+    const paymentsList = (item.order as any)?.payments ?? [];
+    const venuePayments = paymentsList
+      .filter((p: any) => p.status === "completed" && p.method !== "razorpay")
+      .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
     const billResult = calculateBill(
       [billingItem as any],
       extras || [],
       new Date(),
       null,
       item.order?.advance_paid ?? 0,
-      item.order?.discount_amount ?? 0
+      item.order?.discount_amount ?? 0,
+      0,
+      0,
+      pointsDiscount
     );
+
+    const currentDue = Math.max(0, Math.round((billResult.totalDue - venuePayments) * 100) / 100);
 
     sessionData = {
       order_item_id:    item.id,
@@ -172,7 +184,7 @@ export async function GET(request: Request) {
       elapsed_seconds:  elapsedSeconds,
       remaining_seconds: remainingSeconds,
       is_overtime:      isOvertime,
-      current_bill:     billResult.totalDue,
+      current_bill:     currentDue,
       advance_paid:     item.order?.advance_paid ?? 0,
       max_extend_mins:  maxExtendMins,
       customer_name:    item.order?.customer_name ?? null,
@@ -186,6 +198,26 @@ export async function GET(request: Request) {
     };
   } else {
     // Scheduled but not yet started
+    const pointsDiscount = Number(item.order?.points_redeemed_online ?? item.order?.points_redeemed ?? 0);
+    const paymentsList = (item.order as any)?.payments ?? [];
+    const venuePayments = paymentsList
+      .filter((p: any) => p.status === "completed" && p.method !== "razorpay")
+      .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+    const schedBill = calculateBill(
+      [item as any],
+      [],
+      new Date(),
+      null,
+      item.order?.advance_paid ?? 0,
+      item.order?.discount_amount ?? 0,
+      0,
+      0,
+      pointsDiscount
+    );
+
+    const currentDue = Math.max(0, Math.round((schedBill.totalDue - venuePayments) * 100) / 100);
+
     sessionData = {
       order_item_id:   item.id,
       order_id:        item.order_id,
@@ -194,7 +226,7 @@ export async function GET(request: Request) {
       scheduled_end:   item.scheduled_end,
       num_people:      item.num_people,
       rate_per_hour:   item.rate_per_hour,
-      current_bill:    item.order?.advance_paid ?? 0,
+      current_bill:    currentDue,
       max_extend_mins: 0,
       customer_name:   item.order?.customer_name ?? null,
       extras:          [],

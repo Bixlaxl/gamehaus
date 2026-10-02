@@ -342,5 +342,68 @@ describe("billing engine", () => {
     expect(result.subtotal).toBe(500);
     expect(result.totalDue).toBe(500);
   });
+
+  it("online booking with public coupon, points redeemed, and advance paid correctly deducts points", () => {
+    // 1 hr session on ₹360/hr table
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      expected_end: t60.toISOString(),
+      rate_per_hour: 360,
+      status: "finished",
+    });
+    // Cafe extras: 2 water (₹20) + 2 mountain dew (₹40) = ₹60
+    const extra1 = makeExtra({ name: "Water Bottle", price: 10, quantity: 2 });
+    const extra2 = makeExtra({ name: "Mountain Dew", price: 20, quantity: 2 });
+
+    // Public coupon ₹30, advance paid ₹93, points redeemed 177
+    const result = calculateBill(
+      [item],
+      [extra1, extra2],
+      t60,
+      null,
+      93,  // advancePaid
+      30,  // fixedDiscountAmount (coupon)
+      0,   // memberDiscountPct
+      0,   // freeHoursDiscountAmount
+      177  // pointsDiscountAmount
+    );
+
+    expect(result.subtotal).toBe(420); // 360 table + 60 extras
+    expect(result.discountAmount).toBe(30);
+    expect(result.pointsDiscountAmount).toBe(177);
+    // Table net: 360 - 30 = 330
+    // After points: 330 - 177 = 153
+    // Table due after advance (93): 153 - 93 = 60
+    // Extras due: 60
+    // Total due: 60 + 60 = 120!
+    expect(result.totalDue).toBe(120);
+  });
+
+  it("excess points discount spills over to cover extras", () => {
+    const item = makeItem({
+      actual_start: t0.toISOString(),
+      expected_end: t60.toISOString(),
+      rate_per_hour: 100,
+      status: "finished",
+    });
+    const extra = makeExtra({ price: 50, quantity: 1 });
+
+    // Table ₹100, Extra ₹50, Points ₹120, Advance ₹0
+    const result = calculateBill(
+      [item],
+      [extra],
+      t60,
+      null,
+      0,
+      0,
+      0,
+      0,
+      120 // pointsDiscountAmount
+    );
+
+    // Table net is 100 -> covered fully by 100 points
+    // Unused points = 20 -> reduces extra (50 - 20 = 30)
+    expect(result.totalDue).toBe(30);
+  });
 });
 
