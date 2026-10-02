@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 import { sendWhatsAppConfirmation } from "@/lib/whatsapp";
 
@@ -107,7 +109,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const [{ data: viewer }, { data: loc }] = await Promise.all([
     admin.from("users").select("role, location_id").eq("id", session.user.id).single(),
-    admin.from("locations").select("opening_time, closing_time").eq("id", location_id).single(),
+    admin.from("locations").select("opening_time, closing_time, operating_hours, timezone").eq("id", location_id).single(),
   ]);
 
   if (!viewer || (viewer.role !== "owner" && viewer.role !== "staff")) {
@@ -120,17 +122,20 @@ export async function POST(request: Request) {
     return NextResponse.json(err("Location not found", "NOT_FOUND"), { status: 404 });
   }
 
-  // Validate operating hours
-  if (loc.opening_time && loc.closing_time) {
+  // Validate operating hours for the specific date of the booking
+  const opDate = getOperatingDate(scheduled_start, loc.opening_time || "10:00");
+  const { opening_time, closing_time } = getLocationOperatingHours(loc as any, opDate);
+
+  if (opening_time && closing_time) {
     const withinHours = isWithinOperatingHours(
       scheduled_start,
       scheduled_end,
-      loc.opening_time,
-      loc.closing_time
+      opening_time,
+      closing_time
     );
     if (!withinHours) {
       return NextResponse.json(
-        err(`Booking time must be within operating hours (${loc.opening_time} – ${loc.closing_time})`, "OUTSIDE_HOURS"),
+        err(`Booking time must be within operating hours (${opening_time} – ${closing_time})`, "OUTSIDE_HOURS"),
         { status: 400 }
       );
     }

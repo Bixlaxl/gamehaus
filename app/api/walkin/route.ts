@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { ok, err } from "@/lib/validators/schemas";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 
 export const runtime = 'edge';
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
   // ── Enforce operating hours & active state ─────────────────────────────
   const { data: loc } = await admin
     .from("locations")
-    .select("opening_time, closing_time, is_active")
+    .select("opening_time, closing_time, is_active, operating_hours, timezone")
     .eq("id", location_id)
     .maybeSingle();
 
@@ -53,9 +55,12 @@ export async function POST(request: Request) {
     );
   }
 
-  if (loc.opening_time && loc.closing_time) {
-    const [oh, om] = loc.opening_time.split(":").map(Number);
-    const [ch, cm] = loc.closing_time.split(":").map(Number);
+  const opDate = getOperatingDate(now, loc.opening_time || "10:00");
+  const { opening_time, closing_time } = getLocationOperatingHours(loc as any, opDate);
+
+  if (opening_time && closing_time) {
+    const [oh, om] = opening_time.split(":").map(Number);
+    const [ch, cm] = closing_time.split(":").map(Number);
     const crossesMidnight = (ch * 60 + cm) <= (oh * 60 + om);
 
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -85,7 +90,7 @@ export async function POST(request: Request) {
 
     if (now.getTime() < opensMs) {
       return NextResponse.json(
-        err(`Shop opens at ${loc.opening_time} — walk-ins not allowed yet`, "OUTSIDE_HOURS"),
+        err(`Shop opens at ${opening_time} — walk-ins not allowed yet`, "OUTSIDE_HOURS"),
         { status: 409 }
       );
     }

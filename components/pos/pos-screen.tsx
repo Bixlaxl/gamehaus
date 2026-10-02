@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,8 @@ import { LogOut, UserPlus, QrCode, CalendarClock, CupSoda } from "lucide-react";
 import { toast } from "sonner";
 import { StaffConsumeModal } from "./staff-consume-modal";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
-import { getShopWindow } from "@/lib/utils";
+import { getShopWindow, getOperatingDate } from "@/lib/utils";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
 import { installPOSAuthGuard } from "@/lib/pos-fetch";
 import { TableGrid } from "./table-grid";
 import { ContextPanel } from "./context-panel";
@@ -105,7 +106,7 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
   }, []);
 
   // Data queries
-  const { data: liveLoc } = useQuery<{ opening_time: string; closing_time: string } | null>({
+  const { data: liveLoc } = useQuery<any | null>({
     queryKey: ["pos-location", locationId],
     queryFn: async () => {
       const res = await fetch("/api/locations", { cache: "no-store" });
@@ -113,15 +114,21 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
       const body = await res.json();
       const list = body.success ? body.data : [];
       const found = list.find((l: any) => l.id === locationId);
-      return found ? { opening_time: found.opening_time, closing_time: found.closing_time } : null;
+      return found ?? null;
     },
     staleTime: 30 * 1000,
     refetchInterval: 30 * 1000,
     refetchOnWindowFocus: true,
   });
 
-  const effectiveOpeningTime = liveLoc?.opening_time ?? openingTime;
-  const effectiveClosingTime = liveLoc?.closing_time ?? closingTime;
+  const effectiveHours = useMemo(() => {
+    if (!liveLoc) return { opening_time: openingTime, closing_time: closingTime };
+    const opDate = getOperatingDate(new Date(), liveLoc.opening_time || openingTime || "10:00");
+    return getLocationOperatingHours(liveLoc, opDate);
+  }, [liveLoc, openingTime, closingTime]);
+
+  const effectiveOpeningTime = effectiveHours.opening_time;
+  const effectiveClosingTime = effectiveHours.closing_time;
 
   useEffect(() => {
     usePOSStore.setState({ openingTime: effectiveOpeningTime, closingTime: effectiveClosingTime });

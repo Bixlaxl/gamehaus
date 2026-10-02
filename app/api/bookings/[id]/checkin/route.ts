@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, err } from "@/lib/validators/schemas";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 export const runtime = 'edge';
 
@@ -24,7 +26,7 @@ export async function POST(
   // accidentally check someone in while the shop is closed.
   const { data: booking, error: bookingError } = await admin
     .from("bookings")
-    .select("*, order_item:order_items(table_id, table:tables(location:locations(id, opening_time, closing_time)))")
+    .select("*, order_item:order_items(table_id, table:tables(location:locations(id, opening_time, closing_time, operating_hours, timezone)))")
     .eq("id", bookingId)
     .single();
 
@@ -40,9 +42,10 @@ export async function POST(
   // Edge runtime is UTC. Resolve "is the shop currently open?" in IST so a
   // 14:30 IST check-in for a 10:00–23:00 shop passes regardless of where the
   // function runs.
-  const orderItem    = booking.order_item as { table?: { location?: { opening_time?: string; closing_time?: string } } } | null;
-  const opening = orderItem?.table?.location?.opening_time ?? null;
-  const closing = orderItem?.table?.location?.closing_time ?? null;
+  const orderItem = booking.order_item as any;
+  const loc = orderItem?.table?.location;
+  const opDate = getOperatingDate(new Date(), loc?.opening_time || "10:00");
+  const { opening_time: opening, closing_time: closing } = getLocationOperatingHours(loc, opDate);
   if (opening && closing) {
     const [oh, om] = opening.split(":").map(Number);
     const [ch, cm] = closing.split(":").map(Number);

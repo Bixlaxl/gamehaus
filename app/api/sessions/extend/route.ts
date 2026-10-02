@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extendSessionSchema, ok, err } from "@/lib/validators/schemas";
 import { syncOrderTotals } from "@/lib/billing/engine";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
+import { getOperatingDate } from "@/lib/utils";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: item, error: itemError } = await admin
     .from("order_items")
-    .select("*, table:tables(location:locations(opening_time, closing_time))")
+    .select("*, table:tables(location:locations(opening_time, closing_time, operating_hours, timezone))")
     .eq("id", order_item_id)
     .single();
 
@@ -47,8 +49,9 @@ export async function POST(request: Request) {
   const newExpectedEnd = new Date(anchor.getTime() + extend_mins * 60 * 1000);
 
   // Enforce shop closing time as a hard ceiling
-  const openingTime = (item.table as { location: { opening_time: string; closing_time: string } | null } | null)?.location?.opening_time;
-  const closingTime = (item.table as { location: { opening_time: string; closing_time: string } | null } | null)?.location?.closing_time;
+  const loc = (item.table as { location: any } | null)?.location;
+  const opDate = getOperatingDate(anchor, loc?.opening_time || "10:00");
+  const { opening_time: openingTime, closing_time: closingTime } = getLocationOperatingHours(loc, opDate);
   if (openingTime && closingTime) {
     const [oh, om] = openingTime.split(":").map(Number);
     const [ch, cm] = closingTime.split(":").map(Number);

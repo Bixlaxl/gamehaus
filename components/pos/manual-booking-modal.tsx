@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { CalendarPlus, Banknote, Smartphone, CheckCircle, Gamepad2, Clock, AlertTriangle } from "lucide-react";
 import type { Table, TableMode } from "@/lib/supabase/types";
 import { isSimulatorActive, isSimulatorTable, addOneDay } from "@/lib/utils";
+import { getLocationOperatingHours } from "@/lib/operating-hours";
 
 
 interface Props {
@@ -143,15 +144,15 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   const chosenTable = useMemo(() => tables.find((t) => t.id === tableId), [tables, tableId]);
 
-  // Load location opening/closing times
-  const { data: locationInfo } = useQuery<{ opening_time: string; closing_time: string }>({
+  // Load location opening/closing times (including custom schedule)
+  const { data: locationInfo } = useQuery<any | null>({
     queryKey: ["location-info-detail", locationId],
     queryFn: async () => {
       const res = await fetch("/api/locations", { cache: "no-store" });
       const body = await res.json();
       const list = body.success ? body.data : [];
       const found = list.find((l: any) => l.id === locationId);
-      return found ? { opening_time: found.opening_time, closing_time: found.closing_time } : { opening_time: "10:00", closing_time: "23:00" };
+      return found ?? null;
     },
     staleTime: 10 * 60 * 1000,
   });
@@ -256,8 +257,7 @@ export function ManualBookingModal({ locationId, defaultDate, onClose, onCreated
 
   // Generate slots grid for visual picking
   const slotPills = useMemo(() => {
-    const rawOpening = locationInfo?.opening_time ?? "10:00";
-    const rawClosing = locationInfo?.closing_time ?? "23:00";
+    const { opening_time: rawOpening, closing_time: rawClosing } = getLocationOperatingHours(locationInfo, date);
     const opening = rawOpening.split(":").slice(0, 2).join(":");
     const closing = rawClosing.split(":").slice(0, 2).join(":");
     const [oh, om] = opening.split(":").map(Number);
