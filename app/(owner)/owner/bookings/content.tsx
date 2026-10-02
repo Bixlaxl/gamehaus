@@ -37,8 +37,17 @@ type BookingRow = Booking & {
     points_redeemed: number;
     points_redeemed_online?: number;
     order_items?: Array<{ id: string; status: string }> | null;
+    order_extras?: Array<{ id: string; name: string; price: number; quantity: number; is_deleted?: boolean | null }> | null;
+    payments?: Array<{ id: string; amount: number; method: string; status: string; collected_at?: string | null }> | null;
   } | null;
-  order_item: { num_people?: number | null; selected_mode_name?: string | null; table: TableRef } | null;
+  order_item: {
+    num_people?: number | null;
+    selected_mode_name?: string | null;
+    rate_per_hour?: number | null;
+    final_amount?: number | null;
+    scheduled_duration_mins?: number | null;
+    table: TableRef;
+  } | null;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -688,9 +697,20 @@ export function BookingsContent({
               return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
             };
 
+            const activeExtras = (order?.order_extras ?? []).filter((e: any) => !e.is_deleted);
+            const extrasTotal = activeExtras.reduce((sum: number, e: any) => sum + (Number(e.price) * Number(e.quantity)), 0);
+            const tableSlotAmount = extrasTotal > 0 ? Math.max(0, baseSubtotal - extrasTotal) : baseSubtotal;
+
             const isFinalized = order?.status === "finalized";
             const amountPaid = isFinalized ? total : advance;
             const remainingDue = isFinalized ? 0 : Math.max(0, total - advance);
+
+            // Payments breakdown
+            const completedPayments = (order?.payments ?? []).filter((p: any) => p.status === "completed");
+            const onlinePayments = completedPayments.filter((p: any) => p.method === "razorpay" || p.razorpay_payment_id);
+            const venuePayments = completedPayments.filter((p: any) => p.method !== "razorpay" && !p.razorpay_payment_id);
+            const onlinePaid = onlinePayments.length > 0 ? onlinePayments.reduce((s: number, p: any) => s + Number(p.amount), 0) : advance;
+            const venuePaid = venuePayments.length > 0 ? venuePayments.reduce((s: number, p: any) => s + Number(p.amount), 0) : (isFinalized ? Math.max(0, total - onlinePaid) : 0);
 
             return (
               <div className="space-y-8 pt-6 text-left">
@@ -736,10 +756,29 @@ export function BookingsContent({
                 <div className="space-y-4 border-t border-gray-100 dark:border-[#222] pt-6">
                   <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Price Calculation</p>
                   
-                  <div className="flex justify-between text-base font-semibold">
-                    <span className="text-gray-500 dark:text-gray-400">Booking Subtotal</span>
-                    <span className="tabular-nums font-bold text-gray-900 dark:text-white">₹{Math.round(baseSubtotal)}</span>
-                  </div>
+                  {activeExtras.length > 0 ? (
+                    <>
+                      <div className="flex justify-between text-base font-semibold">
+                        <span className="text-gray-500 dark:text-gray-400">Table Slot ({formatDuration(durationMins)})</span>
+                        <span className="tabular-nums font-bold text-gray-900 dark:text-white">₹{Math.round(tableSlotAmount)}</span>
+                      </div>
+                      {activeExtras.map((extra: any) => (
+                        <div key={extra.id} className="flex justify-between text-sm font-medium text-gray-500 dark:text-gray-400 pl-3 border-l-2 border-orange-200 dark:border-orange-900/40">
+                          <span>+ {extra.name} {extra.quantity > 1 ? `(×${extra.quantity})` : ""}</span>
+                          <span className="tabular-nums font-semibold text-gray-700 dark:text-gray-300">₹{Math.round(Number(extra.price) * Number(extra.quantity))}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-base font-semibold border-t border-dashed border-gray-150 dark:border-[#222] pt-2">
+                        <span className="text-gray-600 dark:text-gray-300">Total Subtotal</span>
+                        <span className="tabular-nums font-bold text-gray-900 dark:text-white">₹{Math.round(baseSubtotal)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between text-base font-semibold">
+                      <span className="text-gray-500 dark:text-gray-400">Booking Subtotal</span>
+                      <span className="tabular-nums font-bold text-gray-900 dark:text-white">₹{Math.round(baseSubtotal)}</span>
+                    </div>
+                  )}
 
                   {pubDisc > 0 && (
                     <div className="flex justify-between text-base font-semibold text-emerald-600">
@@ -769,15 +808,34 @@ export function BookingsContent({
                     </div>
                   )}
 
-                  {advance > 0 && (
+                  <div className="flex justify-between border-t border-gray-150 dark:border-[#222] pt-3 text-lg font-black">
+                    <span className="text-gray-900 dark:text-white">Net Bill Amount</span>
+                    <span className="tabular-nums text-gray-900 dark:text-white text-xl font-black">₹{Math.round(total)}</span>
+                  </div>
+                </div>
+
+                {/* Payment & Settlement Breakdown */}
+                <div className="space-y-3 border-t border-gray-100 dark:border-[#222] pt-6">
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest pb-1">Payment & Settlement</p>
+
+                  {onlinePaid > 0 && (
                     <div className="flex justify-between text-base font-semibold text-emerald-600">
                       <span>Advance Paid Online</span>
-                      <span className="tabular-nums font-bold">−₹{Math.round(advance)}</span>
+                      <span className="tabular-nums font-bold">₹{Math.round(onlinePaid)}</span>
+                    </div>
+                  )}
+
+                  {venuePaid > 0 && (
+                    <div className="flex justify-between text-base font-semibold text-blue-600 dark:text-blue-400">
+                      <span>
+                        Paid at Venue {venuePayments.length > 0 ? `(${venuePayments.map((p: any) => p.method?.toUpperCase()).join(", ")})` : ""}
+                      </span>
+                      <span className="tabular-nums font-bold">₹{Math.round(venuePaid)}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between border-t border-gray-100 dark:border-[#222] pt-4 text-xl font-black">
-                    <span className="text-gray-900 dark:text-white">Amount Paid / Settled</span>
+                    <span className="text-gray-900 dark:text-white">Total Settled</span>
                     <span className="tabular-nums text-emerald-600 text-2xl">₹{Math.round(amountPaid)}</span>
                   </div>
 
@@ -787,6 +845,7 @@ export function BookingsContent({
                       <span className="tabular-nums text-[#D4541A] text-2xl">₹{Math.round(remainingDue)}</span>
                     </div>
                   )}
+                </div>
 
                   {otherMediumTables.length > 0 && (
                     <div className="space-y-3 border-t border-gray-100 dark:border-[#222] pt-6">
@@ -837,7 +896,6 @@ export function BookingsContent({
                       </div>
                     </div>
                   )}
-                </div>
 
                 {/* Footer Status badge & Cancel action */}
                 <div className="pt-4 flex justify-between items-center text-base font-bold text-gray-500 border-t border-gray-100 dark:border-[#222]">
