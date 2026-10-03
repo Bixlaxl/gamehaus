@@ -41,7 +41,7 @@ export default async function POSLayout({ children }: { children: React.ReactNod
   const admin = createAdminClient();
   const { data: location } = await admin
     .from("locations")
-    .select("name")
+    .select("id, name, opening_time, closing_time, operating_hours")
     .eq("id", profile.location_id)
     .single();
 
@@ -51,6 +51,10 @@ export default async function POSLayout({ children }: { children: React.ReactNod
         staffName={profile.name}
         locationName={location?.name ?? ""}
         role={profile.role}
+        locationId={profile.location_id}
+        openingTime={location?.opening_time}
+        closingTime={location?.closing_time}
+        operatingHours={location?.operating_hours}
       />
       {children}
     </div>

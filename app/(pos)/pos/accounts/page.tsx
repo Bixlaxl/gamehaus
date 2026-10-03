@@ -42,6 +42,7 @@ export default async function StaffAccountsPage() {
         locations={locations ?? []}
         initialDate={defaultDate}
         userName={profile.name ?? "Staff"}
+        userRole="staff"
       />
     </main>
   );

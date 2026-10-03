@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { usePOSStore } from "@/store/pos";
-import { LogOut, UserPlus, QrCode, CalendarClock, CupSoda } from "lucide-react";
+import Link from "next/link";
+import { LogOut, UserPlus, QrCode, CalendarClock, CupSoda, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { StaffConsumeModal } from "./staff-consume-modal";
 import { subscribeToPOS } from "@/lib/realtime/subscriptions";
@@ -129,6 +130,50 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
 
   const effectiveOpeningTime = effectiveHours.opening_time;
   const effectiveClosingTime = effectiveHours.closing_time;
+
+  const [shiftPending, setShiftPending] = useState(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function checkShift() {
+      try {
+        const today = getOperatingDate(new Date(), effectiveOpeningTime || "10:00");
+        const res = await fetch(`/api/owner/accounts?locationId=${locationId}&date=${today}`);
+        const json = await res.json();
+        if (!isCancelled && json.success) {
+          const rec = (json.data.records || []).find((r: any) => r.business_date === today);
+          setShiftPending(!rec?.night_submitted_at);
+        }
+      } catch {}
+    }
+    checkShift();
+    const interval = setInterval(checkShift, 60000);
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [locationId, effectiveOpeningTime]);
+
+  const isClosingWindow = useMemo(() => {
+    const [ch, cm] = (effectiveClosingTime || "23:30").split(":").map(Number);
+    const now = new Date();
+    const istMs = now.getTime() + 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(istMs);
+    const curH = istDate.getUTCHours();
+    const curM = istDate.getUTCMinutes();
+    const curTotal = curH * 60 + curM;
+
+    let closeTotal = ch * 60 + cm;
+    if (ch < 6) closeTotal += 24 * 60;
+
+    const windowStart = closeTotal - 60;
+    const windowEnd = closeTotal + 210;
+
+    let evalCur = curTotal;
+    if (curH < 6) evalCur += 24 * 60;
+
+    return evalCur >= windowStart && evalCur <= windowEnd;
+  }, [effectiveClosingTime]);
 
   useEffect(() => {
     usePOSStore.setState({ openingTime: effectiveOpeningTime, closingTime: effectiveClosingTime });
@@ -344,6 +389,29 @@ export function POSScreen({ locationId, locationName, openingTime, closingTime, 
 
         {/* Alert strip */}
         <POSAlerts locationId={locationId} />
+
+        {/* Shift accounts closing reminder banner */}
+        {shiftPending && isClosingWindow && (
+          <div className="mx-6 mt-3 px-5 py-3 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-between gap-4 animate-in fade-in duration-300">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+              <div>
+                <p className="text-xs font-black text-amber-600 dark:text-amber-400">
+                  Night Shift Closing Pending for Today
+                </p>
+                <p className="text-[11px] text-gray-600 dark:text-[#aaa]">
+                  Please count the physical drawer cash and submit tonight&apos;s shift accounts before leaving.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/pos/accounts"
+              className="px-3.5 py-1.5 rounded-xl bg-[#D4541A] text-white font-bold text-xs hover:bg-[#b84414] transition shrink-0"
+            >
+              Count & Tally Accounts →
+            </Link>
+          </div>
+        )}
 
         {/* Split content */}
         <div className="flex-1 flex overflow-hidden">
