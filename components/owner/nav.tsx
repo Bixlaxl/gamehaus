@@ -57,9 +57,16 @@ export function OwnerNav({ userName }: OwnerNavProps) {
 
   async function handleSignOut() {
     setSigningOut(true);
-    await new Promise((r) => setTimeout(r, 700));
-    await supabase.auth.signOut();
-    router.replace("/login");
+    try {
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((r) => setTimeout(r, 600)),
+      ]);
+    } catch {}
+    try {
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch {}
+    window.location.href = "/login?signout=true";
   }
 
   useEffect(() => {

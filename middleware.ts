@@ -75,8 +75,26 @@ export async function middleware(request: NextRequest) {
     return res;
   }
 
-  // Authenticated user hitting /login → redirect by role
-  if (user && isLogin) {
+  const isExplicitSignOut = request.nextUrl.searchParams.has("signout") || request.nextUrl.searchParams.has("logout");
+
+  // If hitting /login during an explicit sign-out, purge any lingering auth cookies and allow through
+  if (isLogin && isExplicitSignOut) {
+    const res = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+    for (const c of request.cookies.getAll()) {
+      if (c.name.startsWith("sb-") || c.name.includes("auth-token")) {
+        res.cookies.set(c.name, "", { path: "/", maxAge: 0, expires: new Date(0) });
+      }
+    }
+    applyCsp(res, nonce);
+    return res;
+  }
+
+  // Authenticated user hitting /login → redirect by role (unless explicitly signing out)
+  if (user && isLogin && !isExplicitSignOut) {
     const redirectUrl = request.nextUrl.clone();
     const token  = (await supabase.auth.getSession()).data.session?.access_token;
     const claims = token ? parseJwt(token) : null;
