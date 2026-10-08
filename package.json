@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "NODE_OPTIONS='--max-old-space-size=2048' next build",
+    "start": "NODE_OPTIONS='--max-old-space-size=384' next start",
     "lint": "next lint",
     "test": "vitest"
   },
