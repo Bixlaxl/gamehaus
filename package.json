@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "NODE_OPTIONS='--max-old-space-size=2048' next build",
-    "start": "NODE_OPTIONS='--max-old-space-size=384' next start",
+    "start": "next start",
     "lint": "next lint",
     "test": "vitest"
   },
@@ -38,6 +38,7 @@
     "razorpay": "^2.9.6",
     "react": "^18",
     "react-dom": "^18",
+    "sharp": "^0.35.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.24.4",
