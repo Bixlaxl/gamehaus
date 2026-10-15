@@ -5,7 +5,7 @@ import { createOrderSchema, ok, err } from "@/lib/validators/schemas";
 import { cancelExpiredUnpaidOrders } from "@/lib/booking-cleanup";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { getAppSettings } from "@/lib/settings";
-import { getLocationOperatingHours, isWithinOperatingHours } from "@/lib/operating-hours";
+import { getLocationOperatingHours, isWithinOperatingHours, isWeekendOperatingSlot } from "@/lib/operating-hours";
 import { getOperatingDate } from "@/lib/utils";
 
 export const runtime = 'edge';
@@ -272,6 +272,55 @@ export async function POST(request: Request) {
   }, 0);
 
   const roundedSubtotal = Math.round(totalCost * 100) / 100;
+
+  // ── Validate advance reservation rules (if advance mode chosen) ──────────
+  if (type === "online" && payment_mode === "advance") {
+    // 1. Check weekend restriction using location's opening time and timezone
+    const isWeekend = scheduledItems.some(item =>
+      isWeekendOperatingSlot(item.scheduled_start!, location.opening_time, location.timezone)
+    );
+    if (isWeekend) {
+      return NextResponse.json(
+        err("Advance booking is not available on weekends. Full payment is required.", "ADVANCE_NOT_ALLOWED_WEEKENDS"),
+        { status: 400 }
+      );
+    }
+
+    // 2. Duration check: no table booking exceeding 105 mins (1 hr 45 min)
+    const hasLongSlot = scheduledItems.some(item => {
+      const start = new Date(item.scheduled_start!).getTime();
+      const end = new Date(item.scheduled_end!).getTime();
+      return (end - start) > (105 * 60 * 1000);
+    });
+    if (hasLongSlot) {
+      return NextResponse.json(
+        err("Advance payment is only available for bookings up to 1 hour 45 minutes.", "ADVANCE_DURATION_EXCEEDED"),
+        { status: 400 }
+      );
+    }
+
+    // 3. No membership discount allowed with advance booking
+    if (membership_id) {
+      return NextResponse.json(
+        err("Membership discounts cannot be combined with advance booking.", "ADVANCE_MEMBERSHIP_NOT_ALLOWED"),
+        { status: 400 }
+      );
+    }
+
+    // 4. Threshold check: roundedSubtotal must exceed advance amount
+    const settings = await getAppSettings(admin);
+    const advancePerTable = settings.booking?.advance_amount_per_table ?? 100;
+    const uniqueTableCount = new Set(items.map(i => i.table_id)).size;
+    const totalAdvanceExpected = advancePerTable * uniqueTableCount;
+
+    if (roundedSubtotal <= totalAdvanceExpected) {
+      return NextResponse.json(
+        err(`Total amount (₹${roundedSubtotal}) is less than or equal to the advance deposit (₹${totalAdvanceExpected}). Full payment is required.`, "ADVANCE_NOT_APPLICABLE"),
+        { status: 400 }
+      );
+    }
+  }
+
   let discountAmount = 0;
 
   // ── Validate coupon (if provided) and resolve coupon_id to attach ────────

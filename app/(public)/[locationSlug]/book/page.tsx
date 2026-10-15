@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCartStore } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { formatFriendlyTime } from "@/lib/coupons";
+import { isWeekendOperatingSlot } from "@/lib/operating-hours";
 import { useTheme } from "next-themes";
 import type { AppSettings } from "@/lib/settings";
 import Script from "next/script";
@@ -105,10 +106,10 @@ function SectionHeader({ title, border, textMut }: { title: string; border: stri
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return new Date(iso).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" });
 }
 
 function formatTimer(seconds: number): string {
@@ -306,13 +307,11 @@ export default function CheckoutPage() {
     return Object.values(tableDurations).some((mins) => mins > 105);
   }, [cart.items]);
 
-  // Determine if any booking in the cart is on a Saturday (6) or Sunday (0)
+  // Determine if any booking in the cart is on a weekend operating slot
   const isWeekendBooking = useMemo(() => {
     return cart.items.some((item) => {
       if (!item.scheduledStart) return false;
-      const d = new Date(item.scheduledStart);
-      const day = d.getDay();
-      return day === 0 || day === 6;
+      return isWeekendOperatingSlot(item.scheduledStart);
     });
   }, [cart.items]);
 
@@ -805,6 +804,7 @@ export default function CheckoutPage() {
         currency: "INR",
         receipt: order_id,
         order_id,
+        payment_mode: paymentMode,
       }),
     });
 

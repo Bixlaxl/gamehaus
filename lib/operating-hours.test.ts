@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getLocationOperatingHours, getDayKey, isWithinOperatingHours } from "./operating-hours";
+import { getLocationOperatingHours, getDayKey, isWithinOperatingHours, isWeekendOperatingSlot } from "./operating-hours";
 
 describe("getLocationOperatingHours", () => {
   const nerfTurfLocation = {
@@ -98,5 +98,43 @@ describe("isWithinOperatingHours", () => {
     const start = new Date("2026-10-03T00:30:00+05:30").toISOString();
     const end = new Date("2026-10-03T01:15:00+05:30").toISOString();
     expect(isWithinOperatingHours(start, end, "11:00", "01:00")).toBe(false);
+  });
+});
+
+describe("isWeekendOperatingSlot", () => {
+  it("identifies standard weekday afternoon slots as non-weekend", () => {
+    // Friday afternoon at 14:00 IST
+    const fridaySlot = new Date("2026-10-02T14:00:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(fridaySlot, "11:00")).toBe(false);
+
+    // Monday afternoon at 15:00 IST
+    const mondaySlot = new Date("2026-10-05T15:00:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(mondaySlot, "11:00")).toBe(false);
+  });
+
+  it("identifies Friday post-midnight slots (Saturday 00:30 IST) as Friday weekday shift", () => {
+    // Friday night into Saturday 00:30 IST — belongs to Friday's 11:00 AM operating day
+    const fridayNightPostMidnight = new Date("2026-10-03T00:30:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(fridayNightPostMidnight, "11:00")).toBe(false);
+  });
+
+  it("identifies Saturday daytime and evening slots as weekend", () => {
+    // Saturday afternoon at 15:00 IST
+    const saturdayDaySlot = new Date("2026-10-03T15:00:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(saturdayDaySlot, "11:00")).toBe(true);
+
+    // Saturday evening at 21:00 IST
+    const saturdayNightSlot = new Date("2026-10-03T21:00:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(saturdayNightSlot, "11:00")).toBe(true);
+  });
+
+  it("identifies Sunday daytime and Sunday post-midnight slots as weekend", () => {
+    // Sunday afternoon at 16:00 IST
+    const sundayDaySlot = new Date("2026-10-04T16:00:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(sundayDaySlot, "11:00")).toBe(true);
+
+    // Sunday night into Monday 00:30 IST — belongs to Sunday's operating day!
+    const sundayNightPostMidnight = new Date("2026-10-05T00:30:00+05:30").toISOString();
+    expect(isWeekendOperatingSlot(sundayNightPostMidnight, "11:00")).toBe(true);
   });
 });

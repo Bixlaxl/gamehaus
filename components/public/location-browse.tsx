@@ -42,8 +42,15 @@ function getLocalDateString(timezone: string = "Asia/Kolkata", dateInput: Date =
 }
 
 function isOpen(opening: string, closing: string) {
-  const now = new Date();
-  const cur = now.getHours() * 60 + now.getMinutes();
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(new Date());
+  const h = Number(parts.find(p => p.type === "hour")?.value ?? 0);
+  const m = Number(parts.find(p => p.type === "minute")?.value ?? 0);
+  const cur = h * 60 + m;
   const [oh, om] = opening.split(":").map(Number);
   const [ch, cm] = closing.split(":").map(Number);
   const openMins  = oh * 60 + om;
@@ -348,7 +355,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function isCartOccupied(tableId: string, slotDate: string, slotTime: string): boolean {
     const hours = getLocationOperatingHours(location, slotDate);
     const actualDate = getActualSlotDate(slotDate, slotTime, hours.opening_time, hours.closing_time);
-    const slotMs = new Date(`${actualDate}T${slotTime}:00`).getTime();
+    const slotMs = new Date(`${actualDate}T${slotTime}:00+05:30`).getTime();
     // Per-table check — a slot in the cart for this same table blocks it
     return cartItemsMs.some(item => item.tableId === tableId && slotMs >= item.startMs && slotMs < item.endMs);
   }
@@ -357,7 +364,7 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
   function isServerBlocked(slotDate: string, slotTime: string): boolean {
     const hours = getLocationOperatingHours(location, slotDate);
     const actualDate = getActualSlotDate(slotDate, slotTime, hours.opening_time, hours.closing_time);
-    const slotMs = new Date(`${actualDate}T${slotTime}:00`).getTime();
+    const slotMs = new Date(`${actualDate}T${slotTime}:00+05:30`).getTime();
     return blockedRangesMs.some(r => slotMs >= r.start && slotMs < r.end);
   }
 
@@ -438,12 +445,11 @@ export function LocationBrowse({ location, tables, initialSlots, initialDate }: 
     const lastSlot  = selectedSlots[selectedSlots.length - 1];
     const hours = getLocationOperatingHours(location, date);
     const slotStartDate = getActualSlotDate(date, firstSlot, hours.opening_time, hours.closing_time);
-    console.log("[addToCart] slotStartDate:", slotStartDate);
-    const startIso  = new Date(`${slotStartDate}T${firstSlot}:00`).toISOString();
+    const startIso  = new Date(`${slotStartDate}T${firstSlot}:00+05:30`).toISOString();
     console.log("[addToCart] startIso:", startIso);
     const endStr    = slotEndTime(lastSlot);
     const endDate   = endStr < firstSlot ? addOneDay(slotStartDate) : slotStartDate;
-    const endIso    = new Date(`${endDate}T${endStr}:00`).toISOString();
+    const endIso    = new Date(`${endDate}T${endStr}:00+05:30`).toISOString();
     const durationMins = selectedSlots.length * 15;
 
     if (cart.items.some(i => i.tableId === t.id && i.scheduledStart === startIso)) {

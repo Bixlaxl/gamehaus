@@ -1,3 +1,5 @@
+import { getOperatingDate } from "./utils";
+
 export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export interface DayOperatingHours {
@@ -140,4 +142,19 @@ export function isWithinOperatingHours(
   }
 
   return false;
+}
+
+/**
+  * Determines if a scheduled slot belongs to a weekend (Saturday or Sunday)
+  * business shift, accounting for the location's opening time and post-midnight hours.
+  */
+export function isWeekendOperatingSlot(
+  scheduledStart: string | Date,
+  openingTime: string = "10:00",
+  timezone: string = "Asia/Kolkata"
+): boolean {
+  if (!scheduledStart) return false;
+  const opDateStr = getOperatingDate(scheduledStart, openingTime);
+  const dayKey = getDayKey(opDateStr, timezone);
+  return dayKey === "sat" || dayKey === "sun";
 }

@@ -4,6 +4,8 @@ import { ok, err } from "@/lib/validators/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRazorpayCredentialsForOrder } from "@/lib/razorpay";
 
+import { isWeekendOperatingSlot } from "@/lib/operating-hours";
+
 export const runtime = 'nodejs';
 
 const schema = z.object({
@@ -11,6 +13,7 @@ const schema = z.object({
   currency: z.string().default("INR"),
   receipt: z.string(),
   order_id: z.string().uuid(),
+  payment_mode: z.enum(["advance", "full"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -20,14 +23,14 @@ export async function POST(request: Request) {
     return NextResponse.json(err(parsed.error.errors[0].message, "VALIDATION_ERROR"), { status: 400 });
   }
 
-  const { amount, currency, receipt, order_id } = parsed.data;
+  const { amount, currency, receipt, order_id, payment_mode } = parsed.data;
   const admin = createAdminClient();
   const creds = await getRazorpayCredentialsForOrder(admin, order_id);
 
   // Single Source of Truth: Fetch exact backend total_amount from database
   const { data: dbOrder } = await admin
     .from("orders")
-    .select("total_amount, advance_paid, points_redeemed, points_redeemed_online, subtotal, discount_amount")
+    .select("total_amount, advance_paid, points_redeemed, points_redeemed_online, subtotal, discount_amount, location_id, type")
     .eq("id", order_id)
     .maybeSingle();
 
@@ -42,14 +45,52 @@ export async function POST(request: Request) {
     const discount = Number(dbOrder.discount_amount) || 0;
     const pointsWereNotDeducted = pointsRedeemed > 0 && Math.abs(rawTotal - (subtotal - discount)) < 0.01;
 
+    let fullAmountDue: number;
     if (pointsWereNotDeducted) {
       const { getAppSettings } = await import("@/lib/settings");
       const settings = await getAppSettings(admin);
       const redeemRate = settings.loyalty.redeem_rupees_per_point ?? 1;
       const pointsDiscount = pointsRedeemed * redeemRate;
-      resolvedAmountInRupees = Math.max(0, rawTotal - pointsDiscount - advance);
+      fullAmountDue = Math.max(0, rawTotal - pointsDiscount - advance);
     } else {
-      resolvedAmountInRupees = Math.max(0, rawTotal - advance);
+      fullAmountDue = Math.max(0, rawTotal - advance);
+    }
+
+    if (payment_mode === "advance") {
+      // 1. Fetch location operating hours & timezone
+      const { data: location } = await admin
+        .from("locations")
+        .select("opening_time, timezone")
+        .eq("id", dbOrder.location_id)
+        .maybeSingle();
+
+      // 2. Fetch order items to inspect tables and scheduled slots
+      const { data: orderItems } = await admin
+        .from("order_items")
+        .select("table_id, scheduled_start")
+        .eq("order_id", order_id)
+        .eq("is_deleted", false);
+
+      const itemsList = orderItems || [];
+      const isWeekend = itemsList.some(item =>
+        item.scheduled_start && isWeekendOperatingSlot(item.scheduled_start, location?.opening_time, location?.timezone)
+      );
+      if (isWeekend) {
+        return NextResponse.json(
+          err("Advance booking is not available on weekends. Full payment is required.", "ADVANCE_NOT_ALLOWED_WEEKENDS"),
+          { status: 400 }
+        );
+      }
+
+      const uniqueTableCount = new Set(itemsList.map(item => item.table_id)).size || 1;
+      const { getAppSettings } = await import("@/lib/settings");
+      const settings = await getAppSettings(admin);
+      const advancePerTable = settings.booking?.advance_amount_per_table ?? 100;
+      const expectedAdvance = advancePerTable * uniqueTableCount;
+
+      resolvedAmountInRupees = Math.min(expectedAdvance, fullAmountDue);
+    } else {
+      resolvedAmountInRupees = fullAmountDue;
     }
   } else {
     resolvedAmountInRupees = amount / 100;
