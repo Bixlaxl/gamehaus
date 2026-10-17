@@ -23,11 +23,24 @@ export function isGenericName(name: string | null | undefined): boolean {
   );
 }
 
+export function isScheduledBookingOrder(order: POSOrder): boolean {
+  const items = order.items ?? [];
+  if (items.length === 0) return false;
+  return items.every((i) => i.status === "scheduled" && !i.actual_start && !i.checked_in_at);
+}
+
 export function groupOrders(orders: POSOrder[]): GroupedPOSOrder[] {
   const groups: Map<string, POSOrder[]> = new Map();
   const ungrouped: POSOrder[] = [];
 
   for (const order of orders) {
+    // Unchecked-in scheduled bookings must remain independent and not be grouped
+    // with current active sessions or other bookings
+    if (isScheduledBookingOrder(order)) {
+      ungrouped.push(order);
+      continue;
+    }
+
     const phone = cleanPhone(order.customer_phone);
     const name = order.customer_name?.trim();
 

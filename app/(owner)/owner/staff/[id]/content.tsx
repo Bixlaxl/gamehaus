@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Mail, MapPin, Calendar, Clock, Eye, EyeOff, Copy, Check,
+  ArrowLeft, Mail, MapPin, Calendar, Clock,
   Banknote, UserPlus, Plus, UserX, Receipt,
 } from "lucide-react";
 
@@ -40,7 +40,6 @@ export interface StaffDetailData {
     location_name:  string | null;
     is_active:      boolean;
     created_at:     string;
-    login_password: string | null;
     last_active_at: string | null;
   };
   stats:    { today: StatsBucket; last_7d: StatsBucket; last_30d: StatsBucket };
@@ -104,16 +103,15 @@ export function StaffDetailContent({
   const { profile, stats, activity } = data;
 
   const [range, setRange] = useState<RangeKey>("last_7d");
-  const [showPassword, setShowPassword] = useState(false);
   const [filter, setFilter] = useState<"all" | ActivityType>("all");
-  const [copied, setCopied] = useState<"email" | "password" | null>(null);
+  const [copied, setCopied] = useState<"email" | null>(null);
 
   const bucket = stats[range];
 
-  function copy(value: string, key: "email" | "password") {
+  function copy(value: string) {
     void navigator.clipboard.writeText(value);
-    setCopied(key);
-    toast.success(`${key === "email" ? "Email" : "Password"} copied`);
+    setCopied("email");
+    toast.success("Email copied");
     setTimeout(() => setCopied(null), 1500);
   }
 
@@ -173,29 +171,16 @@ export function StaffDetailContent({
               <Mail className="h-3.5 w-3.5 text-gray-400 shrink-0" />
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">Email</span>
               <span className="font-mono text-sm flex-1 truncate">{profile.email}</span>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copy(profile.email, "email")}>
-                {copied === "email" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
+              <button
+                className="h-7 w-7 flex items-center justify-center rounded hover:bg-gray-100 transition-colors"
+                onClick={() => copy(profile.email)}
+                title="Copy email"
+              >
+                {copied === "email"
+                  ? <span className="text-emerald-600 text-xs font-bold">✓</span>
+                  : <span className="text-gray-400 text-xs">⎘</span>}
+              </button>
             </div>
-            {profile.login_password ? (
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                <div className="h-3.5 w-3.5 shrink-0 flex items-center justify-center text-gray-400 text-xs font-bold">∗</div>
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">Password</span>
-                <span className="font-mono text-sm flex-1 truncate">
-                  {showPassword ? profile.login_password : "•".repeat(Math.min(profile.login_password.length, 12))}
-                </span>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowPassword(v => !v)} title={showPassword ? "Hide" : "Show"}>
-                  {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copy(profile.login_password ?? "", "password")}>
-                  {copied === "password" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 px-3 py-2">
-                Password not stored (this staff was created before the credential view was added).
-              </p>
-            )}
           </div>
         </div>
       </div>

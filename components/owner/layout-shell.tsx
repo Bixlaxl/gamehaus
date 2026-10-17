@@ -189,7 +189,7 @@ export function OwnerLayoutShell({ userName, children }: Props) {
             <span className="font-black text-xl text-gray-900 dark:text-white">Gamehaus Owner</span>
             <div className="w-10 h-10 flex items-center justify-center">
               {mounted && (
-                <StockAlertsBell variant={resolvedTheme === "dark" ? "dark" : "light"} inventoryHref="/owner/inventory" />
+                <StockAlertsBell variant={resolvedTheme === "dark" ? "dark" : "light"} inventoryHref="/owner/inventory" align="right" />
               )}
             </div>
           </header>

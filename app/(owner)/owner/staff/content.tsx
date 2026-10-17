@@ -55,16 +55,6 @@ export function StaffContent({
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [showEditPassword, setShowEditPassword]     = useState(false);
 
-  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
-
-  function toggleReveal(id: string) {
-    setRevealedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
   const { data: locations } = useQuery({
     queryKey: ["locations", "active"],
     queryFn: async () => {
@@ -263,7 +253,6 @@ export function StaffContent({
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Password</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
               <th className="px-4 py-3" />
@@ -271,7 +260,6 @@ export function StaffContent({
           </thead>
           <tbody className="divide-y divide-gray-50">
             {staff?.map((s) => {
-              const revealed = revealedIds.has(s.id);
               return (
                 <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-4 py-3 font-medium">
@@ -283,23 +271,6 @@ export function StaffContent({
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{s.email}</td>
-                  <td className="px-4 py-3">
-                    {s.login_password ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm text-gray-700">
-                          {revealed ? s.login_password : "••••••••"}
-                        </span>
-                        <button
-                          onClick={() => toggleReveal(s.id)}
-                          className="text-gray-400 hover:text-gray-700 transition-colors"
-                        >
-                          {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400 text-xs">—</span>
-                    )}
-                  </td>
                   <td className="px-4 py-3 text-gray-500">{s.locations?.name ?? "—"}</td>
                   <td className="px-4 py-3">
                     <Badge variant={s.is_active ? "success" : "secondary"}>

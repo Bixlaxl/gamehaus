@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Bell, X, Plus } from "lucide-react";
 import type { InventoryItem } from "@/lib/supabase/types";
 import { StockControls } from "./stock-controls";
@@ -19,32 +18,12 @@ interface Props {
   variant?: "dark" | "light";
   /** Where to send "View all" link. */
   inventoryHref?: string;
-}
-
-// localStorage key prefix; one slot per scope so owner-wide alerts and
-// per-location staff alerts don't stomp each other.
-const ALERTED_KEY = (scope: string) => `gh-stock-alerted:${scope}`;
-
-function loadAlerted(scope: string): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem(ALERTED_KEY(scope));
-    if (!raw) return new Set();
-    return new Set(JSON.parse(raw) as string[]);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveAlerted(scope: string, ids: Set<string>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(ALERTED_KEY(scope), JSON.stringify([...ids]));
-  } catch { /* quota — ignore */ }
+  /** Dropdown alignment: 'right' for topbars / mobile headers, 'sidebar' to fly out to the right */
+  align?: "right" | "sidebar";
 }
 
 export function StockAlertsBell({
-  locationId, variant = "dark", inventoryHref = "/owner/inventory",
+  locationId, variant = "dark", inventoryHref = "/owner/inventory", align = "right",
 }: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -65,40 +44,6 @@ export function StockAlertsBell({
     refetchInterval: 60 * 1000,
     refetchOnWindowFocus: true,
   });
-
-  // One-time toast per user, per item, per low-stock event.
-  // Diff current list against localStorage; toast anything new, remember it.
-  // When an item comes back above threshold it leaves the list, so we also
-  // drop it from `alerted` — that way if it drops again later we re-alert.
-  useEffect(() => {
-    if (items.length === 0) {
-      // Nothing low now → forget everything so future drops re-alert
-      saveAlerted(scope, new Set());
-      return;
-    }
-    const alerted = loadAlerted(scope);
-    const currentIds = new Set(items.map((i) => i.id));
-
-    // Prune anything we'd remembered that's no longer low
-    const prunedAlerted = new Set<string>();
-    for (const id of alerted) if (currentIds.has(id)) prunedAlerted.add(id);
-
-    // Toast newly-low items (in-list but not previously alerted)
-    const newlyLow = items.filter((i) => !prunedAlerted.has(i.id));
-    for (const it of newlyLow) {
-      const out = it.stock_count <= 0;
-      const msg = out
-        ? `${it.name} is OUT of stock`
-        : `${it.name} is low — ${it.stock_count} of ${it.low_stock_threshold}`;
-      if (out) toast.error(msg, { duration: 6000 });
-      else     toast.warning(msg, { duration: 5000 });
-      prunedAlerted.add(it.id);
-    }
-
-    if (prunedAlerted.size !== alerted.size || newlyLow.length > 0) {
-      saveAlerted(scope, prunedAlerted);
-    }
-  }, [items, scope]);
 
   // Close dropdown on outside click, ignoring clicks inside portals (dialogs, toasts, select dropdowns)
   useEffect(() => {
@@ -150,11 +95,11 @@ export function StockAlertsBell({
 
       {open && (
         <div
-          className="absolute z-40 mt-2 w-[300px] sm:w-[340px] rounded-xl shadow-2xl overflow-hidden"
+          className="absolute z-40 mt-2 w-[300px] sm:w-[340px] max-w-[calc(100vw-32px)] rounded-xl shadow-2xl overflow-hidden"
           style={{
-            left:  variant === "dark" ? "calc(100% + 6px)" : "auto",
-            right: variant === "dark" ? "auto" : 0,
-            top:   variant === "dark" ? 0 : "100%",
+            left:  align === "sidebar" ? "calc(100% + 6px)" : "auto",
+            right: align === "sidebar" ? "auto" : 0,
+            top:   align === "sidebar" ? 0 : "100%",
             background: variant === "dark" ? "#161616" : "#fff",
             border:     variant === "dark" ? "1px solid #2a2a2a" : "1px solid rgba(0,0,0,0.08)",
           }}

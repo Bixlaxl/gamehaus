@@ -25,3 +25,6 @@ yarn-error.log*
 
 # Claude Code local config
 .claude/
+
+# Scratch investigation scripts
+scratch/

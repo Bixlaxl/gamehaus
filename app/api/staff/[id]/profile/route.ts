@@ -55,7 +55,7 @@ export async function GET(
   // 1. Profile
   const { data: profile, error: profileError } = await admin
     .from("users")
-    .select("id, name, email, role, location_id, is_active, created_at, login_password, locations(name)")
+    .select("id, name, email, role, location_id, is_active, created_at, locations(name)")
     .eq("id", id)
     .single();
   if (profileError || !profile) {
@@ -205,7 +205,6 @@ export async function GET(
       location_name:   (profile.locations as unknown as { name: string } | null)?.name ?? null,
       is_active:       profile.is_active,
       created_at:      profile.created_at,
-      login_password:  profile.login_password,
       last_active_at:  lastActiveAt,
     },
     stats: {

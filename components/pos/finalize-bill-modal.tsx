@@ -495,7 +495,21 @@ function FinalizeBillModalInner({ locationId }: FinalizeBillModalProps) {
     setError(null);
 
     try {
-      const ordersToFinalize = openOrders.filter(o => currentGroup.orderIds.includes(o.id));
+      const ordersToFinalize = openOrders.filter((o) => {
+        if (!currentGroup.orderIds.includes(o.id)) return false;
+        const items = o.items ?? [];
+        const hasActiveSession = items.some(
+          (i) => i.status !== "scheduled" && i.status !== "cancelled" && !i.is_deleted
+        );
+        const hasActiveExtras = (o.extras ?? []).some(
+          (e) => !e.is_deleted && !e.name.startsWith("[PENDING]")
+        );
+        // If the order has only un-started scheduled items, never finalize it
+        if (!hasActiveSession && !hasActiveExtras && items.length > 0 && items.every((i) => i.status === "scheduled")) {
+          return false;
+        }
+        return true;
+      });
       let newVenuePoints = clampedRedeem - currentGroup.points_redeemed_online;
 
       // 1. Calculate tempDue for each individual order

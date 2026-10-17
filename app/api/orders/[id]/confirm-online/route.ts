@@ -35,7 +35,7 @@ export async function POST(
     return NextResponse.json(err("Order not found", "NOT_FOUND"), { status: 404 });
   }
 
-  // Idempotency: if the order is already paid/confirmed, skip immediately
+  // Idempotency: if the order is already confirmed (booking exists or advance_paid > 0), skip
   const { data: existingBookingsEarly } = await admin
     .from("bookings")
     .select("id")
@@ -146,20 +146,14 @@ export async function POST(
   }
 
   let paidAmount = 0;
-  let paymentUpdatePromise: PromiseLike<any> = Promise.resolve();
-  let loyaltyProfilePromise: PromiseLike<any> = Promise.resolve();
-  let whatsappNotificationPromise: PromiseLike<any> = Promise.resolve();
 
+  // ── Verify payment with Razorpay ─────────────────────────────────────────
   if (body.payment_id) {
     const creds = await getRazorpayCredentialsForOrder(admin, orderId);
-    const keyId = creds.keyId;
-    const keySecret = creds.keySecret;
-    const credentials = btoa(`${keyId}:${keySecret}`);
+    const credentials = btoa(`${creds.keyId}:${creds.keySecret}`);
 
     const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${body.payment_id}`, {
-      headers: {
-        "Authorization": `Basic ${credentials}`,
-      },
+      headers: { "Authorization": `Basic ${credentials}` },
     });
     if (!rzpRes.ok) {
       const errTxt = await rzpRes.text();
@@ -186,55 +180,58 @@ export async function POST(
       return NextResponse.json(err("Payment is incomplete or failed", "PAYMENT_INCOMPLETE"), { status: 400 });
     }
 
-    paidAmount = payment.amount / 100;
-
-    // Update payment record
-    paymentUpdatePromise = admin.from("payments").update({
-      status: "completed",
-      razorpay_payment_id: body.payment_id,
-      collected_at: new Date().toISOString(),
-    }).eq("id", dbPayment.id).then(() => {});
-  }
-
-  // Update loyalty points (earned from amount paid, and deducted from points redeemed)
-  if (order.customer_phone) {
-    const phone = order.customer_phone;
-    loyaltyProfilePromise = (async () => {
-      const pointsEarned = Math.floor(paidAmount / settings.loyalty.earn_rupees_per_point);
-      const netPoints    = pointsEarned - (order.points_redeemed ?? 0);
-
-      const { data: profile } = await admin
-        .from("customer_profiles")
-        .select("points_balance")
-        .eq("phone", phone)
-        .single();
-
-      if (profile) {
-        await admin.from("customer_profiles").update({
-          points_balance: Math.max(0, profile.points_balance + netPoints),
-          last_visit_at:  new Date().toISOString(),
-        }).eq("phone", phone);
-      } else {
-        await admin.from("customer_profiles").insert({
-          phone:          phone,
-          name:           order.customer_name,
-          points_balance: Math.max(0, netPoints),
-          visit_count:    0,
-          total_spent:    0,
-          last_visit_at:  new Date().toISOString(),
-        });
-      }
-    })();
+    paidAmount = payment.amount / 100; // Convert paise → rupees
   }
 
   const finalPaidAmount = body.payment_id ? paidAmount : netAdvancePaid;
 
-  // Trigger WhatsApp notification for all confirmed bookings
-  whatsappNotificationPromise = (async () => {
-    const { sendWhatsAppConfirmation } = await import("@/lib/whatsapp");
-    await sendWhatsAppConfirmation(orderId).catch((e) => console.error("WhatsApp failed:", e));
-  })();
+  // ── Delegate to the atomic RPC ────────────────────────────────────────────
+  // The RPC handles: payment claim (idempotent), advance_paid accumulation,
+  // booking insertion (ON CONFLICT DO NOTHING), coupon used_count, loyalty points.
+  const { data: rpcResult, error: rpcError } = await (admin as any)
+    .rpc("confirm_order_payment", {
+      p_order_id:             orderId,
+      p_razorpay_order_id:    body.payment_id
+        ? (await admin.from("payments").select("razorpay_order_id").eq("order_id", orderId).single()).data?.razorpay_order_id
+        : null,
+      p_razorpay_payment_id:  body.payment_id ?? null,
+      p_verified_amount:      finalPaidAmount,
+      p_method:               "razorpay",
+    });
 
+  if (rpcError) {
+    console.error(`[confirm-online] confirm_order_payment RPC error for order ${orderId}:`, rpcError);
+    return NextResponse.json(err("Failed to confirm payment", "INTERNAL_ERROR"), { status: 500 });
+  }
+
+  const result = rpcResult as {
+    success: boolean;
+    already_processed?: boolean;
+    error?: string;
+  };
+
+  if (!result.success) {
+    const code = result.error ?? "CONFIRM_FAILED";
+    return NextResponse.json(err("Could not confirm payment", code), { status: 409 });
+  }
+
+  // ── Update order financial summary columns ─────────────────────────────────
+  // These are display/reporting columns; the RPC already set status + advance_paid.
+  // Only update if the webhook hasn't already written them (advance_paid guard).
+  await admin
+    .from("orders")
+    .update({
+      subtotal:              bill.subtotal,
+      discount_amount:       totalDiscount,
+      public_discount_amount: (order as any).public_discount_amount ?? 0,
+      total_amount:          netAdvancePaid,
+      points_redeemed_online: order.points_redeemed ?? 0,
+      amount_due:            0,
+      membership_id:         order.membership_id ?? null,
+    })
+    .eq("id", orderId);
+
+  // ── Decrement membership free-hours ledger ─────────────────────────────────
   const membershipUpdatePromises = Array.from(ledgerUpdates.values())
     .filter(e => e.hoursRedeemed > 0)
     .map(e =>
@@ -244,64 +241,15 @@ export async function POST(
       }).eq("id", e.id)
     );
 
-  const primaryMembership = memberships.find(m => {
-    const e = ledgerUpdates.get(m.id);
-    return e && e.hoursRedeemed > 0;
-  }) ?? memberships[0] ?? null;
+  if (membershipUpdatePromises.length > 0) {
+    await Promise.all(membershipUpdatePromises);
+  }
 
-  const { data: existingBookings } = await admin
-    .from("bookings")
-    .select("id")
-    .eq("order_id", orderId);
-
-  const bookingsPromise = (!existingBookings || existingBookings.length === 0) ? (async () => {
-    const bookingsToInsert = (items ?? [])
-      .filter((item) => item.scheduled_start && item.scheduled_end)
-      .map((item) => ({
-        order_id: orderId,
-        order_item_id: item.id,
-        scheduled_start: item.scheduled_start!,
-        scheduled_end: item.scheduled_end!,
-        held_until: new Date(new Date(item.scheduled_start!).getTime() + 15 * 60 * 1000).toISOString(),
-        status: "confirmed" as const,
-      }));
-    if (bookingsToInsert.length > 0) {
-      await admin.from("bookings").insert(bookingsToInsert);
-    }
-  })() : Promise.resolve();
-
-  await Promise.all([
-    admin
-      .from("orders")
-      .update({
-        status: "open",
-        subtotal: bill.subtotal,
-        discount_amount: totalDiscount,
-        public_discount_amount: (order as any).public_discount_amount ?? 0,
-        total_amount: netAdvancePaid,
-        points_redeemed_online: order.points_redeemed ?? 0,
-        // Guard: only overwrite advance_paid if the Razorpay webhook hasn't already
-        // written the real payment amount. Webhook fires async — if it won the race
-        // first (advance_paid > 0 on the order), preserve that value.
-        // For fully-free orders (free hours covering 100%), both values are 0 — safe.
-        ...(order.advance_paid > 0
-          ? {}
-          : { advance_paid: finalPaidAmount }),
-        amount_due: 0,
-        membership_id: order.membership_id ?? primaryMembership?.id ?? null,
-      })
-      .eq("id", orderId),
-    admin
-      .from("order_items")
-      .update({ status: "scheduled" })
-      .eq("order_id", orderId)
-      .eq("status", "cancelled"),
-    bookingsPromise,
-    paymentUpdatePromise,
-    loyaltyProfilePromise,
-    whatsappNotificationPromise,
-    ...membershipUpdatePromises,
-  ]);
+  // ── Dispatch WhatsApp confirmation (non-fatal) ─────────────────────────────
+  const { sendWhatsAppConfirmation } = await import("@/lib/whatsapp");
+  sendWhatsAppConfirmation(orderId).catch((e) =>
+    console.error("[confirm-online] WhatsApp failed:", e)
+  );
 
   return NextResponse.json(ok({ order_id: orderId }));
 }

@@ -143,7 +143,7 @@ export function OwnerNav({ userName }: OwnerNavProps) {
               Owner
             </span>
             <div className="ml-auto">
-              <StockAlertsBell variant={resolvedTheme === "dark" ? "dark" : "light"} inventoryHref="/owner/inventory" />
+              <StockAlertsBell variant={resolvedTheme === "dark" ? "dark" : "light"} inventoryHref="/owner/inventory" align="sidebar" />
             </div>
           </div>
         </div>
